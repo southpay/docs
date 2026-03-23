@@ -25,10 +25,10 @@
           {
             "group": "Getting started",
             "pages": [
-              "index"
+              "index",
+              "quickstart"
             ]
-          },
-          "quickstart"
+          }
         ]
       },
       {
