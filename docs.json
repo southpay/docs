@@ -33,7 +33,7 @@
       },
       {
         "tab": "API reference",
-        "openapi": "api-reference/openapi.json",
+        "openapi": "api-1.json",
         "groups": [
           {
             "group": "API documentation",
@@ -63,15 +63,15 @@
   },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
   },
   "footer": {
     "socials": {
@@ -84,6 +84,7 @@
     "default": "light"
   },
   "api": {
+    "openapi": "/api-1.json",
     "playground": {
       "proxy": false
     }
