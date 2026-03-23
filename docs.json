@@ -84,10 +84,12 @@
     "default": "light"
   },
   "api": {
-    "openapi": "/api-1.json",
     "playground": {
       "proxy": false,
-      "display": "auth"
+      "display": "interactive"
     }
+  },
+  "thumbnails": {
+    "appearance": "light"
   }
 }
