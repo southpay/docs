@@ -82,5 +82,10 @@
   "appearance": {
     "strict": true,
     "default": "light"
+  },
+  "api": {
+    "playground": {
+      "proxy": false
+    }
   }
 }
