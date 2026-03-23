@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "SouthPay",
   "colors": {
     "primary": "#4253FE",
     "light": "#07C983",
@@ -43,7 +43,8 @@
   },
   "logo": {
     "light": "/logo/light.png",
-    "dark": "/logo/dark.png"
+    "dark": "/logo/dark.png",
+    "href": "https://southpay.io"
   },
   "navbar": {
     "links": [
@@ -72,13 +73,12 @@
   },
   "footer": {
     "socials": {
-      "x": "https://x.com/southpay",
       "github": "https://github.com/southpay",
       "linkedin": "https://linkedin.com/company/southpay"
     }
   },
   "appearance": {
-    "strict": false,
+    "strict": true,
     "default": "light"
   }
 }
