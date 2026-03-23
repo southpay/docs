@@ -80,5 +80,11 @@
   "appearance": {
     "strict": true,
     "default": "light"
+  },
+  "api": {
+    "openapi": "openapi.json",
+    "playground": {
+      "display": "auth"
+    }
   }
 }
