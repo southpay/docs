@@ -82,11 +82,5 @@
   "appearance": {
     "strict": true,
     "default": "light"
-  },
-  "api": {
-    "openapi": "api-reference/openapi.json",
-    "playground": {
-      "display": "auth"
-    }
   }
 }
