@@ -83,12 +83,6 @@
     "strict": true,
     "default": "light"
   },
-  "api": {
-    "playground": {
-      "proxy": false,
-      "display": "interactive"
-    }
-  },
   "thumbnails": {
     "appearance": "light"
   }
