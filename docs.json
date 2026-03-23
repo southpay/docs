@@ -21,14 +21,14 @@
     "tabs": [
       {
         "tab": "Guides",
-        "groups": [
+        "pages": [
           {
             "group": "Getting started",
             "pages": [
-              "index",
-              "quickstart"
+              "index"
             ]
-          }
+          },
+          "quickstart"
         ]
       },
       {
