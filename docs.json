@@ -86,7 +86,8 @@
   "api": {
     "openapi": "/api-1.json",
     "playground": {
-      "proxy": false
+      "proxy": false,
+      "display": "auth"
     }
   }
 }
