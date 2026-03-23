@@ -1,0 +1,41 @@
+---
+title: Quickstart
+description: Create your first payment in Southpay
+---
+
+## Create your first payment
+
+This guide will help you create your first payment and receive a successful confirmation.
+
+Southpay handles the full lifecycle of payments — from creation to confirmation and settlement.
+
+---
+
+## 1. Create a store
+
+Every integration starts with a store, which represents your isolated payment environment.
+
+<Card title="Go to dashboard" icon="store" href="/dashboard">
+  Create a new store to get started.
+</Card>
+
+Once created, you will receive:
+
+- a `store_id`
+- an API key
+
+---
+
+## 2. Create a payment
+
+Use your API key to create a payment.
+
+```bash
+curl -X POST https://api.southpay.io/v1/payments \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": "10.00",
+    "currency": "USD",
+    "reference": "order_123"
+  }'
