@@ -84,7 +84,7 @@
     "default": "light"
   },
   "api": {
-    "openapi": "openapi.json",
+    "openapi": "api-reference/openapi.json",
     "playground": {
       "display": "auth"
     }
