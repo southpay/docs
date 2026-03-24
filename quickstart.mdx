@@ -6,38 +6,153 @@ sidebarTitle: "Quickstart"
 
 ## Create your first payment
 
-This guide will help you create your first payment and receive a successful confirmation.
-
-Southpay handles the full lifecycle of payments — from creation to confirmation and settlement.
+This guide walks through the full integration flow — from creating a payment to confirming it on your server.
 
 ---
 
 ## 1. Create a store
 
-Every integration starts with a store, which represents your isolated payment environment.
+Every integration is scoped to a store. Create one from the dashboard to get your `store_id` and API key.
 
-<Card title="Go to dashboard" icon="store" href="/dashboard">
+<Card title="Go to dashboard" icon="store" href="https://api.southpay.io">
   Create a new store to get started.
 </Card>
-
-Once created, you will receive:
-
-- a `store_id`
-- an API key
 
 ---
 
 ## 2. Create a payment
 
-Use your API key to create a payment.
+Use your API key to create a payment. The response includes a `checkout_url` — redirect your customer there to complete payment.
 
 ```bash
-curl -X POST https://api.southpay.io/v1/payments \
+curl -X POST https://api.southpay.io/v1/payments/ \
   -H "Authorization: Bearer <API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{
-    "amount": "10.00",
+    "amount": "49.99",
     "currency": "USD",
-    "reference": "order_123"
+    "merchant_reference": "order_123",
+    "success_url": "https://yourapp.com/success",
+    "cancel_url": "https://yourapp.com/cancel"
   }'
 ```
+
+**Response**
+
+```json
+{
+  "payment_id": "pay_abc123",
+  "checkout_url": "https://api.southpay.io/v1/checkout/pay/...",
+  "status": "pending",
+  "amount": "49.99",
+  "currency": "USD",
+  "merchant_reference": "order_123",
+  "expires_at": "2026-03-24T15:00:00.000Z",
+  "created_at": "2026-03-24T14:00:00.000Z"
+}
+```
+
+**Request fields**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `amount` | string | Yes | Decimal amount (e.g. `"49.99"`) |
+| `currency` | string | Yes | ISO 4217 fiat code (e.g. `USD`) |
+| `merchant_reference` | string | No | Your internal order ID — must be unique per store |
+| `success_url` | string | No | Redirect URL after successful payment |
+| `cancel_url` | string | No | Redirect URL when customer cancels |
+| `customer_email` | string | No | Pre-fills the checkout form |
+| `metadata` | object | No | Key-value string pairs attached to the payment |
+| `provider_type` | string | No | Override the store's default provider (`radom`, `nowpayments`, `cpay`) |
+
+<Tip>
+  Pass an `Idempotency-Key` header to safely retry the request without creating duplicate payments. If `merchant_reference` is provided, it is used as the idempotency key automatically.
+</Tip>
+
+---
+
+## 3. Redirect the customer
+
+Send your customer to the `checkout_url` from the response. They complete payment on the Southpay-hosted checkout page.
+
+After payment, the customer is redirected to your `success_url` or `cancel_url` with query parameters appended:
+
+```
+https://yourapp.com/success?session_id=...&status=paid
+```
+
+---
+
+## 4. Check payment status
+
+Poll the payment status from your server using the `payment_id`:
+
+```bash
+curl https://api.southpay.io/v1/payments/pay_abc123
+```
+
+**Response**
+
+```json
+{
+  "payment_id": "pay_abc123",
+  "status": "paid",
+  "amount": "49.99",
+  "currency": "USD",
+  "crypto_amount": "0.00082",
+  "crypto_currency": "ETH",
+  "expires_at": "2026-03-24T15:00:00.000Z"
+}
+```
+
+**Payment statuses**
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Waiting for the customer to initiate payment |
+| `processing` | Funds received, confirming on-chain |
+| `paid` | Payment confirmed and complete |
+| `failed` | Payment failed |
+| `expired` | Payment window closed before funds arrived |
+| `refunded` | Payment was refunded |
+
+---
+
+## 5. Receive webhook events
+
+Instead of polling, configure a webhook to receive real-time events as payment status changes.
+
+<Card title="Webhooks" icon="webhook" href="/webhooks">
+  Set up your endpoint and verify signatures.
+</Card>
+
+The `payment.completed` event fires when a payment is fully confirmed:
+
+```json
+{
+  "id": "3f2d1a9b-...",
+  "event": "payment.completed",
+  "timestamp": "2026-03-24T14:05:00.000Z",
+  "api_version": "v1",
+  "data": {
+    "payment_id": "pay_abc123",
+    "merchant_reference": "order_123",
+    "status": "paid",
+    "amount": "49.99",
+    "currency": "USD"
+  }
+}
+```
+
+---
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Webhooks" icon="webhook" href="/webhooks">
+    Verify signatures and handle events reliably.
+  </Card>
+  <Card title="API reference" icon="terminal" href="/api-reference">
+    Full reference for payments, payouts, and stores.
+  </Card>
+</Columns>

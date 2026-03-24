@@ -5,9 +5,7 @@ description: "The payment infrastructure for modern developers"
 
 ## Build payments like you build software
 
-Southpay is a developer-first payment infrastructure layer.
-
-Think of it as **Apple for payments** — a platform where payments are as easy as plug n play
+Southpay is a developer-first crypto payment infrastructure. Accept payments in crypto, get notified in real time via webhooks, and integrate in minutes with a clean REST API.
 
 ---
 
@@ -21,61 +19,60 @@ Think of it as **Apple for payments** — a platform where payments are as easy 
 
 ## Developer-first by design
 
-Southpay is built around simple primitives and predictable APIs.
-
 <Columns cols={2}>
-  <Card title="API-first architecture" icon="terminal" href="/api-reference/introduction">
-    Everything is exposed through a clean, consistent API.
+  <Card title="API-first" icon="terminal" href="/api-reference">
+    Every feature is exposed through a consistent REST API.
   </Card>
 
-  <Card title="Instant integration" icon="bolt" href="/quickstart">
-    Start accepting payments with minimal setup.
+  <Card title="Idempotent by default" icon="shield">
+    Pass a `merchant_reference` or `Idempotency-Key` — duplicate requests return the same payment, safely.
   </Card>
 
-  <Card title="Reliable by default" icon="shield">
-    Idempotency, retries, and webhook delivery are handled for you.
+  <Card title="Real-time webhooks" icon="webhook" href="/webhooks">
+    Get notified on every payment event. Signed, retried, and logged automatically.
   </Card>
 
-  <Card title="Built for scale" icon="layer-group">
-    Designed to handle high-volume payment systems from day one.
+  <Card title="Hosted checkout" icon="bolt" href="/quickstart">
+    One API call creates a `checkout_url`. No frontend integration required.
   </Card>
 </Columns>
 
 ---
 
-## End-to-end payment lifecycle
+## Payment lifecycle
 
-Southpay handles the full flow of money movement across your product.
+A payment moves through a predictable set of states from creation to confirmation.
 
-<Columns cols={2}>
-  <Card title="Payments" icon="credit-card" href="/payments">
-    Create and track payments in real time.
-  </Card>
-
-  <Card title="Settlements" icon="coins" href="/settlements">
-    Automatically settle completed payments.
-  </Card>
-
-  <Card title="Balances" icon="wallet" href="/wallets">
-    Maintain real-time balances with a ledger-based system.
-  </Card>
-
-  <Card title="Payouts" icon="paper-plane" href="/payouts">
-    Withdraw funds to external destinations globally.
-  </Card>
-</Columns>
+| Status | Description |
+|--------|-------------|
+| `pending` | Created, waiting for customer action |
+| `processing` | Funds received on-chain, confirming |
+| `paid` | Confirmed and credited |
+| `failed` | Could not be completed |
+| `expired` | Window closed before payment arrived |
+| `refunded` | Funds returned |
 
 ---
 
-## Built for production systems
+## Core resources
 
-Southpay is designed for reliability, correctness, and developer experience:
+<Columns cols={2}>
+  <Card title="Payments" icon="credit-card" href="/api-reference">
+    Create and track crypto payments in real time.
+  </Card>
 
-- sandbox and production environments
-- idempotent operations by default
-- event-driven webhook system
-- ledger-based balance tracking
-- strict consistency for financial operations
+  <Card title="Webhooks" icon="webhook" href="/webhooks">
+    Receive signed events for every payment status change.
+  </Card>
+
+  <Card title="Payouts" icon="paper-plane" href="/api-reference">
+    Withdraw settled funds to a bank or crypto address.
+  </Card>
+
+  <Card title="Stores" icon="store" href="/api-reference">
+    Isolated environments with their own API keys and config.
+  </Card>
+</Columns>
 
 ---
 
