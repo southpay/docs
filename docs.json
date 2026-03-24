@@ -36,16 +36,6 @@
             ]
           }
         ]
-      },
-      {
-        "tab": "API reference",
-        "openapi": "api-1.json",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": []
-          }
-        ]
       }
     ]
   },
