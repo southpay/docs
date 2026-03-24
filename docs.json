@@ -28,6 +28,12 @@
               "index",
               "quickstart"
             ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "webhooks"
+            ]
           }
         ]
       },

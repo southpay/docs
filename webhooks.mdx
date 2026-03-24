@@ -1,0 +1,312 @@
+---
+title: Webhooks
+description: Receive real-time notifications when payment events occur in your store
+---
+
+Webhooks let you receive HTTP notifications whenever a payment event happens — completed, failed, expired, and more. Instead of polling the API, your server gets notified automatically.
+
+---
+
+## How it works
+
+1. You register a public HTTPS endpoint in your store settings
+2. Southpay generates a signing secret and returns it **once** — store it securely
+3. When an event occurs, Southpay sends a signed POST request to your endpoint
+4. Your server verifies the signature and processes the event
+
+---
+
+## Setting up a webhook
+
+Configure your webhook URL from the dashboard or via the API.
+
+```bash
+curl -X POST https://api.southpay.io/v1/stores/{store_id}/webhooks \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "webhookUrl": "https://yourapp.com/webhooks/southpay",
+    "enabled": true
+  }'
+```
+
+The response includes your `webhookSecret`. **This is the only time it is returned** — save it immediately.
+
+```json
+{
+  "webhookSecret": "a3f9d2e1b4c7..."
+}
+```
+
+---
+
+## Event envelope
+
+Every webhook request has the same envelope structure, regardless of event type.
+
+```json
+{
+  "id": "3f2d1a9b-...",
+  "event": "payment.completed",
+  "timestamp": "2026-03-24T14:00:00.000Z",
+  "api_version": "v1",
+  "data": { ... }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique delivery ID (UUID) |
+| `event` | string | Event type (see below) |
+| `timestamp` | string | ISO 8601 UTC timestamp |
+| `api_version` | string | Always `"v1"` |
+| `data` | object | Event-specific payload |
+
+---
+
+## Event types
+
+### Payment events
+
+| Event | Description |
+|-------|-------------|
+| `payment.created` | A new payment was created |
+| `payment.pending` | Payment is waiting for funds |
+| `payment.processing` | Funds received, confirming on-chain |
+| `payment.completed` | Payment fully confirmed and settled |
+| `payment.failed` | Payment failed |
+| `payment.expired` | Payment window expired before funds arrived |
+| `payment.refunded` | Payment was refunded |
+| `payment.updated` | Payment details were updated |
+| `payment.test` | Test event sent from dashboard |
+
+### Payment data payload
+
+```json
+{
+  "payment_id": "pay_abc123",
+  "merchant_reference": "order_456",
+  "status": "completed",
+  "amount": "99.00",
+  "currency": "USD",
+  "crypto_amount": "0.00234",
+  "crypto_currency": "ETH",
+  "crypto_network": "ethereum",
+  "transaction_hash": "0xabc...",
+  "paid_at": "2026-03-24T14:00:00.000Z",
+  "created_at": "2026-03-24T13:50:00.000Z",
+  "metadata": { "customer_id": "cus_789" }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `payment_id` | string | Southpay payment ID |
+| `merchant_reference` | string \| null | Your reference passed at creation |
+| `status` | string | Current payment status |
+| `amount` | string \| null | Fiat amount |
+| `currency` | string \| null | Fiat currency (e.g. `USD`) |
+| `crypto_amount` | string \| null | Crypto amount received |
+| `crypto_currency` | string \| null | Crypto asset (e.g. `ETH`) |
+| `crypto_network` | string \| null | Network (e.g. `ethereum`) |
+| `transaction_hash` | string \| null | On-chain transaction hash |
+| `paid_at` | string \| null | When funds were confirmed |
+| `created_at` | string | When the payment was created |
+| `metadata` | object \| null | Custom metadata from creation |
+
+---
+
+## Verifying signatures
+
+Every request includes three headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-SouthPay-Sig` | HMAC-SHA512 signature of the full envelope |
+| `X-SouthPay-Event` | Event type (e.g. `payment.completed`) |
+| `X-SouthPay-Delivery` | Delivery ID (matches envelope `id`) |
+
+### How the signature is computed
+
+1. Sort all envelope keys recursively (alphabetically)
+2. Serialize to JSON (no extra whitespace)
+3. Compute HMAC-SHA512 using your `webhookSecret`
+4. Compare using a timing-safe equality check
+
+<CodeGroup>
+
+```typescript Node.js / Bun
+import { createHmac, timingSafeEqual } from "crypto";
+
+function sortObjectKeys(obj: Record<string, unknown>): Record<string, unknown> {
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort()) {
+    const value = obj[key];
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      sorted[key] = sortObjectKeys(value as Record<string, unknown>);
+    } else {
+      sorted[key] = value;
+    }
+  }
+  return sorted;
+}
+
+function verifyWebhook(
+  rawBody: string,
+  signature: string,
+  secret: string,
+): boolean {
+  const envelope = JSON.parse(rawBody);
+  const sorted = sortObjectKeys(envelope);
+  const expected = createHmac("sha512", secret)
+    .update(JSON.stringify(sorted))
+    .digest("hex");
+
+  const sigBuf = Buffer.from(signature);
+  const expBuf = Buffer.from(expected);
+  if (sigBuf.length !== expBuf.length) return false;
+  return timingSafeEqual(sigBuf, expBuf);
+}
+```
+
+```python Python
+import hmac
+import hashlib
+import json
+
+def sort_object_keys(obj):
+    if not isinstance(obj, dict):
+        return obj
+    return {k: sort_object_keys(v) for k, v in sorted(obj.items())}
+
+def verify_webhook(raw_body: str, signature: str, secret: str) -> bool:
+    envelope = json.loads(raw_body)
+    sorted_envelope = sort_object_keys(envelope)
+    payload = json.dumps(sorted_envelope, separators=(',', ':'))
+    expected = hmac.new(
+        secret.encode(), payload.encode(), hashlib.sha512
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+```
+
+```go Go
+import (
+    "crypto/hmac"
+    "crypto/sha512"
+    "encoding/hex"
+    "encoding/json"
+    "sort"
+)
+
+func sortKeys(obj map[string]any) map[string]any {
+    sorted := make(map[string]any)
+    keys := make([]string, 0, len(obj))
+    for k := range obj { keys = append(keys, k) }
+    sort.Strings(keys)
+    for _, k := range keys {
+        if nested, ok := obj[k].(map[string]any); ok {
+            sorted[k] = sortKeys(nested)
+        } else {
+            sorted[k] = obj[k]
+        }
+    }
+    return sorted
+}
+
+func verifyWebhook(rawBody []byte, signature, secret string) bool {
+    var envelope map[string]any
+    json.Unmarshal(rawBody, &envelope)
+    sorted := sortKeys(envelope)
+    payload, _ := json.Marshal(sorted)
+    mac := hmac.New(sha512.New, []byte(secret))
+    mac.Write(payload)
+    expected := hex.EncodeToString(mac.Sum(nil))
+    return hmac.Equal([]byte(signature), []byte(expected))
+}
+```
+
+</CodeGroup>
+
+### Example endpoint
+
+```typescript
+import { createHmac, timingSafeEqual } from "crypto";
+
+app.post("/webhooks/southpay", async (req, res) => {
+  const signature = req.headers["x-southpay-sig"] as string;
+  const rawBody = req.rawBody; // ensure you read raw bytes before JSON parsing
+
+  if (!verifyWebhook(rawBody, signature, process.env.SOUTHPAY_WEBHOOK_SECRET)) {
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+
+  const event = req.body;
+
+  switch (event.event) {
+    case "payment.completed":
+      await fulfillOrder(event.data.merchant_reference);
+      break;
+    case "payment.failed":
+    case "payment.expired":
+      await cancelOrder(event.data.merchant_reference);
+      break;
+  }
+
+  res.status(200).json({ received: true });
+});
+```
+
+---
+
+## Delivery and retries
+
+- Southpay expects a `2xx` response within **30 seconds**
+- On `5xx` or `429` responses, delivery is automatically retried with backoff
+- `4xx` responses (except `429`) are not retried — fix the endpoint and use the test tool to resend
+- Each delivery attempt is logged and viewable in your dashboard
+
+---
+
+## Testing your endpoint
+
+Send a test event from the dashboard or via the API:
+
+```bash
+curl -X POST https://api.southpay.io/v1/stores/{store_id}/webhooks/test \
+  -H "Authorization: Bearer <API_KEY>"
+```
+
+The test event uses the `payment.test` event type and a synthetic payload with `"metadata": { "test": true }`. Your endpoint should return `200` — any HTTP response is treated as a success for test events.
+
+---
+
+## Managing webhooks
+
+**Rotate your secret** at any time without downtime — the new secret takes effect immediately:
+
+```bash
+curl -X POST https://api.southpay.io/v1/stores/{store_id}/webhooks/rotate-secret \
+  -H "Authorization: Bearer <API_KEY>"
+```
+
+**Disable** a webhook without deleting it:
+
+```bash
+curl -X PATCH https://api.southpay.io/v1/stores/{store_id}/webhooks \
+  -H "Authorization: Bearer <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{ "enabled": false }'
+```
+
+**View delivery logs** from the dashboard or API to inspect request/response bodies for each delivery attempt.
+
+---
+
+## Security best practices
+
+- Always verify the `X-SouthPay-Sig` header before processing any event
+- Use a timing-safe comparison (`timingSafeEqual` / `hmac.compare_digest`) — never `===`
+- Store your webhook secret in an environment variable, never in source code
+- Your endpoint must be reachable over **HTTPS**
+- Respond quickly (under 30s) — offload heavy processing to a background job
+- Use the `id` field to deduplicate retried deliveries
