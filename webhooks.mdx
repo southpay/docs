@@ -1,6 +1,6 @@
 ---
-title: Webhooks
-description: Receive real-time notifications when payment events occur in your store
+title: "Webhooks"
+description: "Receive real-time notifications when payment events occur in your store"
 ---
 
 Webhooks let you receive HTTP notifications whenever a payment event happens — completed, failed, expired, and more. Instead of polling the API, your server gets notified automatically.
@@ -55,7 +55,7 @@ Every webhook request has the same envelope structure, regardless of event type.
 ```
 
 | Field | Type | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | `id` | string | Unique delivery ID (UUID) |
 | `event` | string | Event type (see below) |
 | `timestamp` | string | ISO 8601 UTC timestamp |
@@ -69,7 +69,7 @@ Every webhook request has the same envelope structure, regardless of event type.
 ### Payment events
 
 | Event | Description |
-|-------|-------------|
+| --- | --- |
 | `payment.created` | A new payment was created |
 | `payment.pending` | Payment is waiting for funds |
 | `payment.processing` | Funds received, confirming on-chain |
@@ -100,7 +100,7 @@ Every webhook request has the same envelope structure, regardless of event type.
 ```
 
 | Field | Type | Description |
-|-------|------|-------------|
+| --- | --- | --- |
 | `payment_id` | string | Southpay payment ID |
 | `merchant_reference` | string \| null | Your reference passed at creation |
 | `status` | string | Current payment status |
@@ -121,7 +121,7 @@ Every webhook request has the same envelope structure, regardless of event type.
 Every request includes three headers:
 
 | Header | Description |
-|--------|-------------|
+| --- | --- |
 | `X-SouthPay-Sig` | HMAC-SHA512 signature of the full envelope |
 | `X-SouthPay-Event` | Event type (e.g. `payment.completed`) |
 | `X-SouthPay-Delivery` | Delivery ID (matches envelope `id`) |
@@ -233,7 +233,7 @@ func verifyWebhook(rawBody []byte, signature, secret string) bool {
 import { createHmac, timingSafeEqual } from "crypto";
 
 app.post("/webhooks/southpay", async (req, res) => {
-  const signature = req.headers["x-southpay-sig"] as string;
+  const signature = req.headers["X-SouthPay-Sig"] as string;
   const rawBody = req.rawBody; // ensure you read raw bytes before JSON parsing
 
   if (!verifyWebhook(rawBody, signature, process.env.SOUTHPAY_WEBHOOK_SECRET)) {
