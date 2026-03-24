@@ -54,19 +54,20 @@ curl -X POST https://api.southpay.io/v1/payments/ \
 
 **Request fields**
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `amount` | string | Yes | Decimal amount (e.g. `"49.99"`) |
-| `currency` | string | Yes | ISO 4217 fiat code (e.g. `USD`) |
-| `merchant_reference` | string | No | Your internal order ID — must be unique per store |
-| `success_url` | string | No | Redirect URL after successful payment |
-| `cancel_url` | string | No | Redirect URL when customer cancels |
-| `customer_email` | string | No | Pre-fills the checkout form |
-| `metadata` | object | No | Key-value string pairs attached to the payment |
-| `provider_type` | string | No | Override the store's default provider (`radom`, `nowpayments`, `cpay`) |
+| Field                | Type   | Required | Description                                       |
+| -------------------- | ------ | -------- | ------------------------------------------------- |
+| `amount`             | string | Yes      | Decimal amount (e.g. `"49.99"`)                   |
+| `currency`           | string | Yes      | ISO 4217 fiat code (e.g. `USD`)                   |
+| `merchant_reference` | string | No       | Your internal order ID — must be unique per store |
+| `success_url`        | string | No       | Redirect URL after successful payment             |
+| `cancel_url`         | string | No       | Redirect URL when customer cancels                |
+| `customer_email`     | string | No       | Pre-fills the checkout form                       |
+| `metadata`           | object | No       | Key-value string pairs attached to the payment    |
 
 <Tip>
-  Pass an `Idempotency-Key` header to safely retry the request without creating duplicate payments. If `merchant_reference` is provided, it is used as the idempotency key automatically.
+  Pass an `Idempotency-Key` header to safely retry the request without creating
+  duplicate payments. If `merchant_reference` is provided, it is used as the
+  idempotency key automatically.
 </Tip>
 
 ---
@@ -107,14 +108,14 @@ curl https://api.southpay.io/v1/payments/pay_abc123
 
 **Payment statuses**
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Waiting for the customer to initiate payment |
-| `processing` | Funds received, confirming on-chain |
-| `paid` | Payment confirmed and complete |
-| `failed` | Payment failed |
-| `expired` | Payment window closed before funds arrived |
-| `refunded` | Payment was refunded |
+| Status       | Description                                  |
+| ------------ | -------------------------------------------- |
+| `pending`    | Waiting for the customer to initiate payment |
+| `processing` | Funds received, confirming on-chain          |
+| `paid`       | Payment confirmed and complete               |
+| `failed`     | Payment failed                               |
+| `expired`    | Payment window closed before funds arrived   |
+| `refunded`   | Payment was refunded                         |
 
 ---
 
