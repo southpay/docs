@@ -3,6 +3,29 @@ title: Changelog
 description: The latest updates, new features, and improvements to Southpay
 ---
 
+<Update label="2026-03-28" description="March 28, 2026" tags={["Feature", "Improvement", "Fix"]}>
+  ## New features
+
+  **Balance breakdown by network** — Your store balances are now broken down by cryptocurrency and blockchain network. For example, you can see your USDT balance on Tron separately from USDT on Ethereum. The balance transaction history also supports filtering by currency and network.
+
+  **Checkout redirect URLs** — You can now pass `success_url` and `cancel_url` when creating a payment. After your customer completes or cancels checkout, they are automatically redirected to the URL you specified. The redirect includes `session_id` and `status` query parameters so your application can identify the payment.
+
+  **Miner fee transparency** — Payment settlement details now include a `miner_fee` field showing the blockchain network fee charged for processing the on-chain transaction. The full breakdown — gross amount, miner fee, processing fee, and net amount — is returned on every payment.
+
+  ## Improvements
+
+  **Request tracing** — Every API response now includes an `x-request-id` header. Use this identifier when contacting support to help us quickly locate and debug issues with specific requests.
+
+  **Payout processing reliability** — Payouts now use distributed locking to prevent concurrent processing of the same payout, reducing the chance of duplicate or stuck payouts during high-traffic periods.
+
+  ## Bug fixes
+
+  - Fixed an issue where paginated store payment responses could return incorrect results.
+  - Fixed double fee taxation on certain payment flows.
+  - Resolved payout sweeping timeouts that could delay payout completion.
+  - Fixed settlement amount precision for large transactions.
+</Update>
+
 <Update label="2026-03-27" description="March 2026" tags={["Feature", "Improvement", "Fix"]}>
   ## New features
 
