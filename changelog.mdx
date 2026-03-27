@@ -1,0 +1,35 @@
+---
+title: Changelog
+description: The latest updates and improvements to Southpay
+---
+
+<Update label="2026-03-27" description="March 2026" tags={["Feature", "Improvement", "Fix"]}>
+  ## New features
+
+  **API key authentication** — You can now create scoped API keys for programmatic access to your store. Each key supports granular permissions (payments, payouts, store, and webhooks) and optional expiration dates. Generate keys from the dashboard or via the API. See the [authentication guide](/authentication) for details.
+
+  **Auto-swap** — Automatically convert incoming crypto payments to your preferred stablecoin (e.g., USDT) as soon as they settle. Enable auto-swap per store and configure your target currency. You can also trigger manual swaps or request a swap estimate before executing.
+
+  **Custom domains** — Serve your hosted checkout page from your own domain (e.g., `pay.yourstore.com`). Register a domain, add the required DNS records, and verify ownership — all through the API. Your store branding (logo and color) appears on the checkout page automatically.
+
+  **Expanded webhook events** — Subscribe to a broader set of real-time events including payout, swap, and balance updates. New event types: `payout.created`, `payout.completed`, `payout.failed`, `swap.completed`, `swap.failed`, `balance.updated`, and `order.updated`. See the [webhooks guide](/webhooks) for the full list.
+
+  **Google sign-in** — Authenticate with Google as an alternative to email and password. Existing accounts are automatically linked when the email matches. See [authentication](/authentication) for setup.
+
+  ## Improvements
+
+  **Idempotent payment creation** — Duplicate payment requests with the same `merchant_reference` or `Idempotency-Key` header now safely return the original payment instead of creating a duplicate.
+
+  **Stricter rate limiting on auth routes** — Authentication endpoints now enforce tighter rate limits (10 requests per 5 minutes per IP) to better protect against brute-force attempts.
+
+  **Webhook signature verification** — Webhook envelopes are now signed with HMAC-SHA256 and include delivery headers (`X-SouthPay-Sig`, `X-SouthPay-Event`, `X-SouthPay-Delivery`) for secure verification. See [verifying signatures](/webhooks#verifying-signatures).
+
+  ## Bug fixes
+
+  - Fixed an issue where the rate limit window on auth routes was misconfigured.
+  - Fixed webhook signature enveloping to ensure consistent payload formatting.
+  - Resolved a balance ledger issue that could produce incorrect entries on certain payment paths.
+  - Fixed payout status tracking and webhook delivery for payout events.
+  - Fixed swap balance calculations to prevent ghost entries.
+  - Resolved double-deduction issues on payment settlements.
+</Update>
