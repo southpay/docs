@@ -14,6 +14,8 @@ description: The latest updates, new features, and improvements to Southpay
 
   **Custom domains** — Serve your hosted checkout page from your own domain (e.g., `pay.yourstore.com`). Register a domain, add the required DNS records, and verify ownership — all through the API. Your store branding appears on the checkout page automatically.
 
+  **Email notifications** — Receive email alerts when payments are received, payouts are initiated, and swaps complete. Toggle email notifications on or off per store.
+
   **Expanded webhook events** — Subscribe to a broader set of real-time events including payout, swap, and balance updates. New event types: `payout.created`, `payout.completed`, `payout.failed`, `swap.completed`, `swap.failed`, `balance.updated`, and `order.updated`. See the [webhooks guide](/webhooks) for the full list.
 
   **Google sign-in** — Authenticate with Google as an alternative to email and password. Existing accounts are automatically linked when the email matches. See [authentication](/authentication) for setup.
@@ -24,6 +26,8 @@ description: The latest updates, new features, and improvements to Southpay
 
   **Real-time events (SSE)** — Subscribe to a Server-Sent Events stream to receive live updates for your store, including payment status changes and new notifications, without polling the API.
 
+  **WooCommerce plugin** — Accept crypto payments on your WooCommerce store with the official Southpay payment gateway plugin. Download the plugin directly from the API and configure it with your store credentials.
+
   ## Improvements
 
   **Balance breakdown by network** — Store balances are now broken down by cryptocurrency and blockchain network. For example, you can see your USDT balance on Tron separately from USDT on Ethereum. The balance transaction history also supports filtering by currency and network.
@@ -31,6 +35,8 @@ description: The latest updates, new features, and improvements to Southpay
   **Idempotent payment creation** — Duplicate payment requests with the same `merchant_reference` or `Idempotency-Key` header now safely return the original payment instead of creating a duplicate.
 
   **Payout processing reliability** — Payouts now use distributed locking to prevent concurrent processing of the same payout, reducing the chance of duplicate or stuck payouts during high-traffic periods.
+
+  **Improved input validation** — Registration and store creation endpoints now enforce stricter validation rules and reject reserved words, giving you clearer error messages when input doesn't meet requirements.
 
   **Request tracing** — Every API response now includes an `x-request-id` header. Include this identifier when contacting support to help us quickly locate and debug issues with specific requests.
 
