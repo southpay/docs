@@ -6,8 +6,7 @@ sidebarTitle: "Authentication"
 
 ## Overview
 
-Before interacting with the API, your users must have an account. **Registration happens on the website**, and after logging in, they can generate an API key or get OAuth tokens to authenticate API requests.
-This guide shows how to log in, refresh tokens, and use them to authorize API calls.
+Before interacting with the API, you must have an account. **Registration happens on the website**, and after logging in, you can generate an API key or get OAuth tokens to authenticate API requests. This guide shows how to log in, refresh tokens, and use them to authorize API calls.
 
 ---
 
@@ -26,7 +25,7 @@ curl -X POST https://api.southpay.io/v1/auth/login \
 
 Response
 
-`````json
+```json
 {
   "access_token": "<ACCESS_TOKEN>",
   "refresh_token": "<REFRESH_TOKEN>",
@@ -35,16 +34,17 @@ Response
 }
 ```
 
-The access_token is used for authenticating API requests.
-The refresh_token is used to obtain a new access token when it expires.
+The `access_token` is used for authenticating API requests.
+
+The `refresh_token` is used to obtain a new access token when it expires.
 
 ---
 
 ## Refresh an access token
 
-When the access_token expires, use the /auth/session/refresh endpoint with the refresh_token:
+When the `access_token` expires, use the `/auth/session/refresh` endpoint with the `refresh_token`:
 
-```bash
+```shellscript bash
 curl -X POST https://api.southpay.io/v1/auth/login \
   -H "Content-Type: application/json" \
   -d 'curl -X POST https://api.southpay.io/v1/auth/session/refresh \
@@ -57,7 +57,7 @@ curl -X POST https://api.southpay.io/v1/auth/login \
 
 Response
 
-````json
+```json bash
 {
   "access_token": "<NEW_ACCESS_TOKEN>",
   "refresh_token": "<NEW_REFRESH_TOKEN>",
@@ -65,24 +65,30 @@ Response
   "token_type": "Bearer"
 }
 ```
+
 ---
+
 ## Log in with Google
+
 You can also authenticate using Google OAuth:
 
 1. Get the Google sign-in URL:
-```bash
+
+```shellscript
 curl https://api.southpay.io/v1/auth/google/authorize
 ```
 
 Response
 
-````json
+```json
 {
   "url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=..."
 }
+```
 
 2. Exchange the authorization code for tokens:
-```bash
+
+```shellscript
 curl -X POST https://api.southpay.io/v1/auth/google/callback \
   -H "Content-Type: application/json" \
   -d '{
@@ -92,7 +98,7 @@ curl -X POST https://api.southpay.io/v1/auth/google/callback \
 
 Response
 
-````json
+```json
 {
   "access_token": "<ACCESS_TOKEN>",
   "refresh_token": "<REFRESH_TOKEN>",
@@ -100,8 +106,12 @@ Response
   "token_type": "Bearer"
 }
 ```
+
 ---
 
-Tips
-
-`````
+<Tip>
+  - Store tokens securely in your backend or client storage.
+  - Never share `access_token` or `refresh_token` publicly.
+  - Access tokens expire quickly (1 hour), always handle token refresh automatically.
+  - For server-to-server authentication, consider generating an **API key** in the dashboard instead of using user credentials.
+</Tip>
