@@ -16,7 +16,15 @@ description: The latest updates, new features, and improvements to Southpay
 
   **Google sign-in** — Authenticate with Google as an alternative to email and password. Existing accounts are automatically linked when the email matches. See [authentication](/authentication) for setup.
 
+  **In-app notifications** — Stay informed with a built-in notification center. You receive alerts for important events like failed webhook deliveries and recovered payments. View, filter, and mark notifications as read via the API.
+
+  **Real-time events (SSE)** — Subscribe to a Server-Sent Events stream to receive live updates for your store, including payment status changes and new notifications, without polling the API.
+
+  **Checkout redirects** — Pass `success_url` and `cancel_url` when creating a payment. After checkout, your customer is automatically redirected back to your site with the `session_id` and payment `status` as query parameters.
+
   ## Improvements
+
+  **Balance breakdown by network** — Store balances are now broken down by both currency and blockchain network. You can view and filter balances and transaction history per network for more granular accounting.
 
   **Idempotent payment creation** — Duplicate payment requests with the same `merchant_reference` or `Idempotency-Key` header now safely return the original payment instead of creating a duplicate.
 
