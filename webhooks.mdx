@@ -128,21 +128,30 @@ Every request includes three headers:
 
 ### How the signature is computed
 
-1. Sort all envelope keys recursively (alphabetically)
-2. Serialize to JSON (no extra whitespace)
-3. Compute HMAC-SHA512 using your `webhookSecret`
-4. Compare using a timing-safe equality check
+1. **Sort all envelope keys recursively** in alphabetical order.
+   1. Only objects are sorted; arrays, dates, and primitive values remain unchanged.
+2. **Serialize the sorted envelope to JSON** using standard JSON serialization with **no extra whitespace**.
+3. **Compute HMAC-SHA256** of the JSON payload using your `webhookSecret`.
+4. **Compare using a timing-safe equality check** to prevent timing attacks.
 
 <CodeGroup>
 
 ```typescript Node.js / Bun
 import { createHmac, timingSafeEqual } from "crypto";
 
+interface SignableEnvelope {
+  id: string;
+  event: string;
+  timestamp: string;
+  api_version: string;
+  data: unknown;
+}
+
 function sortObjectKeys(obj: Record<string, unknown>): Record<string, unknown> {
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(obj).sort()) {
     const value = obj[key];
-    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
       sorted[key] = sortObjectKeys(value as Record<string, unknown>);
     } else {
       sorted[key] = value;
@@ -151,20 +160,18 @@ function sortObjectKeys(obj: Record<string, unknown>): Record<string, unknown> {
   return sorted;
 }
 
-function verifyWebhook(
-  rawBody: string,
-  signature: string,
-  secret: string,
-): boolean {
-  const envelope = JSON.parse(rawBody);
-  const sorted = sortObjectKeys(envelope);
-  const expected = createHmac("sha512", secret)
-    .update(JSON.stringify(sorted))
-    .digest("hex");
+export function signEnvelope(envelope: SignableEnvelope, secret: string): string {
+  const sorted = sortObjectKeys(envelope as unknown as Record<string, unknown>);
+  return createHmac("sha256", secret).update(JSON.stringify(sorted)).digest("hex");
+}
 
+export function verifyEnvelopeSignature(envelope: SignableEnvelope, signature: string, secret: string): boolean {
+  const expected = signEnvelope(envelope, secret);
   const sigBuf = Buffer.from(signature);
   const expBuf = Buffer.from(expected);
+
   if (sigBuf.length !== expBuf.length) return false;
+
   return timingSafeEqual(sigBuf, expBuf);
 }
 ```
@@ -182,17 +189,16 @@ def sort_object_keys(obj):
 def verify_webhook(raw_body: str, signature: str, secret: str) -> bool:
     envelope = json.loads(raw_body)
     sorted_envelope = sort_object_keys(envelope)
-    payload = json.dumps(sorted_envelope, separators=(',', ':'))
-    expected = hmac.new(
-        secret.encode(), payload.encode(), hashlib.sha512
-    ).hexdigest()
-    return hmac.compare_digest(signature, expected)
+    payload = json.dumps(sorted_envelope)
+    expected = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    
+return hmac.compare_digest(signature, expected)
 ```
 
 ```go Go
 import (
     "crypto/hmac"
-    "crypto/sha512"
+    "crypto/sha256"
     "encoding/hex"
     "encoding/json"
     "sort"
@@ -201,8 +207,11 @@ import (
 func sortKeys(obj map[string]any) map[string]any {
     sorted := make(map[string]any)
     keys := make([]string, 0, len(obj))
+
     for k := range obj { keys = append(keys, k) }
+
     sort.Strings(keys)
+
     for _, k := range keys {
         if nested, ok := obj[k].(map[string]any); ok {
             sorted[k] = sortKeys(nested)
@@ -210,18 +219,63 @@ func sortKeys(obj map[string]any) map[string]any {
             sorted[k] = obj[k]
         }
     }
+
     return sorted
 }
 
 func verifyWebhook(rawBody []byte, signature, secret string) bool {
     var envelope map[string]any
+
     json.Unmarshal(rawBody, &envelope)
     sorted := sortKeys(envelope)
     payload, _ := json.Marshal(sorted)
-    mac := hmac.New(sha512.New, []byte(secret))
+    mac := hmac.New(sha256.New, []byte(secret))
     mac.Write(payload)
     expected := hex.EncodeToString(mac.Sum(nil))
+
     return hmac.Equal([]byte(signature), []byte(expected))
+}
+```
+
+```php P
+<?php
+
+function sortObjectKeys(array $obj): array {
+    ksort($obj);
+    foreach ($obj as $key => $value) {
+        if (is_array($value)) {
+            if (array_keys($value) !== range(0, count($value) - 1)) {
+                $obj[$key] = sortObjectKeys($value);
+            }
+        }
+    }
+    return $obj;
+}
+
+function signEnvelope(array $envelope, string $secret): string {
+    $sorted = sortObjectKeys($envelope);
+    $jsonPayload = json_encode($sorted, JSON_UNESCAPED_SLASHES);
+
+    return hash_hmac('sha256', $jsonPayload, $secret);
+}
+
+function verifyEnvelopeSignature(array $envelope, string $signature, string $secret): bool {
+    $expected = signEnvelope($envelope, $secret);
+
+    if (function_exists('hash_equals')) {
+        return hash_equals($expected, $signature);
+    }
+
+
+    if (strlen($expected) !== strlen($signature)) return false;
+
+    $res = 0;
+
+    for ($i = 0; $i < strlen($expected); $i++) {
+        $res |= ord($expected[$i]) ^ ord($signature[$i]);
+    }
+
+    return $res === 0;
 }
 ```
 
@@ -229,32 +283,184 @@ func verifyWebhook(rawBody []byte, signature, secret string) bool {
 
 ### Example endpoint
 
-```typescript
-import { createHmac, timingSafeEqual } from "crypto";
+<CodeGroup>
+
+```typescript Node.js / Express
+import express from "express";
+import { verifyEnvelopeSignature } from "./webhookSignature"; // your utils
+
+const app = express();
+
+
+app.use(express.json({
+  verify: (req, res, buf) => { (req as any).rawBody = buf; }
+}));
 
 app.post("/webhooks/southpay", async (req, res) => {
-  const signature = req.headers["X-SouthPay-Sig"] as string;
-  const rawBody = req.rawBody; // ensure you read raw bytes before JSON parsing
+  const signature = req.headers["x-southpay-sig"] as string | undefined;
+  const rawBody = (req as any).rawBody as Buffer;
 
-  if (!verifyWebhook(rawBody, signature, process.env.SOUTHPAY_WEBHOOK_SECRET)) {
+  if (!signature || !rawBody) return res.status(400).json({ error: "Missing signature or body" });
+
+  const secret = process.env.SOUTHPAY_WEBHOOK_SECRET;
+  if (!secret) return res.status(500).json({ error: "Server misconfiguration" });
+
+  const envelope = JSON.parse(rawBody.toString());
+
+  if (!verifyEnvelopeSignature(envelope, signature, secret)) {
     return res.status(401).json({ error: "Invalid signature" });
   }
 
-  const event = req.body;
-
-  switch (event.event) {
-    case "payment.completed":
-      await fulfillOrder(event.data.merchant_reference);
-      break;
-    case "payment.failed":
-    case "payment.expired":
-      await cancelOrder(event.data.merchant_reference);
-      break;
+  try {
+    switch (envelope.event) {
+      case "payment.completed":
+        await fulfillOrder(envelope.data.merchant_reference);
+        break;
+      case "payment.failed":
+      case "payment.expired":
+        await cancelOrder(envelope.data.merchant_reference);
+        break;
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Internal error" });
   }
 
-  res.status(200).json({ received: true });
+  res.json({ received: true });
 });
 ```
+
+```python Python / FastAPI
+from fastapi import FastAPI, Request, HTTPException
+from webhook_signature import verify_webhook  # your utils
+
+app = FastAPI()
+
+@app.post("/webhooks/southpay")
+async def webhook(request: Request):
+    signature = request.headers.get("X-SouthPay-Sig")
+    if not signature:
+        raise HTTPException(status_code=400, detail="Missing signature")
+
+    raw_body = await request.body()
+    secret = "YOUR_WEBHOOK_SECRET"
+
+    import json
+    envelope = json.loads(raw_body)
+
+    if not verify_webhook(raw_body.decode(), signature, secret):
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    event_type = envelope.get("event")
+    data = envelope.get("data", {})
+
+    if event_type == "payment.completed":
+        await fulfill_order(data.get("merchant_reference"))
+    elif event_type in ["payment.failed", "payment.expired"]:
+        await cancel_order(data.get("merchant_reference"))
+
+    return {"received": True}
+
+async def fulfill_order(ref: str): pass
+async def cancel_order(ref: str): pass
+```
+
+```go Go
+package main
+
+import (
+    "encoding/json"
+    "io"
+    "log"
+    "net/http"
+)
+
+type Envelope struct {
+    Event string                 `json:"event"`
+    Data  map[string]interface{} `json:"data"`
+}
+
+func webhookHandler(w http.ResponseWriter, r *http.Request) {
+    signature := r.Header.Get("X-SouthPay-Sig")
+    if signature == "" {
+        http.Error(w, "Missing signature", http.StatusBadRequest)
+        return
+    }
+
+    rawBody, err := io.ReadAll(r.Body)
+    if err != nil {
+        http.Error(w, "Failed to read body", http.StatusInternalServerError)
+        return
+    }
+
+    secret := "YOUR_WEBHOOK_SECRET"
+
+    if !verifyWebhook(rawBody, signature, secret) {
+        http.Error(w, "Invalid signature", http.StatusUnauthorized)
+        return
+    }
+
+    var envelope Envelope
+    if err := json.Unmarshal(rawBody, &envelope); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    switch envelope.Event {
+    case "payment.completed":
+        fulfillOrder(envelope.Data["merchant_reference"].(string))
+    case "payment.failed", "payment.expired":
+        cancelOrder(envelope.Data["merchant_reference"].(string))
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    w.Write([]byte(`{"received": true}`))
+}
+
+func fulfillOrder(ref string)  { log.Println("Fulfill", ref) }
+func cancelOrder(ref string)   { log.Println("Cancel", ref) }
+```
+
+```php PHP
+<?php
+
+$signature = $_SERVER['HTTP_X_SOUTHPAY_SIG'] ?? null;
+$rawBody = file_get_contents('php://input');
+$secret = getenv('SOUTHPAY_WEBHOOK_SECRET');
+
+if (!$signature || !$rawBody || !$secret) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Missing signature, body, or secret']);
+    exit;
+}
+
+$envelope = json_decode($rawBody, true);
+
+if (!verifyEnvelopeSignature($envelope, $signature, $secret)) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Invalid signature']);
+
+    exit;
+}
+
+switch ($envelope['event'] ?? '') {
+    case 'payment.completed':
+        fulfillOrder($envelope['data']['merchant_reference']);
+        break;
+    case 'payment.failed':
+    case 'payment.expired':
+        cancelOrder($envelope['data']['merchant_reference']);
+        break;
+}
+
+http_response_code(200);
+echo json_encode(['received' => true]);
+
+function fulfillOrder(string $ref) { error_log("Fulfill $ref"); }
+function cancelOrder(string $ref) { error_log("Cancel $ref"); }
+```
+
+</CodeGroup>
 
 ---
 
