@@ -1,0 +1,92 @@
+---
+title: Changelog
+description: The latest updates, new features, and improvements to Southpay
+---
+
+<Update label="2026-03-28" description="Week of March 28, 2026" tags={["Feature", "Improvement", "Fix"]}>
+  ## New features
+
+  **Webhook event filtering** — You can now choose exactly which events each webhook endpoint receives. When configuring a webhook, pass an `event_subscriptions` array to limit delivery to only the event types you care about. Endpoints with no filter continue to receive all events. See the [webhooks guide](/webhooks) for details.
+
+  **Payment auto-expiration** — Unpaid payments now automatically expire after their time window closes. Before marking a payment as expired, the system performs a final status sync to ensure late-arriving on-chain transactions are not missed. The `expires_at` field is included in every payment response so you can display a countdown to your customers.
+
+  **Checkout branding** — Your store name, logo, and brand color are now displayed on the hosted checkout page for every payment — not just payments on a custom domain. Customers see a consistent, branded experience by default.
+
+  ## Improvements
+
+  **Balance breakdown by network** — Store balances are now broken down by cryptocurrency and blockchain network. For example, you can see your USDT balance on Tron separately from USDT on Ethereum. The balance transaction history also supports filtering by currency and network.
+
+  **Checkout redirect URLs** — You can now pass `success_url` and `cancel_url` when creating a payment. After your customer completes or cancels checkout, they are automatically redirected to the URL you specified. The redirect includes `session_id` and `status` query parameters so your application can identify the payment.
+
+  **Miner fee transparency** — Payment settlement details now include a `miner_fee` field showing the blockchain network fee charged for processing the on-chain transaction. The full breakdown — gross amount, miner fee, processing fee, and net amount — is returned on every payment.
+
+  **Request tracing** — Every API response now includes an `x-request-id` header. Use this identifier when contacting support to help us quickly locate and debug issues with specific requests.
+
+  **Payout processing reliability** — Payouts now use distributed locking to prevent concurrent processing of the same payout, reducing the chance of duplicate or stuck payouts during high-traffic periods.
+
+  ## Bug fixes
+
+  - Fixed an issue where paginated store payment responses could return incorrect results.
+  - Fixed double fee taxation on certain payment flows.
+  - Resolved payout sweeping timeouts that could delay payout completion.
+  - Fixed settlement amount precision for large transactions.
+  - Fixed the rate limit window on authentication routes.
+  - Fixed webhook signature enveloping to ensure consistent payload formatting.
+</Update>
+
+<Update label="2026-03-27" description="March 2026" tags={["Feature", "Improvement", "Fix"]}>
+  ## New features
+<Update label="2026-03-27" description="Week of March 27, 2026" tags={["Feature", "Improvement", "Fix"]}>
+  ## New features
+
+  **API key authentication** — Create scoped API keys for programmatic access to your store. Each key supports granular permissions (payments, payouts, store, and webhooks) and optional expiration dates. Generate keys from the dashboard or via the API. See the [authentication guide](/authentication) for details.
+
+  **Auto-swap** — Automatically convert incoming crypto payments to your preferred stablecoin (e.g., USDT) as soon as they settle. Enable auto-swap per store and configure your target currency. You can also trigger manual swaps or request a swap estimate before executing.
+
+  **Checkout redirect URLs** — Pass `success_url` and `cancel_url` when creating a payment. After your customer completes or cancels checkout, they are automatically redirected to the URL you specified. The redirect includes `session_id` and `status` query parameters so your application can identify the payment.
+
+  **Custom domains** — Serve your hosted checkout page from your own domain (e.g., `pay.yourstore.com`). Register a domain, add the required DNS records, and verify ownership — all through the API. Your store branding appears on the checkout page automatically.
+
+  **Email notifications** — Receive email alerts when payments are received, payouts are initiated, and swaps complete. Toggle email notifications on or off per store.
+
+  **Expanded webhook events** — Subscribe to a broader set of real-time events including payout, swap, and balance updates. New event types: `payout.created`, `payout.completed`, `payout.failed`, `swap.completed`, `swap.failed`, `balance.updated`, and `order.updated`. See the [webhooks guide](/webhooks) for the full list.
+
+  **Google sign-in** — Authenticate with Google as an alternative to email and password. Existing accounts are automatically linked when the email matches. See [authentication](/authentication) for setup.
+
+  **In-app notifications** — A built-in notification center alerts you to important events like failed webhook deliveries and recovered payments. View, filter, and mark notifications as read via the API.
+
+  **Miner fee transparency** — Payment settlement details now include a `miner_fee` field showing the blockchain network fee charged for processing the on-chain transaction. The full breakdown — gross amount, miner fee, processing fee, and net amount — is returned on every payment.
+
+  **Real-time events (SSE)** — Subscribe to a Server-Sent Events stream to receive live updates for your store, including payment status changes and new notifications, without polling the API.
+
+  **WooCommerce plugin** — Accept crypto payments on your WooCommerce store with the official Southpay payment gateway plugin. Download the plugin directly from the API and configure it with your store credentials.
+
+  ## Improvements
+
+  **Balance breakdown by network** — Store balances are now broken down by cryptocurrency and blockchain network. For example, you can see your USDT balance on Tron separately from USDT on Ethereum. The balance transaction history also supports filtering by currency and network.
+
+  **Idempotent payment creation** — Duplicate payment requests with the same `merchant_reference` or `Idempotency-Key` header now safely return the original payment instead of creating a duplicate.
+
+  **Payout processing reliability** — Payouts now use distributed locking to prevent concurrent processing of the same payout, reducing the chance of duplicate or stuck payouts during high-traffic periods.
+
+  **Improved input validation** — Registration and store creation endpoints now enforce stricter validation rules and reject reserved words, giving you clearer error messages when input doesn't meet requirements.
+
+  **Request tracing** — Every API response now includes an `x-request-id` header. Include this identifier when contacting support to help us quickly locate and debug issues with specific requests.
+
+  **Stricter rate limiting on auth routes** — Authentication endpoints now enforce tighter rate limits to better protect against brute-force attempts.
+
+  **Webhook signature verification** — Webhook payloads are now signed with HMAC-SHA256 and include delivery headers (`X-SouthPay-Sig`, `X-SouthPay-Event`, `X-SouthPay-Delivery`) for secure verification. See [verifying signatures](/webhooks#verifying-signatures).
+
+  ## Bug fixes
+
+  - Fixed an issue where paginated store payment responses could return incorrect results.
+  - Fixed double fee taxation on certain payment flows.
+  - Resolved payout sweeping timeouts that could delay payout completion.
+  - Fixed settlement amount precision for large transactions.
+  - Resolved a balance ledger issue that could produce incorrect entries on certain payment paths.
+  - Fixed payout status tracking and webhook delivery for payout events.
+  - Fixed swap balance calculations to prevent ghost entries.
+  - Resolved double-deduction issues on payment settlements.
+  - Fixed rate limit timing window on authentication endpoints, ensuring throttling applies correctly.
+  - Fixed webhook signature payload enveloping so that signature verification works as expected. See [verifying signatures](/webhooks#verifying-signatures).
+</Update>
