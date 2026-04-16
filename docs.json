@@ -48,35 +48,15 @@
             ]
           },
           {
-            "group": "Stores",
-            "pages": [
-              "api-reference/stores"
-            ]
-          },
-          {
             "group": "Balances & Assets",
             "pages": [
               "api-reference/assets"
             ]
           },
           {
-            "group": "Payouts",
-            "pages": [
-              "api-reference/payout-schedules",
-              "api-reference/payouts",
-              "api-reference/payout-details"
-            ]
-          },
-          {
             "group": "Webhooks",
             "pages": [
               "api-reference/webhook-endpoints"
-            ]
-          },
-          {
-            "group": "White Label",
-            "pages": [
-              "api-reference/custom-domains"
             ]
           }
         ]
