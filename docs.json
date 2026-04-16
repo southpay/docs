@@ -35,22 +35,11 @@
             "pages": [
               "webhooks"
             ]
-          }
-        ]
-      },
-      {
-        "tab": "API Reference",
-        "pages": [
+          },
           {
             "group": "Payments",
             "pages": [
               "api-reference/payments"
-            ]
-          },
-          {
-            "group": "Balances & Assets",
-            "pages": [
-              "api-reference/assets"
             ]
           },
           {
