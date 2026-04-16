@@ -70,16 +70,35 @@ Authorization: Bearer <API_KEY>
 ```
 </CodeGroup>
 
-**Payment statuses**
+---
+
+## PaymentIntent lifecycle
+
+A PaymentIntent has a single `status` field that represents its lifecycle.
+
+Always rely on `status` as the source of truth.
 
 | Status | Terminal | Description |
 | --- | --- | --- |
-| `pending` | No | Awaiting customer payment |
-| `processing` | No | Funds received on-chain, confirming |
-| `paid` | Yes | Confirmed and credited |
-| `failed` | Yes | Could not be completed |
-| `expired` | Yes | Window closed before payment arrived |
-| `refunded` | Yes | Funds returned to customer |
+| `pending` | No | Created, awaiting customer payment |
+| `processing` | No | Crypto received, blockchain confirmations in progress |
+| `completed` | Yes | Required funds received and confirmed |
+| `expired` | Yes | Payment window elapsed before funds were received |
+| `failed` | Yes | Payment could not be completed (under/overpaid) |
+| `refunded` | Yes | Funds were returned to the customer |
+
+### status_reason
+
+`status_reason` explains why the PaymentIntent reached its current state.
+
+| Reason | Status | Description |
+| --- | --- | --- |
+| `pending_confirmations` | processing | Crypto received, confirmations pending |
+| `completed_exact` | completed | Exact required amount received |
+| `completed_overpaid` | completed | More than required amount received |
+| `failed_underpaid` | failed | Insufficient funds before expiration |
+| `failed_overpaid` | failed | Excess funds rejected |
+| `expired_timeout` | expired | No funds received before timeout |
 
 ---
 
