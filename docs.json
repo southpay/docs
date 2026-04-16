@@ -125,5 +125,9 @@
   },
   "thumbnails": {
     "appearance": "light"
+  },
+  "banner": {
+    "content": "SouthPay Documentation",
+    "dismissible": false
   }
 }
