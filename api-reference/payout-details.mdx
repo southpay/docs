@@ -1,0 +1,223 @@
+---
+title: "Payout Details"
+description: "Manage the bank accounts and crypto addresses where your store's balance is paid out."
+sidebarTitle: "Payout Details"
+---
+
+<Warning>
+  All endpoints require authentication. See [Authentication](/authentication) for details.
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+---
+
+## Fiat payout details
+
+Fiat payout details represent bank accounts for receiving fiat settlement.
+
+### List fiat payout details
+
+<CodeGroup>
+```bash Request
+GET /fiat_payout_details
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+[
+  {
+    "id": "fpd_abc123",
+    "account_holder_name": "Acme Ltd",
+    "nickname": "Main Account",
+    "iban": "GB29NWBK60161331926819",
+    "bic_swift": "NWBKGB2L",
+    "bank_name": "NatWest",
+    "bank_country_code": "GB",
+    "currency": "GBP",
+    "intermediary_bic": null,
+    "intermediary_bank_name": null,
+    "created_at": "2026-04-01T00:00:00.000Z",
+    "updated_at": "2026-04-01T00:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+### Get a fiat payout detail
+
+```bash
+GET /fiat_payout_details/:id
+Authorization: Bearer <API_KEY>
+```
+
+### Create a fiat payout detail
+
+<CodeGroup>
+```bash Request
+POST /fiat_payout_details
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "fiat_payout_detail": {
+    "account_holder_name": "Acme Ltd",
+    "nickname": "Main Account",
+    "iban": "GB29NWBK60161331926819",
+    "bic_swift": "NWBKGB2L",
+    "bank_name": "NatWest",
+    "bank_country_code": "GB",
+    "currency": "GBP",
+    "intermediary_bic": null,
+    "intermediary_bank_name": null
+  }
+}
+```
+
+```json Response 201
+{ "id": "fpd_abc123", ... }
+```
+</CodeGroup>
+
+**Request fields**
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `account_holder_name` | Yes | Legal name on the account |
+| `iban` | Yes | International Bank Account Number |
+| `bic_swift` | Yes | Bank identifier code |
+| `bank_name` | Yes | Name of the bank |
+| `bank_country_code` | Yes | ISO 3166-1 alpha-2 country code |
+| `currency` | Yes | ISO 4217 currency code |
+| `nickname` | No | Friendly label for your reference |
+| `intermediary_bic` | No | BIC of intermediary/correspondent bank |
+| `intermediary_bank_name` | No | Name of intermediary bank |
+
+### Update a fiat payout detail
+
+Only `nickname`, `bank_name`, `bank_country_code`, `intermediary_bic`, and `intermediary_bank_name` can be updated.
+
+```bash
+PATCH /fiat_payout_details/:id
+```
+
+### Delete a fiat payout detail
+
+Archives the record. Returns `204 No Content`.
+
+```bash
+DELETE /fiat_payout_details/:id
+```
+
+### Set as default
+
+<CodeGroup>
+```bash Request
+POST /fiat_payout_details/:id/select
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{ "id": "fpd_abc123", ... }
+```
+</CodeGroup>
+
+---
+
+## Crypto payout details
+
+Crypto payout details are on-chain addresses for receiving crypto payouts.
+
+### List crypto payout details
+
+<CodeGroup>
+```bash Request
+GET /crypto_payout_details?asset_id=ETH_USDC
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+[
+  {
+    "id": "cpd_abc123",
+    "asset": {
+      "asset_id": "ETH_USDC",
+      "coin_symbol": "USDC",
+      "chain_symbol": "ETH"
+    },
+    "address": "0xabc...",
+    "address_label": null,
+    "nickname": "Hot Wallet",
+    "created_at": "2026-04-01T00:00:00.000Z",
+    "updated_at": "2026-04-01T00:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+**Query parameters**
+
+| Parameter | Description |
+| --- | --- |
+| `asset_id` | Filter by asset (optional) |
+
+### Get a crypto payout detail
+
+```bash
+GET /crypto_payout_details/:id
+Authorization: Bearer <API_KEY>
+```
+
+### Create a crypto payout detail
+
+<CodeGroup>
+```bash Request
+POST /crypto_payout_details
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "crypto_payout_detail": {
+    "asset_id": "ETH_USDC",
+    "address": "0xabc...",
+    "address_label": null,
+    "nickname": "Hot Wallet"
+  }
+}
+```
+
+```json Response 201
+{ "id": "cpd_abc123", ... }
+```
+</CodeGroup>
+
+**Request fields**
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `asset_id` | Yes | Asset for this address. See [Supported Assets](/api-reference/assets). |
+| `address` | Yes | On-chain wallet address |
+| `address_label` | No | Memo/tag required by some networks (e.g. XRP destination tag) |
+| `nickname` | No | Friendly label for your reference |
+
+### Update a crypto payout detail
+
+Only `address_label` and `nickname` can be updated.
+
+```bash
+PATCH /crypto_payout_details/:id
+```
+
+### Delete a crypto payout detail
+
+Archives the record. Returns `204 No Content`.
+
+```bash
+DELETE /crypto_payout_details/:id
+```
+
+### Set as default
+
+```bash
+POST /crypto_payout_details/:id/select
+```

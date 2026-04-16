@@ -1,0 +1,233 @@
+---
+title: "Webhook Endpoints"
+description: "Configure the URLs where Southpay sends signed event notifications for payment status changes and other activity."
+sidebarTitle: "Webhook Endpoints"
+---
+
+<Warning>
+  All endpoints require authentication. See [Authentication](/authentication) for details.
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+For handling and verifying incoming webhook events, see the [Webhooks guide](/webhooks).
+
+---
+
+## List webhook endpoints
+
+<CodeGroup>
+```bash Request
+GET /webhook_endpoints?status=active
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+[
+  {
+    "id": "we_abc123",
+    "url": "https://yourapp.com/webhooks/southpay",
+    "description": "Production handler",
+    "status": "active",
+    "subscribed_events": ["payment_intent.completed", "payment_intent.failed"],
+    "delivery_success_rate": 0.98,
+    "created_at": "2026-04-01T00:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+**Query parameters**
+
+| Parameter | Description |
+| --- | --- |
+| `status` | `active` or `disabled` |
+
+---
+
+## Get a webhook endpoint
+
+Returns the endpoint with its recent delivery history and available event types.
+
+<CodeGroup>
+```bash Request
+GET /webhook_endpoints/:id
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "id": "we_abc123",
+  "url": "https://yourapp.com/webhooks/southpay",
+  "description": "Production handler",
+  "status": "active",
+  "subscribed_events": ["payment_intent.completed"],
+  "delivery_success_rate": 0.98,
+  "created_at": "2026-04-01T00:00:00.000Z",
+  "available_events": ["payment_intent.completed", "payment_intent.failed", "payment_intent.expired"],
+  "recent_deliveries": [
+    {
+      "id": "del_xyz",
+      "event_type": "payment_intent.completed",
+      "status": "delivered",
+      "attempts": 1,
+      "response_status": 200,
+      "delivered_at": "2026-04-10T12:01:00.000Z",
+      "created_at": "2026-04-10T12:00:00.000Z"
+    }
+  ]
+}
+```
+</CodeGroup>
+
+---
+
+## Create a webhook endpoint
+
+The signing secret is only returned on creation — store it securely.
+
+<CodeGroup>
+```bash Request
+POST /webhook_endpoints
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "webhook_endpoint": {
+    "url": "https://yourapp.com/webhooks/southpay",
+    "description": "Production handler",
+    "subscribed_events": ["payment_intent.completed", "payment_intent.failed"]
+  }
+}
+```
+
+```json Response 201
+{
+  "id": "we_abc123",
+  "url": "https://yourapp.com/webhooks/southpay",
+  "status": "active",
+  "subscribed_events": ["payment_intent.completed", "payment_intent.failed"],
+  "signing_secret": "whsec_abc123...",
+  ...
+}
+```
+</CodeGroup>
+
+**Request fields**
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `webhook_endpoint[url]` | Yes | HTTPS URL to receive events |
+| `webhook_endpoint[description]` | No | Internal label |
+| `webhook_endpoint[subscribed_events][]` | No | Event types to receive. Defaults to all events. |
+| `webhook_endpoint[metadata]` | No | Arbitrary key-value pairs |
+
+<Warning>
+  Save the `signing_secret` — it is only returned once. Use it to verify incoming requests. See the [Webhooks guide](/webhooks).
+</Warning>
+
+---
+
+## Update a webhook endpoint
+
+<CodeGroup>
+```bash Request
+PATCH /webhook_endpoints/:id
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "webhook_endpoint": {
+    "url": "https://yourapp.com/webhooks/southpay-v2",
+    "subscribed_events": ["payment_intent.completed"]
+  }
+}
+```
+
+```json Response
+{ "id": "we_abc123", "url": "https://yourapp.com/webhooks/southpay-v2", ... }
+```
+</CodeGroup>
+
+---
+
+## Delete a webhook endpoint
+
+Soft-deletes the endpoint. Returns `204 No Content`.
+
+```bash
+DELETE /webhook_endpoints/:id
+Authorization: Bearer <API_KEY>
+```
+
+---
+
+## Enable / Disable
+
+```bash
+PATCH /webhook_endpoints/:id/enable
+PATCH /webhook_endpoints/:id/disable
+Authorization: Bearer <API_KEY>
+```
+
+Both return the updated endpoint object.
+
+---
+
+## Rotate signing secret
+
+Issues a new signing secret. Update your server immediately — the old secret stops working.
+
+<CodeGroup>
+```bash Request
+POST /webhook_endpoints/:id/rotate_secret
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "id": "we_abc123",
+  "signing_secret": "whsec_newvalue...",
+  ...
+}
+```
+</CodeGroup>
+
+---
+
+## Send a test event
+
+Sends a test delivery to verify your endpoint is reachable.
+
+<CodeGroup>
+```bash Request
+POST /webhook_endpoints/:id/send_test?event_type=payment_intent.completed
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "delivery_id": "del_test123",
+  "event_type": "payment_intent.completed",
+  "message": "Test event sent"
+}
+```
+</CodeGroup>
+
+---
+
+## Redeliver a failed delivery
+
+<CodeGroup>
+```bash Request
+POST /webhook_endpoints/:id/redeliver
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{ "delivery_id": "del_xyz" }
+```
+
+```json Response
+{ "message": "Redelivery scheduled" }
+```
+</CodeGroup>

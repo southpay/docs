@@ -1,0 +1,134 @@
+---
+title: "Payment Intents"
+description: "Create and manage crypto payment intents. Each payment intent generates a hosted checkout URL and on-chain payment addresses."
+sidebarTitle: "Payment Intents"
+---
+
+<Warning>
+  All endpoints require authentication. See [Authentication](/authentication) for details.
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+---
+
+## List payment intents
+
+<CodeGroup>
+```bash Request
+GET /payments
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+[
+  {
+    "id": "pi_abc123",
+    "reference": "tok_xyz789",
+    "status": "paid",
+    "state_reason": null,
+    "settlement_currency": "USD",
+    "settlement_amount": "49.99",
+    "terminal": false,
+    "created_at": "2026-04-10T12:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Get a payment intent
+
+<CodeGroup>
+```bash Request
+GET /payments/:id
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "id": "pi_abc123",
+  "reference": "tok_xyz789",
+  "status": "pending",
+  "state_reason": null,
+  "settlement_currency": "USD",
+  "settlement_amount": "49.99",
+  "terminal": false,
+  "expires_at": "2026-04-10T13:00:00.000Z",
+  "created_at": "2026-04-10T12:00:00.000Z",
+  "payment_addresses": [
+    {
+      "asset_id": "ETH_USDC",
+      "coin_symbol": "USDC",
+      "chain_symbol": "ETH",
+      "address": "0xabc...",
+      "amount": "49.99"
+    }
+  ]
+}
+```
+</CodeGroup>
+
+**Payment statuses**
+
+| Status | Terminal | Description |
+| --- | --- | --- |
+| `pending` | No | Awaiting customer payment |
+| `processing` | No | Funds received on-chain, confirming |
+| `paid` | Yes | Confirmed and credited |
+| `failed` | Yes | Could not be completed |
+| `expired` | Yes | Window closed before payment arrived |
+| `refunded` | Yes | Funds returned to customer |
+
+---
+
+## Create a payment intent
+
+<CodeGroup>
+```bash Request
+POST /payments
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+Idempotency-Key: order_123  # optional
+
+{
+  "payment_intent": {
+    "amount": "49.99",
+    "currency": "USD",
+    "metadata": {
+      "order_id": "order_123"
+    }
+  }
+}
+```
+
+```json Response 201
+{
+  "id": "pi_abc123",
+  "reference": "tok_xyz789",
+  "status": "pending",
+  "state_reason": null,
+  "settlement_currency": "USD",
+  "settlement_amount": "49.99",
+  "terminal": false,
+  "checkout_url": "https://checkout.southpay.io/pay/tok_xyz789",
+  "expires_at": "2026-04-10T13:00:00.000Z",
+  "created_at": "2026-04-10T12:00:00.000Z",
+  "payment_addresses": [...]
+}
+```
+</CodeGroup>
+
+**Request fields**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `payment_intent[amount]` | string | Yes | Decimal amount (e.g. `"49.99"`) |
+| `payment_intent[currency]` | string | Yes | ISO 4217 fiat code, uppercase (e.g. `"USD"`) |
+| `payment_intent[metadata]` | object | No | Arbitrary key-value pairs attached to the payment |
+| `Idempotency-Key` | header | No | Pass your order ID to safely retry without creating duplicates |
+
+<Tip>
+  Redirect your customer to `checkout_url` — no frontend integration required.
+</Tip>
