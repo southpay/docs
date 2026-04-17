@@ -2,3 +2,42 @@
 title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
+
+<Update label="April 17, 2026" description="Southpay v2" tags={["Release", "Feature"]}>
+## Southpay v2 is here
+
+We've rebuilt the platform from the ground up. Southpay v2 brings a new API, more crypto assets, automated payouts, and white-label checkout — all designed to get you live faster.
+
+### New features
+
+- **Automated payout schedules** — Set up recurring payouts on a daily, weekly, or monthly cadence with configurable minimum balance thresholds. Payouts are executed automatically to your registered crypto wallet or bank account. [Learn more about payments](/api-reference/payments)
+
+- **Fiat payout destinations** — Register bank accounts (IBAN/SWIFT) as payout destinations. Southpay handles the conversion and settlement in USD, EUR, GBP, HKD, SGD, or JPY.
+
+- **Crypto payout destinations** — Add and manage crypto wallet addresses for direct on-chain payouts. Select a default address per asset and Southpay routes funds automatically.
+
+- **White-label checkout** — Customize the hosted checkout page with your own logo, brand name, and colors. Optionally remove Southpay branding entirely. Pair it with a custom domain (e.g., `pay.yourcompany.com`) for a fully branded payment experience.
+
+- **Custom domains** — Serve the checkout page from your own domain with DNS-based verification.
+
+- **Webhook endpoint management** — Create, update, and delete [webhook endpoints](/api-reference/webhook-endpoints) directly via the API. Subscribe to specific event types, rotate signing secrets, send test events, and redeliver failed deliveries — all without touching the dashboard.
+
+- **PDF invoices** — Generate and download PDF invoices for any payment, including a full fee breakdown.
+
+- **Google OAuth sign-in** — Authenticate with Google in addition to email and password. New OAuth users are automatically provisioned with a default store. [See authentication](/authentication)
+
+### Updates
+
+- **Expanded crypto asset support** — Accept payments across Ethereum, Bitcoin, Solana, Avalanche, BNB Chain, Tron, Polygon, Arbitrum, Base, Optimism, Litecoin, Stellar, Algorand, SUI, TON, and more — including USDC and USDT on multiple chains.
+
+- **Multi-currency settlement** — Set your store's settlement currency to USD, EUR, GBP, HKD, SGD, or JPY. Amounts and balances are denominated in your chosen currency with live exchange rates.
+
+- **Idempotent payment creation** — Pass an `Idempotency-Key` header when [creating payments](/api-reference/payments) to safely retry requests without creating duplicates.
+
+- **Payment status reasons** — The `status_reason` field on payment intents now explains exactly why a payment reached its current state (e.g., `completed_exact`, `failed_underpaid`, `expired_timeout`). [View the full lifecycle](/api-reference/payments)
+
+- **Real-time balance tracking** — View per-asset balances for your store. Balances update automatically as payments confirm and payouts execute.
+
+- **Email notifications** — Receive automatic emails when payments are completed, overpaid, or expired.
+
+</Update>
