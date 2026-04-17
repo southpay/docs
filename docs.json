@@ -47,6 +47,12 @@
             "pages": [
               "api-reference/webhook-endpoints"
             ]
+          },
+          {
+            "group": "Resources",
+            "pages": [
+              "changelog"
+            ]
           }
         ]
       }
