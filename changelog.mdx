@@ -3,6 +3,27 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 18, 2026" description="Checkout redirect URLs, real-time updates, and sandbox mode" tags={["Feature", "Improvement"]}>
+## Checkout redirect URLs and real-time updates
+
+A few improvements to the checkout and payment experience this week.
+
+### New features
+
+- **Checkout redirect URLs** — You can now pass `success_url` and `failed_url` when [creating a payment intent](/api-reference/payments). After your customer completes or fails a payment, they are automatically redirected to the URL you specify — no manual polling or redirect logic required.
+
+- **Sandbox environment** — Test your integration in a dedicated sandbox without affecting live data. Sandbox users and stores are provisioned on demand so you can start testing immediately.
+
+### Updates
+
+- **Real-time checkout status** — The hosted checkout page now uses server-sent events (SSE) for instant payment status updates, replacing the previous polling approach. Your customers see confirmation faster with no extra integration work.
+
+- **Improved checkout payment options** — The checkout page now displays available payment methods in a flat list, making it easier for customers to find and select their preferred crypto asset.
+
+- **Pre-flight balance validation** — Payment options on checkout are now validated against available liquidity before being shown to the customer, reducing failed payment attempts.
+
+</Update>
+
 <Update label="April 17, 2026" description="Southpay v2" tags={["Release", "Feature"]}>
 ## Southpay v2 is here
 
