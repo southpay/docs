@@ -3,62 +3,34 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 18, 2026" description="Webhook validation and reliability improvements" tags={["Improvement"]}>
-## Webhook validation and reliability improvements
+<Update label="April 18, 2026" description="Week of April 14–18: Southpay v2, checkout improvements, and reliability updates" tags={["Release", "Feature", "Improvement"]}>
+## Week of April 14–18
 
-A couple of under-the-hood improvements that make the platform more reliable.
-
-### Updates
-
-- **Stricter webhook URL validation** — [Webhook endpoint](/api-reference/webhook-endpoints) URLs are now validated more strictly. URLs with trailing characters after the domain and path are no longer accepted. If you have existing endpoints with unusual URL formats, verify they still pass validation when updating.
-
-- **Improved payment and payout reliability** — Concurrent payment and payout operations are now handled more reliably under high load, reducing the chance of race conditions during busy periods.
-
-</Update>
-
-<Update label="April 18, 2026" description="Checkout redirect URLs, real-time updates, and sandbox mode" tags={["Feature", "Improvement"]}>
-## Checkout redirect URLs and real-time updates
-
-A few improvements to the checkout and payment experience this week.
+Southpay v2 is live. This week we shipped the new platform, improved checkout, and hardened reliability across the board.
 
 ### New features
 
-- **Checkout redirect URLs** — You can now pass `success_url` and `failed_url` when [creating a payment intent](/api-reference/payments). After your customer completes or fails a payment, they are automatically redirected to the URL you specify — no manual polling or redirect logic required.
+- **Southpay v2** — The platform has been rebuilt from the ground up with a new API, expanded crypto asset support, automated payouts, and white-label checkout.
 
-- **Sandbox environment** — Test your integration in a dedicated sandbox without affecting live data. Sandbox users and stores are provisioned on demand so you can start testing immediately.
+- **Automated payout schedules** — Set up recurring payouts on a daily, weekly, or monthly cadence with configurable minimum balance thresholds. Payouts execute automatically to your registered crypto wallet or bank account. [Learn more](/api-reference/payments)
 
-### Updates
+- **Fiat payout destinations** — Register bank accounts (IBAN/SWIFT) as payout destinations. Southpay handles conversion and settlement in USD, EUR, GBP, HKD, SGD, or JPY.
 
-- **Real-time checkout status** — The hosted checkout page now uses server-sent events (SSE) for instant payment status updates, replacing the previous polling approach. Your customers see confirmation faster with no extra integration work.
+- **Crypto payout destinations** — Add and manage crypto wallet addresses for direct on-chain payouts. Select a default address per asset and funds are routed automatically.
 
-- **Improved checkout payment options** — The checkout page now displays available payment methods in a flat list, making it easier for customers to find and select their preferred crypto asset.
-
-- **Pre-flight balance validation** — Payment options on checkout are now validated against available liquidity before being shown to the customer, reducing failed payment attempts.
-
-</Update>
-
-<Update label="April 17, 2026" description="Southpay v2" tags={["Release", "Feature"]}>
-## Southpay v2 is here
-
-We've rebuilt the platform from the ground up. Southpay v2 brings a new API, more crypto assets, automated payouts, and white-label checkout — all designed to get you live faster.
-
-### New features
-
-- **Automated payout schedules** — Set up recurring payouts on a daily, weekly, or monthly cadence with configurable minimum balance thresholds. Payouts are executed automatically to your registered crypto wallet or bank account. [Learn more about payments](/api-reference/payments)
-
-- **Fiat payout destinations** — Register bank accounts (IBAN/SWIFT) as payout destinations. Southpay handles the conversion and settlement in USD, EUR, GBP, HKD, SGD, or JPY.
-
-- **Crypto payout destinations** — Add and manage crypto wallet addresses for direct on-chain payouts. Select a default address per asset and Southpay routes funds automatically.
-
-- **White-label checkout** — Customize the hosted checkout page with your own logo, brand name, and colors. Optionally remove Southpay branding entirely. Pair it with a custom domain (e.g., `pay.yourcompany.com`) for a fully branded payment experience.
+- **White-label checkout** — Customize the hosted checkout page with your own logo, brand name, and colors. Optionally remove Southpay branding entirely. Pair with a custom domain (e.g., `pay.yourcompany.com`) for a fully branded experience.
 
 - **Custom domains** — Serve the checkout page from your own domain with DNS-based verification.
 
-- **Webhook endpoint management** — Create, update, and delete [webhook endpoints](/api-reference/webhook-endpoints) directly via the API. Subscribe to specific event types, rotate signing secrets, send test events, and redeliver failed deliveries — all without touching the dashboard.
+- **Webhook endpoint management** — Create, update, and delete [webhook endpoints](/api-reference/webhook-endpoints) via the API. Subscribe to specific event types, rotate signing secrets, send test events, and redeliver failed deliveries.
 
 - **PDF invoices** — Generate and download PDF invoices for any payment, including a full fee breakdown.
 
 - **Google OAuth sign-in** — Authenticate with Google in addition to email and password. New OAuth users are automatically provisioned with a default store. [See authentication](/authentication)
+
+- **Checkout redirect URLs** — Pass `success_url` and `failed_url` when [creating a payment intent](/api-reference/payments). Customers are automatically redirected after completing or failing a payment.
+
+- **Sandbox environment** — Test your integration in a dedicated sandbox without affecting live data. Sandbox users and stores are provisioned on demand.
 
 ### Updates
 
@@ -68,10 +40,20 @@ We've rebuilt the platform from the ground up. Southpay v2 brings a new API, mor
 
 - **Idempotent payment creation** — Pass an `Idempotency-Key` header when [creating payments](/api-reference/payments) to safely retry requests without creating duplicates.
 
-- **Payment status reasons** — The `status_reason` field on payment intents now explains exactly why a payment reached its current state (e.g., `completed_exact`, `failed_underpaid`, `expired_timeout`). [View the full lifecycle](/api-reference/payments)
+- **Payment status reasons** — The `status_reason` field on payment intents now explains why a payment reached its current state (e.g., `completed_exact`, `failed_underpaid`, `expired_timeout`). [View the full lifecycle](/api-reference/payments)
 
-- **Real-time balance tracking** — View per-asset balances for your store. Balances update automatically as payments confirm and payouts execute.
+- **Real-time balance tracking** — Per-asset balances for your store update automatically as payments confirm and payouts execute.
 
 - **Email notifications** — Receive automatic emails when payments are completed, overpaid, or expired.
+
+- **Real-time checkout status** — The hosted checkout page now uses server-sent events for instant payment status updates, replacing polling. Customers see confirmation faster with no extra integration work.
+
+- **Improved checkout payment options** — The checkout page now displays available payment methods in a flat list, making it easier for customers to select their preferred crypto asset.
+
+- **Pre-flight balance validation** — Payment options on checkout are validated against available liquidity before being shown, reducing failed payment attempts.
+
+- **Stricter webhook URL validation** — [Webhook endpoint](/api-reference/webhook-endpoints) URLs are now validated more strictly. URLs with trailing characters after the domain and path are no longer accepted.
+
+- **Improved payment and payout reliability** — Concurrent operations are now handled more reliably under high load, reducing the chance of race conditions during busy periods.
 
 </Update>
