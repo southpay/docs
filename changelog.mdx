@@ -3,6 +3,25 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 18, 2026" description="E-commerce integrations, webhook security, and payment lifecycle improvements" tags={["Feature", "Improvement"]}>
+## E-commerce integrations and webhook improvements
+
+New integrations and security improvements to webhooks and payments.
+
+### New features
+
+- **WooCommerce and WHMCS integrations** — Set up [webhook endpoints](/api-reference/webhook-endpoints) with built-in support for WooCommerce and WHMCS. When you create an endpoint with a `platform` type, Southpay automatically subscribes to the right events for that platform — no manual event selection needed.
+
+### Updates
+
+- **Enable and disable webhook endpoints** — You can now enable or disable individual [webhook endpoints](/api-reference/webhook-endpoints) without deleting them. Useful for temporarily pausing delivery during maintenance or debugging.
+
+- **Encrypted webhook signing secrets** — Webhook signing secrets are now encrypted at rest for improved security. No changes to your integration are required — signing and verification work exactly the same.
+
+- **Simplified payment statuses** — The payment lifecycle now uses fewer top-level statuses. Previously separate `overpaid` and `confirmed` states are consolidated under `completed` with a descriptive `status_reason` (e.g., `completed_overpaid`, `completed_exact`). This makes it easier to handle payment outcomes in your integration. [View the full lifecycle](/api-reference/payments)
+
+</Update>
+
 <Update label="April 18, 2026" description="Checkout redirect URLs, real-time updates, and sandbox mode" tags={["Feature", "Improvement"]}>
 ## Checkout redirect URLs and real-time updates
 
