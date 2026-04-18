@@ -32,6 +32,8 @@ Southpay v2 is live. This week we shipped the new platform, improved checkout, a
 
 - **Sandbox environment** — Test your integration in a dedicated sandbox without affecting live data. Sandbox users and stores are provisioned on demand.
 
+- **Live and test mode API keys** — Generate separate API keys for live and test environments from the dashboard. Live keys (`sk_live_`) process real payments; test keys (`sk_test_`) operate against sandbox data. All resources — payments, webhooks, balances — are automatically scoped to the key's mode, so live and test data never mix. [See authentication](/authentication)
+
 ### Updates
 
 - **Expanded crypto asset support** — Accept payments across Ethereum, Bitcoin, Solana, Avalanche, BNB Chain, Tron, Polygon, Arbitrum, Base, Optimism, Litecoin, Stellar, Algorand, SUI, TON, and more — including USDC and USDT on multiple chains.
