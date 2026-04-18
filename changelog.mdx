@@ -58,4 +58,8 @@ Southpay v2 is live. This week we shipped the new platform, improved checkout, a
 
 - **Improved payment and payout reliability** — Concurrent operations are now handled more reliably under high load, reducing the chance of race conditions during busy periods.
 
+### Bug fixes
+
+- **API key authentication on all endpoints** — Fixed an issue where API key authentication (`sk_live_` / `sk_test_`) did not work consistently across all resource endpoints. API keys now authenticate correctly on payments, payouts, balances, payout schedules, and [webhook endpoints](/api-reference/webhook-endpoints). [See authentication](/authentication)
+
 </Update>
