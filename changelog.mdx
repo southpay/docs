@@ -3,6 +3,19 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 18, 2026" description="Webhook validation and reliability improvements" tags={["Improvement"]}>
+## Webhook validation and reliability improvements
+
+A couple of under-the-hood improvements that make the platform more reliable.
+
+### Updates
+
+- **Stricter webhook URL validation** — [Webhook endpoint](/api-reference/webhook-endpoints) URLs are now validated more strictly. URLs with trailing characters after the domain and path are no longer accepted. If you have existing endpoints with unusual URL formats, verify they still pass validation when updating.
+
+- **Improved payment and payout reliability** — Concurrent payment and payout operations are now handled more reliably under high load, reducing the chance of race conditions during busy periods.
+
+</Update>
+
 <Update label="April 18, 2026" description="Checkout redirect URLs, real-time updates, and sandbox mode" tags={["Feature", "Improvement"]}>
 ## Checkout redirect URLs and real-time updates
 
