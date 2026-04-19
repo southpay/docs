@@ -3,16 +3,20 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 19, 2026" description="OAuth 2.0 for third-party integrations" tags={["Feature"]}>
+<Update label="April 19, 2026" description="OAuth 2.0 and payout schedule improvements" tags={["Feature", "Improvement"]}>
 ## Week of April 19
 
-Third-party applications can now connect to Southpay on behalf of your users using OAuth 2.0.
+Third-party applications can now connect to Southpay on behalf of your users using OAuth 2.0, and payout schedules are more flexible.
 
 ### New features
 
 - **OAuth 2.0 authorization** — Southpay now supports the OAuth 2.0 authorization code flow with PKCE. Third-party applications can request scoped access to your account — including reading payments, managing webhooks, and creating payment requests — without ever handling your password. [See authentication](/authentication)
 
 - **Manage connected apps** — You can view and revoke access for any third-party application connected to your store. Revoking a connection immediately invalidates the app's access token.
+
+### Updates
+
+- **Link payout schedules to destinations** — When creating or updating a payout schedule, you can now specify a crypto or fiat payout destination directly. This gives you more control over where scheduled payouts are sent. [Learn more](/api-reference/payments)
 
 </Update>
 
