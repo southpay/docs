@@ -1,0 +1,89 @@
+---
+title: "Environments"
+description: "Use test mode to develop and validate your integration before accepting real payments."
+---
+
+## Test mode vs. live mode
+
+Every Southpay resource exists in either **test mode** or **live mode**. The two environments are completely isolated — test payments, balances, and webhooks never appear in live mode, and vice versa.
+
+| | Test mode | Live mode |
+| --- | --- | --- |
+| API key prefix | `sp_test_...` | `sp_live_...` |
+| Real funds | No | Yes |
+| On-chain transactions | Synthetic (testnet) | Real blockchain |
+| Webhooks | Delivered normally | Delivered normally |
+| Dashboard toggle | Test | Live |
+
+---
+
+## Test API keys
+
+Create test keys from the dashboard under **Settings → API Keys → Create key → Test**.
+
+Test keys work against all the same endpoints as live keys. Payments created with a test key will never settle real funds.
+
+```bash
+curl https://api.southpay.io/api/v2/payments \
+  -H "Authorization: Bearer sp_test_your_test_key"
+```
+
+---
+
+## Simulating payment flows
+
+In test mode, the system uses testnet blockchain networks and simulates on-chain confirmations automatically. You do not need to send real crypto to test the full lifecycle.
+
+Use the **Test payments** panel in the dashboard to:
+- Trigger a simulated successful payment on any pending intent
+- Simulate an underpayment or overpayment
+- Force-expire an intent
+
+This lets you validate your webhook handler against every status transition without touching a real blockchain.
+
+---
+
+## Test webhook delivery
+
+Send a test event to any registered endpoint:
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/send_test \
+  -H "Authorization: Bearer sp_test_your_key"
+```
+
+The delivery is logged and visible in your dashboard. The event type is `payment_intent.completed` with a synthetic payload. Your endpoint should return `2xx`.
+
+---
+
+## Going live
+
+Before switching to live mode:
+
+1. **Verify your webhook endpoint** handles all event types and returns `2xx` reliably
+2. **Test idempotency** — retry the same request with the same `Idempotency-Key` and confirm you get the same response
+3. **Generate a live API key** from the dashboard
+4. **Configure a live webhook endpoint** (test and live endpoints are separate)
+5. **Set up a payout destination** — add a fiat or crypto payout detail and activate it
+
+<Warning>
+  Live API keys and live webhook signing secrets are different from test ones. Update all environment variables before deploying.
+</Warning>
+
+---
+
+## Environment variables
+
+Structure your application to switch modes without code changes:
+
+```bash
+# .env.test
+SOUTHPAY_API_KEY=sp_test_...
+SOUTHPAY_WEBHOOK_SECRET=whsec_...
+
+# .env.production
+SOUTHPAY_API_KEY=sp_live_...
+SOUTHPAY_WEBHOOK_SECRET=whsec_...
+```
+
+Never commit secrets to version control. Use a secrets manager or your deployment platform's secret injection.

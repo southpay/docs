@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Documentation",
+  "name": "Southpay",
   "colors": {
     "primary": "#4253FE",
     "light": "#4253FE",
@@ -23,23 +23,69 @@
         "tab": "Guides",
         "pages": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
               "index",
               "quickstart",
+              "environments"
+            ]
+          },
+          {
+            "group": "Authentication",
+            "pages": [
               "authentication"
             ]
           },
           {
-            "group": "Integrations",
+            "group": "Core Resources",
             "pages": [
+              "payment-intents",
               "webhooks"
             ]
           },
           {
+            "group": "Integration",
+            "pages": [
+              "idempotency",
+              "errors",
+              "best-practices"
+            ]
+          },
+          {
+            "group": "Changelog",
+            "pages": [
+              "changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "pages": [
+          {
             "group": "Payments",
             "pages": [
               "api-reference/payments"
+            ]
+          },
+          {
+            "group": "Stores",
+            "pages": [
+              "api-reference/stores"
+            ]
+          },
+          {
+            "group": "Balances & Assets",
+            "pages": [
+              "api-reference/assets"
+            ]
+          },
+          {
+            "group": "Payouts",
+            "pages": [
+              "api-reference/payout-schedules",
+              "api-reference/payouts",
+              "api-reference/payout-details"
             ]
           },
           {
@@ -49,9 +95,9 @@
             ]
           },
           {
-            "group": "Resources",
+            "group": "White Label",
             "pages": [
-              "changelog"
+              "api-reference/custom-domains"
             ]
           }
         ]

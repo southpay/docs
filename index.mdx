@@ -1,68 +1,70 @@
 ---
 title: "Introduction"
-description: "Developer-first crypto payment infrastructure with a REST API, webhooks, and hosted checkout"
+description: "Developer-first crypto payment infrastructure. Accept crypto, settle in fiat, integrate in minutes."
 ---
 
-## Build payments like you build software
+## What is Southpay?
 
-Southpay is a developer-first crypto payment infrastructure. Accept payments in crypto, get notified in real time via webhooks, and integrate in minutes with a clean REST API.
+Southpay is a crypto payment processing API for merchants. Your customers pay in cryptocurrency; Southpay handles address allocation, on-chain confirmation, ledger accounting, and disbursement to your configured payout destination.
 
-<Tip>
-  Whether you’re building with Vibe or getting help from Claude, you can tap into our MCP server to connect your AI agents seamlessly to our documentation. [Explore the MCP docs](https://docs.southpay.io/mcp).
-</Tip>
-
----
-
-## Get started in minutes
-
-<Card title="Quickstart" icon="rocket" horizontal href="/quickstart">
-  Create your first payment flow in under 5 minutes.
-</Card>
+You interact with one resource: a **Payment Intent**. Everything else — crypto address generation, exchange rate locking, blockchain confirmation, balance crediting — happens automatically.
 
 ---
 
-## Developer-first by design
+## Core flow
 
-<Columns cols={2}>
-  <Card title="API-first" icon="terminal">
-    Every feature is exposed through a consistent REST API.
-  </Card>
-
-  <Card title="Idempotent by default" icon="shield">
-    Pass a `merchant_reference` or `Idempotency-Key` — duplicate requests return the same payment, safely.
-  </Card>
-
-  <Card title="Real-time webhooks" icon="webhook" href="/webhooks">
-    Get notified on every payment event. Signed, retried, and logged automatically.
-  </Card>
-
-  <Card title="Hosted checkout" icon="bolt" href="/quickstart">
-    One API call creates a `checkout_url`. No frontend integration required.
-  </Card>
-</Columns>
+<Steps>
+  <Step title="Create a Payment Intent">
+    POST a fiat amount and currency. Get back a hosted checkout URL and one deposit address per supported asset.
+  </Step>
+  <Step title="Redirect your customer">
+    Send the customer to the checkout URL. Southpay handles the UI, QR code, and countdown timer.
+  </Step>
+  <Step title="Receive a webhook">
+    When the on-chain transaction confirms, Southpay sends a signed `payment_intent.completed` event to your endpoint.
+  </Step>
+  <Step title="Fulfill the order">
+    Verify the webhook signature, check the status, and fulfill. Done.
+  </Step>
+</Steps>
 
 ---
 
 ## Payment lifecycle
 
-A payment moves through a predictable set of states from creation to confirmation.
+Every Payment Intent moves through a well-defined set of states:
 
 | Status | Description |
 | --- | --- |
-| `pending` | Created, waiting for customer action |
-| `processing` | Funds received on-chain, confirming |
-| `paid` | Confirmed and credited |
-| `failed` | Could not be completed |
-| `expired` | Window closed before payment arrived |
-| `refunded` | Funds returned |
+| `pending` | Created and waiting for the customer to send funds |
+| `processing` | Payment detected on-chain, awaiting required confirmations |
+| `completed` | Confirmed and credited to your balance |
+| `expired` | No payment received within 60 minutes |
+| `failed` | Payment received but could not complete (e.g. underpayment) |
+| `refunded` | Funds returned to the sender |
 
 ---
 
-## Core resources
+## Core concepts
 
 <Columns cols={2}>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Use API keys for server-side integrations and OAuth 2.0 for third-party applications.
+  </Card>
+  <Card title="Payment Intents" icon="bolt" href="/payment-intents">
+    The primary resource. One call to create, one webhook to confirm.
+  </Card>
   <Card title="Webhooks" icon="webhook" href="/webhooks">
-    Receive signed events for every payment status change.
+    Signed, retried, and logged. Get real-time payment events without polling.
+  </Card>
+  <Card title="Idempotency" icon="shield" href="/idempotency">
+    Pass an `Idempotency-Key` header to safely retry any request.
+  </Card>
+  <Card title="Environments" icon="flask" href="/environments">
+    Test with synthetic transactions before going live.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/errors">
+    Structured error responses with machine-readable codes.
   </Card>
 </Columns>
 
@@ -70,6 +72,6 @@ A payment moves through a predictable set of states from creation to confirmatio
 
 ## Start building
 
-<Card title="Quickstart guide" icon="play" href="/quickstart">
-  Create your first integration and process a payment in minutes.
+<Card title="Quickstart" icon="rocket" href="/quickstart">
+  Create your first payment and handle a webhook in under 5 minutes.
 </Card>

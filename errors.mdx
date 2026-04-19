@@ -1,0 +1,165 @@
+---
+title: "Errors"
+description: "Structured error responses with HTTP status codes and machine-readable messages."
+---
+
+## Error response format
+
+All errors return a consistent JSON body:
+
+```json
+{
+  "error": {
+    "message": "settlement_currency USD is not compatible with asset ETH_ETH_ERC20",
+    "code": "currency_mismatch"
+  }
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `error.message` | string | Human-readable description of the error |
+| `error.code` | string \| null | Machine-readable error code when available |
+
+---
+
+## HTTP status codes
+
+| Status | Meaning |
+| --- | --- |
+| `200 OK` | Request succeeded |
+| `201 Created` | Resource created successfully |
+| `400 Bad Request` | Malformed request (missing required params, invalid JSON) |
+| `401 Unauthorized` | Missing or invalid authentication token |
+| `404 Not Found` | Resource does not exist or does not belong to your store |
+| `409 Conflict` | Duplicate idempotency key with different parameters |
+| `422 Unprocessable Entity` | Request is valid but cannot be processed (validation error, business rule violation) |
+| `502 Bad Gateway` | Upstream service error. Safe to retry. |
+| `500 Internal Server Error` | Unexpected server error. Safe to retry. |
+
+---
+
+## Common errors
+
+### Authentication errors
+
+**`401 Unauthorized`**
+
+```json
+{ "error": { "message": "Invalid or expired token" } }
+```
+
+Causes:
+- API key revoked or invalid
+- JWT expired
+- OAuth token expired (re-authorize the user)
+- Missing `Authorization` header
+
+---
+
+### Validation errors (422)
+
+**Invalid amount:**
+
+```json
+{
+  "error": {
+    "message": "Amount must be a positive decimal value"
+  }
+}
+```
+
+**Unsupported currency:**
+
+```json
+{
+  "error": {
+    "message": "USD is not a supported settlement currency for this store",
+    "code": "unsupported_currency"
+  }
+}
+```
+
+**Currency/asset mismatch:**
+
+```json
+{
+  "error": {
+    "message": "Asset ETH_ETH does not settle in EUR",
+    "code": "currency_mismatch"
+  }
+}
+```
+
+**Record not found:**
+
+```json
+{
+  "error": {
+    "message": "Record not found"
+  }
+}
+```
+Returns `404`. The resource does not exist within your store and mode scope.
+
+---
+
+### Upstream errors (502)
+
+```json
+{
+  "error": {
+    "message": "Upstream provider returned an error. Please retry."
+  }
+}
+```
+
+`502` errors indicate a transient failure in an external dependency. They are safe to retry with the same `Idempotency-Key`. Use exponential backoff.
+
+---
+
+## Retry strategy
+
+| Status | Retry? | Notes |
+| --- | --- | --- |
+| `4xx` (except 409, 429) | No | Fix the request before retrying |
+| `409` | No | Idempotency key conflict — check your parameters |
+| `429` | Yes | Rate limited — respect `Retry-After` header |
+| `502` | Yes | Use same `Idempotency-Key` with backoff |
+| `500` | Yes | Use same `Idempotency-Key` with backoff |
+| Network timeout | Yes | Use same `Idempotency-Key` |
+
+```typescript
+async function apiRequest(url: string, options: RequestInit, idempotencyKey?: string) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${process.env.SOUTHPAY_API_KEY}`,
+    "Content-Type": "application/json",
+    ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+  };
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(url, { ...options, headers });
+    if (res.ok || res.status < 500) return res;
+    await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
+  }
+
+  throw new Error("Request failed after retries");
+}
+```
+
+---
+
+## Idempotency key conflicts
+
+If you send the same `Idempotency-Key` with **different request parameters**, you get a `409 Conflict`:
+
+```json
+{
+  "error": {
+    "message": "An idempotency key conflict was detected. The key 'order_123' was used with different parameters.",
+    "code": "idempotency_conflict"
+  }
+}
+```
+
+This means you previously made a successful request with that key. Either use the original response or generate a new key for a new attempt.

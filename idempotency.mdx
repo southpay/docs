@@ -1,0 +1,132 @@
+---
+title: "Idempotency"
+description: "Safely retry any API request without risk of duplicate charges."
+---
+
+## What is idempotency?
+
+An idempotent request produces the same result no matter how many times it is submitted. This is essential for handling network timeouts, connection drops, and retries safely — you can always retry a request without worrying about creating duplicate payments.
+
+---
+
+## How to use it
+
+Pass an `Idempotency-Key` header on any `POST` request. The value must be unique per intended operation and can be any string up to 255 characters.
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/payments \
+  -H "Authorization: Bearer sp_test_YOUR_KEY" \
+  -H "Idempotency-Key: order_8721_checkout_attempt_1" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payment_intent": {
+      "amount": "49.99",
+      "currency": "USD"
+    }
+  }'
+```
+
+If you send the same `Idempotency-Key` again:
+- The original Payment Intent is returned as-is
+- No new Payment Intent is created
+- The HTTP status code is `200` (not `201`)
+
+---
+
+## Key generation
+
+Good idempotency keys are deterministic from your business context:
+
+```typescript
+const idempotencyKey = `order_${orderId}_payment_v1`;
+```
+
+```python
+idempotency_key = f"order_{order_id}_payment_v1"
+```
+
+**Guidelines:**
+- Derive the key from your internal order or transaction ID
+- Append a version suffix if you intentionally want to retry with new parameters
+- Use a new key if you are creating a genuinely new payment for the same order (e.g. after the first one expired)
+
+**Do not** use random UUIDs generated at request time — that defeats the purpose, since a new UUID on each retry means a new payment intent each time.
+
+---
+
+## Scope
+
+Idempotency keys are scoped to:
+- A single **store**
+- A single **mode** (test or live)
+
+The same key reused across different stores or modes creates separate resources.
+
+---
+
+## Expiry
+
+Once a Payment Intent reaches a terminal state (`completed`, `expired`, `failed`, `refunded`), the idempotency key is consumed. Using the same key after that point will return the original terminal-state intent.
+
+To create a replacement payment (e.g. after expiry), generate a new key:
+
+```typescript
+const retryKey = `order_${orderId}_payment_v2`;
+```
+
+---
+
+## Example: safe retry loop
+
+```typescript
+async function createPaymentWithRetry(
+  amount: string,
+  currency: string,
+  orderId: string
+): Promise<PaymentIntent> {
+  const idempotencyKey = `order_${orderId}_payment_v1`;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch("https://api.southpay.io/api/v2/payments", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.SOUTHPAY_API_KEY}`,
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          payment_intent: { amount, currency },
+        }),
+      });
+
+      if (response.ok || response.status === 422) {
+        return await response.json();
+      }
+
+      // 5xx errors are safe to retry with the same key
+      if (attempt < maxAttempts) {
+        await sleep(1000 * attempt);
+      }
+    } catch (err) {
+      if (attempt === maxAttempts) throw err;
+      await sleep(1000 * attempt);
+    }
+  }
+
+  throw new Error("Failed after maximum retry attempts");
+}
+```
+
+<Note>
+  `5xx` server errors can always be retried with the same `Idempotency-Key`. `4xx` errors indicate a client-side issue (bad parameters, auth failure) — retrying with the same key will produce the same error.
+</Note>
+
+---
+
+## Idempotency in webhooks
+
+Webhook deliveries are also idempotent — Southpay uses an internal idempotency key per `(endpoint, event)` pair, so the same event is never delivered twice to the same endpoint under normal conditions.
+
+However, at-least-once delivery means rare duplicates can occur during retries. Always [deduplicate on the event `id`](/webhooks#deduplication) in your webhook handler.

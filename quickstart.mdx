@@ -1,154 +1,233 @@
 ---
 title: "Quickstart"
-description: "Set up a store, create a payment, and handle checkout with the Southpay API"
-sidebarTitle: "Quickstart"
+description: "Create your first payment and receive a webhook confirmation in under 5 minutes."
 ---
 
-<Warning>
-  Every operation requires authentication. See [Authentication](https://docs.southpay.io/authentication) for details.
-</Warning>
-
-## Create your first payment
-
-Follow this guide to integrate Southpay, from creating a payment to confirming it on your server.
+<Info>
+  All API requests must be authenticated. [Get your API key](https://api.southpay.io) from the dashboard before starting.
+</Info>
 
 ---
 
-## 1. Create a store
+## 1. Create a Payment Intent
 
-Every integration is scoped to a store. Create one from the dashboard to get your `store_id` and API key.
-
-<Card title="Go to dashboard" icon="store" href="https://api.southpay.io">
-  Create a new store to get started.
-</Card>
-
----
-
-## 2. Create a payment
-
-Use your API key to create a payment. The response includes a `checkout_url` — redirect your customer there to complete payment.
+A Payment Intent represents a single payment request for a specific fiat amount. Create one with a `POST` to `/api/v2/payments`.
 
 ```bash
-curl -X POST https://api.southpay.io/v1/payments/ \
-  -H "Authorization: Bearer <API_KEY>" \
+curl -X POST https://api.southpay.io/api/v2/payments \
+  -H "Authorization: Bearer sp_test_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "amount": "49.99",
-    "currency": "USD",
-    "merchant_reference": "order_123",
-    "success_url": "https://yourapp.com/success",
-    "cancel_url": "https://yourapp.com/cancel"
+    "payment_intent": {
+      "amount": "49.99",
+      "currency": "USD",
+      "success_url": "https://yourapp.com/success",
+      "failed_url": "https://yourapp.com/cancel",
+      "metadata": {
+        "order_id": "order_8721"
+      }
+    }
   }'
 ```
 
-**Response**
+**Response:**
 
 ```json
 {
-  "payment_id": "pay_abc123",
-  "checkout_url": "https://api.southpay.io/v1/checkout/pay/...",
+  "id": "018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b",
+  "reference": "A1B2C3D4E5F6G7H8",
   "status": "pending",
-  "amount": "49.99",
-  "currency": "USD",
-  "merchant_reference": "order_123",
-  "expires_at": "2026-03-24T15:00:00.000Z",
-  "created_at": "2026-03-24T14:00:00.000Z"
+  "settlement_currency": "USD",
+  "settlement_amount": "49.99",
+  "expires_at": "2026-04-19T15:00:00.000Z",
+  "created_at": "2026-04-19T14:00:00.000Z",
+  "success_url": "https://yourapp.com/success",
+  "failed_url": "https://yourapp.com/cancel",
+  "terminal": false,
+  "payment_addresses": [
+    {
+      "id": "018f1a2b-0001-7000-8000-000000000001",
+      "address": "0xAbCdEf1234567890AbCdEf1234567890AbCdEf12",
+      "status": "pending",
+      "crypto_amount_atomic": "22549000000000000",
+      "exchange_rate_snapshot": "2218.50",
+      "supported_asset": {
+        "asset_id": "ETH_ETH",
+        "coin_symbol": "ETH",
+        "chain_symbol": "ETH",
+        "atomic_decimals": 18
+      }
+    }
+  ]
 }
 ```
 
-**Request fields**
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `amount` | string | Yes | Decimal amount (e.g. `"49.99"`) |
-| `currency` | string | Yes | ISO 4217 fiat code (e.g. `USD`) |
-| `merchant_reference` | string | No | Your internal order ID — must be unique per store |
-| `success_url` | string | No | Redirect URL after successful payment |
-| `cancel_url` | string | No | Redirect URL when customer cancels |
-| `customer_email` | string | No | Pre-fills the checkout form |
-| `metadata` | object | No | Key-value string pairs attached to the payment |
+The `payment_addresses` array contains one address per blockchain your store has enabled. Each address has a `crypto_amount_atomic` — the exact amount the customer must send in the asset's smallest unit (e.g. wei for ETH).
 
 ---
 
-## 3. Redirect the customer
+## 2. Redirect your customer
 
-Send your customer to the `checkout_url` from the response. They complete payment on the Southpay-hosted checkout page.
+Construct the hosted checkout URL from the `reference` field:
 
-After payment, the customer is redirected to your `success_url` or `cancel_url` with query parameters appended:
-
-```text
-https://yourapp.com/success?session_id=...&status=paid
+```
+https://api.southpay.io/api/v2/checkout/{reference}
 ```
 
+For the example above:
+
+```
+https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8
+```
+
+The checkout page shows a QR code, address, amount, and a 60-minute countdown timer. No frontend integration required. Once the customer pays and the transaction confirms, they are redirected to your `success_url`.
+
 ---
 
-## 4. Check payment status
+## 3. Handle the webhook
 
-Poll the payment status from your server using the `payment_id`:
+Register a webhook endpoint from your dashboard or via the API:
 
 ```bash
-curl https://api.southpay.io/v1/payments/pay_abc123
+curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
+  -H "Authorization: Bearer sp_test_YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "webhook_endpoint": {
+      "url": "https://yourapp.com/webhooks/southpay",
+      "subscribed_events": ["payment_intent.completed", "payment_intent.failed", "payment_intent.expired"]
+    }
+  }'
 ```
 
-**Response**
+The response includes a `signing_secret` — **save it immediately, it is only shown once.**
+
+When the payment confirms, Southpay sends a `POST` to your endpoint:
 
 ```json
 {
-  "payment_id": "pay_abc123",
-  "status": "paid",
-  "amount": "49.99",
-  "currency": "USD",
-  "crypto_amount": "0.00082",
-  "crypto_currency": "ETH",
-  "expires_at": "2026-03-24T15:00:00.000Z"
-}
-```
-
-**Payment statuses**
-
-| Status | Description |
-| --- | --- |
-| `pending` | Waiting for the customer to initiate payment |
-| `processing` | Funds received, confirming on-chain |
-| `paid` | Payment confirmed and complete |
-| `failed` | Payment failed |
-| `expired` | Payment window closed before funds arrived |
-| `refunded` | Payment was refunded |
-
----
-
-## 5. Receive webhook events
-
-Instead of polling, configure a webhook to receive real-time events as payment status changes.
-
-<Card title="Webhooks" icon="webhook" href="/webhooks">
-  Set up your endpoint and verify signatures.
-</Card>
-
-The `payment.completed` event fires when a payment is fully confirmed:
-
-```json
-{
-  "id": "3f2d1a9b-...",
-  "event": "payment.completed",
-  "timestamp": "2026-03-24T14:05:00.000Z",
-  "api_version": "v1",
+  "id": "018f1a2b-ffff-7000-8000-000000000099",
+  "type": "payment_intent.completed",
+  "created": 1745071260,
+  "livemode": false,
   "data": {
-    "payment_id": "pay_abc123",
-    "merchant_reference": "order_123",
-    "status": "paid",
-    "amount": "49.99",
-    "currency": "USD"
+    "object": {
+      "id": "018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b",
+      "reference": "A1B2C3D4E5F6G7H8",
+      "status": "completed",
+      "settlement_currency": "USD",
+      "settlement_amount": "49.99",
+      "metadata": { "order_id": "order_8721" }
+    }
   }
 }
 ```
+
+Verify the signature before processing (see [Webhooks — Signature verification](/webhooks#verifying-signatures)):
+
+<CodeGroup>
+
+```typescript Node.js
+import { createHmac, timingSafeEqual } from "crypto";
+
+function verifySignature(rawBody: string, header: string, secret: string): boolean {
+  const parts = Object.fromEntries(
+    header.split(",").map(p => p.split("=") as [string, string])
+  );
+  const timestamp = parts["t"];
+  const expectedSig = parts["v1"];
+  if (!timestamp || !expectedSig) return false;
+
+  const computed = createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
+
+  const a = Buffer.from(computed);
+  const b = Buffer.from(expectedSig);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+app.post("/webhooks/southpay", express.raw({ type: "application/json" }), (req, res) => {
+  const sig = req.headers["southpay-signature"] as string;
+  const secret = process.env.SOUTHPAY_WEBHOOK_SECRET!;
+
+  if (!verifySignature(req.body.toString(), sig, secret)) {
+    return res.status(401).json({ error: "Invalid signature" });
+  }
+
+  const event = JSON.parse(req.body.toString());
+
+  if (event.type === "payment_intent.completed") {
+    const { reference, metadata } = event.data.object;
+    fulfillOrder(metadata.order_id, reference);
+  }
+
+  res.json({ received: true });
+});
+```
+
+```python Python
+import hmac, hashlib, os
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+def verify_signature(raw_body: bytes, header: str, secret: str) -> bool:
+    parts = dict(p.split("=", 1) for p in header.split(","))
+    timestamp = parts.get("t")
+    expected = parts.get("v1")
+    if not timestamp or not expected:
+        return False
+    signed = f"{timestamp}.{raw_body.decode()}"
+    computed = hmac.new(secret.encode(), signed.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, expected)
+
+@app.post("/webhooks/southpay")
+def webhook():
+    sig = request.headers.get("Southpay-Signature", "")
+    secret = os.environ["SOUTHPAY_WEBHOOK_SECRET"]
+
+    if not verify_signature(request.data, sig, secret):
+        return jsonify(error="Invalid signature"), 401
+
+    event = request.json
+    if event["type"] == "payment_intent.completed":
+        obj = event["data"]["object"]
+        fulfill_order(obj["metadata"]["order_id"], obj["reference"])
+
+    return jsonify(received=True)
+```
+
+</CodeGroup>
+
+---
+
+## 4. Poll for status (alternative)
+
+If webhooks aren't practical, poll the payment status using the `id` or `reference`:
+
+```bash
+curl https://api.southpay.io/api/v2/payments/018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b \
+  -H "Authorization: Bearer sp_test_YOUR_API_KEY"
+```
+
+Check the `terminal` field — when `true`, the payment is in a final state and will not change.
 
 ---
 
 ## Next steps
 
 <Columns cols={2}>
+  <Card title="Payment Intents" icon="bolt" href="/payment-intents">
+    Full lifecycle, all statuses, and the events API.
+  </Card>
   <Card title="Webhooks" icon="webhook" href="/webhooks">
-    Verify signatures and handle events reliably.
+    Signature verification, retries, and all event types.
+  </Card>
+  <Card title="Idempotency" icon="shield" href="/idempotency">
+    Safely retry API calls without duplicate charges.
+  </Card>
+  <Card title="Environments" icon="flask" href="/environments">
+    Use test mode to develop without real funds.
   </Card>
 </Columns>

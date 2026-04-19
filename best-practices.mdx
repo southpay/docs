@@ -1,0 +1,171 @@
+---
+title: "Best Practices"
+description: "Integration patterns for a correct, resilient, and production-ready Southpay integration."
+---
+
+## Use webhooks, not polling
+
+Polling burns API quota and introduces latency. Webhooks fire within seconds of an on-chain confirmation.
+
+```
+payment_intent.completed  →  fulfill order
+payment_intent.failed     →  notify customer, surface error
+payment_intent.expired    →  cancel order or prompt retry
+```
+
+Set up your webhook endpoint before going live. Test it with the `send_test` endpoint.
+
+---
+
+## Always use Idempotency-Key on creates
+
+Any network failure between your server and the API means you don't know if the request landed. Retrying without an idempotency key creates duplicate Payment Intents.
+
+```typescript
+const key = `order_${order.id}_payment_v1`;
+
+const intent = await createPaymentIntent({ amount, currency, idempotencyKey: key });
+```
+
+If the customer needs to retry after an expiry, bump the version:
+
+```typescript
+const retryKey = `order_${order.id}_payment_v2`;
+```
+
+See [Idempotency](/idempotency) for a complete retry loop example.
+
+---
+
+## Verify webhook signatures before processing
+
+A webhook endpoint that processes without signature verification is a security hole. Anyone who discovers your URL can send fake payment confirmations.
+
+Use timing-safe comparison. Never use `===` on HMAC digests. See [Webhooks — Verifying signatures](/webhooks#verifying-signatures) for verified code examples in Node.js, Python, Go, and Ruby.
+
+---
+
+## Deduplicate on event ID
+
+Southpay guarantees at-least-once delivery. During retries, the same event may arrive more than once. Guard your fulfillment logic with an idempotency check:
+
+```typescript
+async function handleWebhook(event: SouthpayEvent) {
+  const alreadyProcessed = await db.processedEvents.exists(event.id);
+  if (alreadyProcessed) return; // safe to ignore
+
+  await db.processedEvents.insert(event.id);
+  await fulfill(event);
+}
+```
+
+---
+
+## Return 2xx quickly
+
+Your webhook endpoint has a 30-second timeout. If your fulfillment logic (database writes, emails, third-party calls) takes longer, return `200` immediately and process in a background job:
+
+```typescript
+app.post("/webhooks/southpay", (req, res) => {
+  // verify signature first
+  if (!verifySignature(req.body, req.headers["southpay-signature"], secret)) {
+    return res.status(401).end();
+  }
+
+  res.json({ received: true }); // respond immediately
+
+  queue.enqueue("process_payment_event", req.body); // process async
+});
+```
+
+---
+
+## Check `terminal` before acting
+
+A `completed` Payment Intent will not revert. But during `processing`, the outcome is not yet final. Always check `terminal: true` before fulfilling an order:
+
+```typescript
+const intent = await getPaymentIntent(id);
+
+if (intent.terminal && intent.status === "completed") {
+  fulfillOrder(intent.metadata.order_id);
+}
+```
+
+---
+
+## Handle every terminal state
+
+Don't only handle `payment_intent.completed`. Customers need feedback on failures and expirations:
+
+| Event | Action |
+| --- | --- |
+| `payment_intent.completed` | Fulfill order, send confirmation |
+| `payment_intent.failed` | Notify customer (underpayment, overpayment rejected) |
+| `payment_intent.expired` | Offer to retry with a new payment link |
+| `payment_intent.refunded` | Update order status, notify customer |
+
+---
+
+## Use test mode for CI/CD
+
+Create a test API key and test webhook endpoint for your staging environment. Never use live credentials outside production.
+
+Use environment variables:
+
+```bash
+# .env.production
+SOUTHPAY_API_KEY=sp_live_...
+SOUTHPAY_WEBHOOK_SECRET=whsec_...
+
+# .env.staging
+SOUTHPAY_API_KEY=sp_test_...
+SOUTHPAY_WEBHOOK_SECRET=whsec_...
+```
+
+---
+
+## Store both `id` and `reference` at creation time
+
+The `id` (UUID) is used in API calls. The `reference` (16-char alphanumeric) is displayed to customers and used in the checkout URL. Persist both immediately after creation:
+
+```typescript
+const intent = await createPaymentIntent(...);
+
+await db.orders.update(orderId, {
+  southpay_intent_id: intent.id,
+  southpay_reference: intent.reference,
+  southpay_expires_at: intent.expires_at,
+});
+```
+
+---
+
+## Set meaningful metadata
+
+Metadata is passed through every event and returned in webhook payloads. Use it to correlate Southpay events back to your system:
+
+```json
+{
+  "metadata": {
+    "order_id": "order_8721",
+    "customer_id": "cus_4421",
+    "product_sku": "SKU-001"
+  }
+}
+```
+
+---
+
+## Production readiness checklist
+
+<Check>Created a live API key from the dashboard</Check>
+<Check>Configured a live webhook endpoint (separate from test)</Check>
+<Check>Webhook handler verifies `Southpay-Signature` using timing-safe comparison</Check>
+<Check>Webhook handler deduplicates on event `id`</Check>
+<Check>All `POST` requests include `Idempotency-Key`</Check>
+<Check>All three terminal states handled: completed, failed, expired</Check>
+<Check>Webhook endpoint responds within 30 seconds</Check>
+<Check>Secrets stored in environment variables, not source code</Check>
+<Check>Payout destination configured (fiat or crypto)</Check>
+<Check>Tested full payment lifecycle in test mode before going live</Check>
