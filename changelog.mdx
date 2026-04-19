@@ -3,10 +3,10 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 19, 2026" description="OAuth 2.0, payout destination linking, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
+<Update label="April 19, 2026" description="OAuth 2.0, environment-scoped assets, payout destination linking, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 19
 
-Third-party OAuth integrations, more flexible payout routing, and fixes to settlement and payout reliability.
+Third-party OAuth integrations, environment-scoped asset lists, more flexible payout routing, and fixes to settlement and payout reliability.
 
 ### New features
 
@@ -15,6 +15,8 @@ Third-party OAuth integrations, more flexible payout routing, and fixes to settl
 - **Manage connected apps** — You can view and revoke access for any third-party application connected to your store. Revoking a connection immediately invalidates the app's access token.
 
 ### Updates
+
+- **Supported assets scoped to environment** — The supported assets list now respects your API key's mode. Live keys return only production-ready assets; test keys return testnet assets. This prevents mismatches when switching between [environments](/environments).
 
 - **Link payout destinations to schedules** — When creating a payout schedule, you can now specify a `crypto_payout_detail_id` or `fiat_payout_detail_id` to route payouts to a specific destination. This gives you more control over where scheduled payouts are sent. [Learn more](/api-reference/payments)
 
