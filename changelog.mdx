@@ -3,10 +3,10 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 20, 2026" description="Email confirmation, asset chain validation, and deposit address fix" tags={["Feature", "Improvement", "Fix"]}>
+<Update label="April 20, 2026" description="Email confirmation, asset chain validation, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 20
 
-Email confirmation for sign-up, stricter asset activation checks, and a fix for deposit address generation.
+Email confirmation for sign-up, stricter asset activation checks, and reliability fixes for deposit addresses and payment creation.
 
 ### New features
 
@@ -19,6 +19,10 @@ Email confirmation for sign-up, stricter asset activation checks, and a fix for 
 ### Bug fixes
 
 - **Deposit address chain mismatch** — Fixed an issue where deposit addresses could be generated using an incorrect chain identifier, potentially routing payments to the wrong network. Addresses are now created using the correct chain for each asset.
+
+- **Duplicate deposit address prevention** — Fixed a race condition where concurrent payment requests could receive the same deposit address. The system now retries address generation to guarantee each payment gets a unique address.
+
+- **Idempotent payment creation under concurrency** — Fixed a race condition where simultaneous requests with the same [idempotency key](/idempotency) could fail instead of returning the existing payment. Concurrent requests now resolve correctly.
 
 </Update>
 
