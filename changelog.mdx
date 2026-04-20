@@ -3,6 +3,25 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 20, 2026" description="Email confirmation, asset chain validation, and deposit address fix" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 20
+
+Email confirmation for sign-up, stricter asset activation checks, and a fix for deposit address generation.
+
+### New features
+
+- **Email confirmation on sign-up** — New accounts now go through an email verification step. After signing up, you receive a confirmation code by email that must be submitted before your account is fully activated. You can also request a new code if the original expires.
+
+### Updates
+
+- **Live-mode chain validation for assets** — When you enable a payment asset in live mode, Southpay now verifies that the asset's blockchain is supported by the payment provider before activation. This prevents enabling assets that cannot process real transactions.
+
+### Bug fixes
+
+- **Deposit address chain mismatch** — Fixed an issue where deposit addresses could be generated using an incorrect chain identifier, potentially routing payments to the wrong network. Addresses are now created using the correct chain for each asset.
+
+</Update>
+
 <Update label="April 19, 2026" description="OAuth 2.0, environment-scoped assets, payout destination linking, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 19
 
