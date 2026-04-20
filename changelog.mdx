@@ -3,14 +3,16 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 23, 2026" description="Avalanche payment fix and webhook reliability improvements" tags={["Fix"]}>
+<Update label="April 23, 2026" description="Avalanche payment fix, fee processing resilience, and webhook reliability improvements" tags={["Fix"]}>
 ## Week of April 23
 
-Avalanche payments now process correctly, and webhook handling is more resilient.
+Avalanche payments now process correctly, fee collection is more resilient, and webhook handling is more reliable.
 
 ### Bug fixes
 
-- **Avalanche (AVAX) payment processing** — Fixed an issue where incoming Avalanche payments were not matched to the correct payment due to an asset identifier mismatch. AVAX payments are now recognized and processed reliably.
+- **Avalanche (AVAX) payment processing** — Fixed an issue where incoming Avalanche payments were not matched to the correct payment due to an asset identifier mismatch. Additionally, AVAX payments in a pending confirmation state are now resolved correctly instead of getting stuck. AVAX payments are now recognized and processed reliably.
+
+- **Fee collection resilience** — Fee processing for incoming payments no longer blocks payment completion if a fee wallet is unavailable. Payments are credited to your balance even if fee collection is temporarily skipped, and the system retries automatically.
 
 - **Webhook processing reliability** — Improved how incoming payment webhooks are handled when they reference an unrecognized deposit address. These webhooks are now handled gracefully instead of causing errors, improving overall payment processing reliability.
 
