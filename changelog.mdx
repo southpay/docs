@@ -3,6 +3,19 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 23, 2026" description="Avalanche payment fix and webhook reliability improvements" tags={["Fix"]}>
+## Week of April 23
+
+Avalanche payments now process correctly, and webhook handling is more resilient.
+
+### Bug fixes
+
+- **Avalanche (AVAX) payment processing** — Fixed an issue where incoming Avalanche payments were not matched to the correct payment due to an asset identifier mismatch. AVAX payments are now recognized and processed reliably.
+
+- **Webhook processing reliability** — Improved how incoming payment webhooks are handled when they reference an unrecognized deposit address. These webhooks are now handled gracefully instead of causing errors, improving overall payment processing reliability.
+
+</Update>
+
 <Update label="April 22, 2026" description="Fiat-independent crypto payment options" tags={["Improvement"]}>
 ## Week of April 22
 
