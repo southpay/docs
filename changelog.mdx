@@ -3,10 +3,10 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 20, 2026" description="Email confirmation, payout dust threshold, asset chain validation, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
+<Update label="April 20, 2026" description="Email confirmation, payout dust threshold, asset chain validation, EVM payment routing, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 20
 
-Email confirmation for sign-up, minimum payout thresholds per chain, stricter asset activation checks, and reliability fixes for deposit addresses and payment creation.
+Email confirmation for sign-up, minimum payout thresholds per chain, stricter asset activation checks, and reliability fixes for deposit addresses, EVM payment routing, and payment creation.
 
 ### New features
 
@@ -19,6 +19,8 @@ Email confirmation for sign-up, minimum payout thresholds per chain, stricter as
 - **Live-mode chain validation for assets** — When you enable a payment asset in live mode, Southpay now verifies that the asset's blockchain is supported by the payment provider before activation. This prevents enabling assets that cannot process real transactions.
 
 ### Bug fixes
+
+- **EVM cross-chain payment routing** — Fixed an issue where incoming payments on EVM-compatible chains (such as Ethereum, Polygon, Arbitrum, and Base) could be matched to the wrong payment when the same deposit address was shared across multiple chains. Payments are now resolved using both the deposit address and the asset, ensuring funds are attributed to the correct transaction.
 
 - **Deposit address chain mismatch** — Fixed an issue where deposit addresses could be generated using an incorrect chain identifier, potentially routing payments to the wrong network. Addresses are now created using the correct chain for each asset.
 
