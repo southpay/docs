@@ -3,6 +3,23 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 21, 2026" description="Shared EVM deposit addresses, faster checkout pricing, and crypto precision improvements" tags={["Improvement", "Fix"]}>
+## Week of April 21
+
+Shared deposit addresses across EVM chains, faster exchange rate lookups during checkout, and improved precision for high-decimal crypto assets.
+
+### Updates
+
+- **Shared deposit addresses for EVM chains** — Payments that accept multiple EVM-compatible assets (such as Ethereum, Polygon, Avalanche, and Base) now share a single deposit address per payment instead of generating one per chain. This simplifies the checkout experience and reduces the number of addresses your customers see.
+
+- **Faster checkout pricing** — Exchange rates are now pre-fetched in batch when a payment is created, so pricing loads faster on the hosted checkout page. You don't need to change anything in your integration.
+
+### Bug fixes
+
+- **Crypto amount precision for high-decimal assets** — Fixed an issue where payment amounts for assets with many decimal places could lose precision due to integer overflow. Amounts are now stored with full precision, ensuring accurate pricing across all supported assets.
+
+</Update>
+
 <Update label="April 20, 2026" description="Email confirmation, payout dust threshold, asset chain validation, EVM payment routing, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 20
 
