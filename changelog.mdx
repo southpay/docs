@@ -3,6 +3,21 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 23, 2026" description="OAuth connected apps improvements" tags={["Improvement", "Fix"]}>
+## Week of April 23
+
+Improvements to how OAuth connected apps are listed and how access tokens are issued.
+
+### Updates
+
+- **One active token per app per store** — Authorizing a third-party application now automatically revokes any previous active token that app held for the same store. Each connected app holds at most one active token per store, making it easier to reason about which credentials are in use. [See authentication](/authentication)
+
+### Bug fixes
+
+- **Connected apps list scoped to your user** — Fixed an issue where the connected apps list and revoke action were scoped to the current store instead of the user who granted access. You now see every third-party application you've authorized, and revoking a connection works regardless of which store is currently selected.
+
+</Update>
+
 <Update label="April 23, 2026" description="Avalanche payment fix, fee processing resilience, and webhook reliability improvements" tags={["Fix"]}>
 ## Week of April 23
 
