@@ -3,6 +3,19 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 24, 2026" description="Faster checkout payment links and OAuth store selection" tags={["Improvement"]}>
+## Week of April 24
+
+Checkout payment links now load faster, and OAuth authorization lets users pick which store to connect when they own more than one.
+
+### Updates
+
+- **Faster payment link generation** — Creating a payment now generates deposit addresses and fetches exchange rates in parallel. Payment links are noticeably quicker to open, especially for payments that accept multiple crypto assets. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+- **OAuth store selection for multi-store users** — When a user with multiple stores authorizes a third-party application without specifying a `store_id`, they are now shown a consent screen to choose which store to grant access to. Previously, access defaulted to the first store. Users with a single store continue to be auto-authorized as before. [See authentication](/authentication)
+
+</Update>
+
 <Update label="April 24, 2026" description="OAuth tokens now support live mode" tags={["Improvement"]}>
 ## Week of April 24
 
