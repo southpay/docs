@@ -3,6 +3,17 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 24, 2026" description="Fiat-denominated payout schedule thresholds" tags={["Improvement"]}>
+## Week of April 24
+
+Payout schedule minimum thresholds are now set in fiat amounts instead of crypto atomic units, making them easier to configure and more stable as exchange rates move.
+
+### Updates
+
+- **Fiat-denominated minimum thresholds on payout schedules** — Payout schedules now accept `minimum_fiat_cents` and `minimum_fiat_currency` (one of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`) in place of the previous crypto-denominated `minimum_threshold`. Southpay converts the threshold to the asset's value at payout time using live exchange rates, so a schedule set to "skip payouts below $10" behaves consistently across assets without needing to recalculate atomic amounts. Update any payout schedule requests to send the new fields. [Learn more about payouts](/api-reference/payments)
+
+</Update>
+
 <Update label="April 24, 2026" description="Financial breakdown on payment intents" tags={["Improvement"]}>
 ## Week of April 24
 
