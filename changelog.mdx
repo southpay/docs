@@ -3,6 +3,17 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 24, 2026" description="Financial breakdown on payment intents" tags={["Improvement"]}>
+## Week of April 24
+
+Payment intents now return a detailed financial breakdown so you can see exactly how each payment splits between your net revenue and Southpay fees.
+
+### Updates
+
+- **Financial breakdown on payment intents** — Retrieving a payment intent now includes a `financials` object with `gross_amount`, `fee_amount`, `net_amount`, `fee_percentage`, and `currency`. Use it to reconcile payouts, display fee details to your team, or surface net proceeds in your own dashboards. The `amount_paid` field is now computed from the same source, making it more accurate across partial and overpaid payments. [Learn more about payment intents](/payment-intents)
+
+</Update>
+
 <Update label="April 24, 2026" description="Faster checkout payment links and OAuth store selection" tags={["Improvement"]}>
 ## Week of April 24
 
