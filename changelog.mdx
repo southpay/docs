@@ -3,6 +3,17 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 24, 2026" description="OAuth tokens now support live mode" tags={["Improvement"]}>
+## Week of April 24
+
+OAuth access tokens can now operate in live mode, giving third-party applications access to production data when explicitly requested.
+
+### Updates
+
+- **Live mode for OAuth tokens** — OAuth access tokens now honor the `X-Livemode` header. Send `X-Livemode: true` on requests authorized with an OAuth token (`spo_...`) to operate against live data; omit the header or send `false` to stay in test mode. Previously, OAuth tokens were always scoped to test mode. [See authentication](/authentication)
+
+</Update>
+
 <Update label="April 23, 2026" description="OAuth connected apps improvements" tags={["Improvement", "Fix"]}>
 ## Week of April 23
 
