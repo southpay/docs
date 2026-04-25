@@ -3,6 +3,21 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 25, 2026" description="Auto-swap to stablecoins and faster, more resilient exchange rates" tags={["Feature", "Improvement"]}>
+## Week of April 25
+
+Automatically convert incoming crypto payments into a stablecoin, plus faster and more resilient exchange rate lookups across the platform.
+
+### New features
+
+- **Auto-swap to USDC or USDT** — Stores can now opt in to automatically swap incoming crypto payments into a stablecoin on Ethereum. Enable auto-swap from your store settings and pick either USDC or USDT (Ethereum) as your target asset; Southpay handles the on-chain swap and credits the converted balance back to your store. Use it to reduce exposure to crypto price volatility without managing swaps yourself.
+
+### Updates
+
+- **Faster, more resilient exchange rates** — Exchange rates are now pre-fetched on a rolling schedule and served from an in-process cache, with automatic fallback if the upstream rate provider is briefly unavailable. Checkout pricing and payout valuations stay fast and accurate even during provider hiccups. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+</Update>
+
 <Update label="April 25, 2026" description="Reliable payout execution with auto-sweep recovery" tags={["Fix"]}>
 ## Week of April 25
 
