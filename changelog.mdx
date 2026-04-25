@@ -3,6 +3,23 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 25, 2026" description="Reliable payout execution with auto-sweep recovery" tags={["Fix"]}>
+## Week of April 25
+
+Payouts and fee sweeps now execute reliably end-to-end, with automatic recovery when on-chain liquidity needs to be consolidated.
+
+### Bug fixes
+
+- **End-to-end payout reliability** — Fixed an issue where outgoing payouts and fee sweeps could fail to broadcast on-chain due to incorrect source address routing. Payouts and sweeps now consistently complete and confirm. No integration changes required. [Learn more about payouts](/api-reference/payments)
+
+- **Automatic recovery for insufficient on-chain liquidity** — Payouts that previously failed when funds needed to be consolidated across deposit addresses now trigger an automatic on-chain consolidation and retry. Scheduled and one-off payouts complete without manual intervention.
+
+- **Permanent failure handling for stuck payouts** — Payouts that exhaust their retry budget are now marked as permanently failed and the reserved balance is released back to your store. Funds no longer remain locked when a payout cannot be completed.
+
+- **Live and test balances kept separate during payouts** — Fixed an issue where automated payouts could read from the wrong [environment's](/environments) balance. Live and test mode balances are now strictly isolated when payouts are evaluated and executed.
+
+</Update>
+
 <Update label="April 24, 2026" description="Fiat-denominated payout schedule thresholds" tags={["Improvement"]}>
 ## Week of April 24
 
