@@ -3,6 +3,17 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 26, 2026" description="Consistent error responses across resource endpoints" tags={["Improvement"]}>
+## Week of April 26
+
+Resource endpoints now return consistent, structured error responses for unexpected failures.
+
+### Updates
+
+- **Unified error handling on resource endpoints** — Payments, payouts, balances, payout schedules, and [webhook endpoints](/api-reference/webhook-endpoints) now share the same error-handling behavior as the rest of the API. Unexpected server errors are returned as structured JSON with a clear message and code instead of generic responses, making failures easier to detect and surface in your integration. No integration changes required.
+
+</Update>
+
 <Update label="April 25, 2026" description="Auto-swap to stablecoins and faster, more resilient exchange rates" tags={["Feature", "Improvement"]}>
 ## Week of April 25
 
