@@ -3,6 +3,17 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 27, 2026" description="Pass processing fees to customers at checkout" tags={["Feature"]}>
+## Week of April 27
+
+Stores can now opt to have customers cover the Southpay processing fee at checkout instead of absorbing it themselves.
+
+### New features
+
+- **Customer-paid processing fees** — Enable `customer_pays_fee` on your store (or override per payment) and the checkout amount is grossed up so the customer covers the fee. Each crypto payment option on the hosted checkout now includes a `base_crypto_atomic` and `fee_crypto_atomic` breakdown alongside the total `crypto_amount_atomic`, and the fee percentage is locked in at intent creation time so customers always pay the rate they were quoted. Toggle it from store settings or pass `customer_pays_fee` when [creating a payment intent](/payment-intents). [Learn more](/payment-intents)
+
+</Update>
+
 <Update label="April 27, 2026" description="Four new settlement currencies, a payment currencies endpoint, and Google sign-in name fix" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 27
 
