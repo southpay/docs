@@ -3,6 +3,33 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 27, 2026" description="Four new settlement currencies, a payment currencies endpoint, and Google sign-in name fix" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 27
+
+Four additional fiat settlement currencies are now supported, a new endpoint lists every currency you can settle in, and Google sign-in now correctly captures user names.
+
+### New features
+
+- **Four new settlement currencies** — You can now settle payments in Danish Krone (`DKK`), Swiss Franc (`CHF`), Swedish Krona (`SEK`), and Norwegian Krone (`NOK`), in addition to the existing `USD`, `EUR`, `GBP`, `HKD`, `SGD`, and `JPY`. Pass any supported code as the `currency` when [creating a payment intent](/payment-intents) or as the `minimum_fiat_currency` on a payout schedule. [Learn more about payment intents](/payment-intents)
+
+- **List supported payment currencies endpoint** — A new `GET /payment_currencies` endpoint returns every fiat currency you can use for payments and settlement, along with a human-readable label for each (for example, `USD` → "US Dollar"). Use it to populate currency pickers in your own UI without hard-coding the list. [See the API reference](/api-reference/payments)
+
+### Updates
+
+- **Clearer payment notification emails** — Payment status notification emails now show the settlement amount as a formatted decimal (for example, `12.50`) instead of a raw integer in cents, so amounts in your inbox match what customers see at checkout.
+
+### Bug fixes
+
+- **Google sign-in captures first and last name** — Fixed an issue where signing in with Google could leave a new account's first and last name set to "Unknown". Names are now pulled from your Google profile (`given_name` and `family_name`) when available, with a sensible fallback to the full name on the account. Existing accounts keep any name you've already set. [See authentication](/authentication)
+
+- **Underpayment ledger entries on expiry** — Fixed an issue where stores that accept underpayments could complete an expired payment without recording a ledger receipt for the partial amount. Confirmed funds are now always credited to your store's balance when an underpaid payment is accepted.
+
+- **Expired checkout sessions in test mode** — Fixed an issue where expiring a pending payment from the hosted checkout page could be evaluated against the wrong [environment](/environments). Test-mode payments now expire correctly without affecting live data.
+
+- **Manual payouts honor idempotency keys** — Manual payouts created from the dashboard or API now accept an idempotency key, so retrying the same request returns the original payout instead of creating a duplicate. [Learn more about payouts](/api-reference/payments)
+
+</Update>
+
 <Update label="April 27, 2026" description="Resilient exchange rate fallbacks, environment-scoped asset selection, and webhook and payment fixes" tags={["Improvement", "Fix"]}>
 ## Week of April 27
 
