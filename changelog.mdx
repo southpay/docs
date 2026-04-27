@@ -3,14 +3,18 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
-<Update label="April 27, 2026" description="Refreshed transactional emails" tags={["Improvement"]}>
+<Update label="April 27, 2026" description="Refreshed transactional emails, auto-swap default for new stores, and environment-scoped store assets" tags={["Improvement"]}>
 ## Week of April 27
 
-Account and payment notification emails have been redesigned and now send directly from Southpay with consistent branding.
+Account and payment notification emails have been redesigned, new stores ship with a sensible auto-swap default, and store-level asset settings now respect your active environment.
 
 ### Updates
 
-- **Refreshed transactional emails** — Welcome, email verification, payment completed, payment overpaid, payment expired, payout disbursed, and webhook delivery failure emails now use a unified Southpay-branded template. Sign-up verification codes are also delivered through the same system, so verification emails arrive with the same look and feel as the rest of your account notifications. No integration changes required. [See authentication](/authentication)
+- **Refreshed transactional emails** — Welcome, email verification, payment completed, payment overpaid, payment expired, payout disbursed, and webhook delivery failure emails now use a unified Southpay-branded template with a friendlier, more consistent tone across every message. Sign-up verification codes are delivered through the same system, so verification emails arrive with the same look and feel as the rest of your account notifications. No integration changes required. [See authentication](/authentication)
+
+- **Auto-swap to USDC or USDT enabled by default for new stores** — New stores are now created with USDT (Ethereum) pre-selected as the auto-swap target asset. You can change the target asset, or turn auto-swap off entirely, from your store settings at any time. Existing stores are unaffected.
+
+- **Store asset settings scoped to live or test mode** — The list of active assets returned for your store now matches the [environment](/environments) of the API key making the request. Live keys see live-mode assets and test keys see test-mode assets, preventing cross-environment mismatches when configuring which crypto assets your store accepts.
 
 </Update>
 
