@@ -3,6 +3,31 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 27, 2026" description="Resilient exchange rate fallbacks, environment-scoped asset selection, and webhook and payment fixes" tags={["Improvement", "Fix"]}>
+## Week of April 27
+
+Exchange rate lookups are now more resilient with a Binance fallback and stale-rate recovery, store assets are correctly scoped to live or test mode at allocation time, and several payment and webhook edge cases are fixed.
+
+### Updates
+
+- **Binance fallback for exchange rates** — Rate lookups for BTC, SOL, and TRX now automatically fall back to Binance if the primary provider is briefly unavailable. Checkout pricing and payout valuations stay accurate during upstream provider issues. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+- **Stale-rate recovery for exchange rates** — If a fresh exchange rate cannot be fetched, the last known good rate (up to 24 hours old) is used as a fallback so payments and payouts keep working through provider outages. No integration changes required.
+
+- **Resilient payment creation across multiple assets** — When [creating a payment intent](/payment-intents) that accepts multiple crypto assets, a temporary rate lookup failure on a single asset no longer fails the entire request. The unavailable asset is dropped from the payment and the remaining assets are offered to the customer.
+
+### Bug fixes
+
+- **Live and test assets correctly scoped at address allocation** — Fixed an issue where a store could see test-mode assets in live mode (or vice versa) when allocating deposit addresses or listing active store assets. Asset selection now strictly respects the [environment](/environments) of the API key making the request.
+
+- **Avalanche and testnet Ethereum webhook handling** — Fixed an issue where incoming webhooks for Avalanche (`AVAXC`) and Sepolia testnet Ethereum (`SETH`) payments could be misrouted due to internal asset ID remapping. Webhooks for these assets are now matched to the correct payment.
+
+- **TRX exchange rate caching** — Fixed a cache key collision that could cause TRX rates to be fetched or cached incorrectly. TRX pricing is now consistent across checkout and payouts.
+
+- **Testnet rate handling for stablecoins** — Stablecoins in test mode now resolve to their real peg value instead of a generic testnet mock rate, so test payments using USDC and USDT match production behavior more closely.
+
+</Update>
+
 <Update label="April 27, 2026" description="Refreshed transactional emails, auto-swap default for new stores, and environment-scoped store assets" tags={["Improvement"]}>
 ## Week of April 27
 
