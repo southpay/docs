@@ -3,6 +3,41 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="April 28, 2026" description="Automatic refunds for failed payments, OAuth livemode at authorization, and confirmation accuracy fixes" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 28
+
+Underpaid payments that fail are now refunded automatically to the sender, OAuth applications choose live or test mode at authorization time, and webhook delivery and on-chain confirmation handling are more accurate.
+
+### New features
+
+- **Automatic refunds for failed underpaid payments** — When an underpaid payment expires and your store does not [accept underpayments](/payment-intents), Southpay now automatically initiates an on-chain refund of the partial amount to the sender. Refunds are recorded against the payment intent and the refunded amount is debited from your balance. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+- **List refunds for a payment** — A new `GET /payments/{id}/refunds` endpoint returns every refund associated with a payment intent, including status (`pending`, `submitted`, `confirmed`, `failed`), reason, destination address, amount, and on-chain transaction hash. Use it to surface refund progress in your own dashboards. [See the API reference](/api-reference/payments)
+
+- **Shopify and Magento webhook platforms** — When [creating a webhook endpoint](/api-reference/webhook-endpoints), you can now set the `platform` to `shopify` or `magento` in addition to `woocommerce` and `custom`. The legacy `whmcs` option has been removed.
+
+### Updates
+
+- **OAuth live mode chosen at authorization** — OAuth applications now request live or test mode at authorization time by passing `livemode=true` to `/oauth/authorize`. The resulting access token is permanently scoped to that mode, so the previous `X-Livemode` header on OAuth requests is no longer required (or honored). Update your authorization URLs to include `livemode` if your application needs production access. [See authentication](/authentication)
+
+- **New `processing_underpaid` state reason** — Payment intents that are in `processing` but have not yet received the full required amount now report a `state_reason` of `processing_underpaid`, making it easier to distinguish partially-funded payments from those that have already met the required total. [View the full lifecycle](/payment-intents)
+
+- **`failed → refunded` transition** — Payment intents that ended in `failed` (for example, due to underpayment) can now move to `refunded` once the automatic refund completes on-chain. Listen for `payment_intent.refunded` to update order state in your system. [See webhooks](/webhooks)
+
+### Bug fixes
+
+- **Accurate confirmation handling for in-flight transactions** — Fixed an issue where transactions reported as `confirming` by the upstream chain provider were marked as fully confirmed before reaching the required number of block confirmations. Transactions now stay in `confirming` until `confirmations >= required_confirmations`, preventing payments from completing prematurely.
+
+- **Processing transition only on real on-chain activity** — Payment intents now move from `pending` to `processing` only when at least one transaction for the deposit address is `confirming` or `confirmed`. Stray webhook events without on-chain activity no longer flip an intent into `processing`. [View the full lifecycle](/payment-intents)
+
+- **Webhook delivery blocked for private addresses** — Outbound [webhook deliveries](/webhooks) to private, loopback, link-local, and unique-local IP addresses are now rejected before the request is sent, and the endpoint is automatically marked as `error`. This prevents misconfigured endpoints from causing requests to internal networks.
+
+- **Google sign-in rejects mismatched identities** — Fixed an issue where signing in with Google could attach the Google identity to an existing account that had registered with the same email through a different method. Sign-in now fails with a clear error if the email is already registered to a different identity. [See authentication](/authentication)
+
+- **Refund destination address resolution** — Fixed an issue where source addresses delivered as a list (instead of a single value) were not parsed, which could prevent automatic refunds from finding a valid destination. Refunds now correctly extract the sender address from list-style provider payloads.
+
+</Update>
+
 <Update label="April 27, 2026" description="Pass processing fees to customers at checkout" tags={["Feature"]}>
 ## Week of April 27
 
