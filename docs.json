@@ -27,7 +27,8 @@
             "pages": [
               "index",
               "quickstart",
-              "environments"
+              "environments",
+              "currencies"
             ]
           },
           {

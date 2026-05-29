@@ -10,7 +10,7 @@ sidebarTitle: "Payment Intents"
 
 Base URL: `https://api.southpay.io/api/v2`
 
-A Payment Intent is the single resource you need to accept a crypto payment. You submit a fiat amount; Southpay locks an exchange rate, allocates a deposit address per enabled asset, and returns a hosted checkout URL. See the [Payment Intents guide](/payment-intents) for the integration walkthrough.
+A Payment Intent is the single resource you need to accept a crypto payment. You submit a fiat amount; Southpay locks an exchange rate, allocates a deposit address for each crypto asset your store has enabled, and returns a hosted checkout URL. The set of `payment_addresses` reflects the store's enabled assets, not anything in the request. See the [Payment Intents guide](/payment-intents) for the walkthrough and [Supported currencies and assets](/currencies) for the catalog.
 
 ---
 
@@ -82,7 +82,7 @@ Idempotency-Key: order_123
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `payment_intent[amount]` | string | Yes | Decimal fiat amount (e.g. `"49.99"`). |
-| `payment_intent[currency]` | string | Yes | ISO 4217 fiat code, uppercase (e.g. `"USD"`). Determines pricing only - not which assets the customer can pay with. |
+| `payment_intent[currency]` | string | Yes | ISO 4217 fiat code, uppercase (e.g. `"USD"`). One of the [supported currencies](/currencies). Determines pricing only - not which assets the customer can pay with. |
 | `payment_intent[success_url]` | string | No | Redirect after successful payment. |
 | `payment_intent[failed_url]` | string | No | Redirect after failure/expiration. |
 | `payment_intent[order_id]` | string | No | Your own order reference. Max 255 characters. Filterable on the list endpoint. |

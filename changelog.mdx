@@ -1,0 +1,379 @@
+---
+title: "Changelog"
+description: "Latest updates, new features, and improvements to the Southpay API and platform"
+---
+
+<Update label="April 28, 2026" description="Automatic refunds for failed payments, OAuth livemode at authorization, and confirmation accuracy fixes" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 28
+
+Underpaid payments that fail are now refunded automatically to the sender, OAuth applications choose live or test mode at authorization time, and webhook delivery and on-chain confirmation handling are more accurate.
+
+### New features
+
+- **Automatic refunds for failed underpaid payments**: When an underpaid payment expires and your store does not [accept underpayments](/payment-intents), Southpay now automatically initiates an on-chain refund of the partial amount to the sender. Refunds are recorded against the payment intent and the refunded amount is debited from your balance. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+- **List refunds for a payment**: A new `GET /payments/{id}/refunds` endpoint returns every refund associated with a payment intent, including status (`pending`, `submitted`, `confirmed`, `failed`), reason, destination address, amount, and on-chain transaction hash. Use it to surface refund progress in your own dashboards. [See the API reference](/api-reference/payments)
+
+- **Shopify and Magento webhook platforms**: When [creating a webhook endpoint](/api-reference/webhook-endpoints), you can now set the `platform` to `shopify` or `magento` in addition to `woocommerce` and `custom`. The legacy `whmcs` option has been removed.
+
+### Updates
+
+- **OAuth live mode chosen at authorization**: OAuth applications now request live or test mode at authorization time by passing `livemode=true` to `/oauth/authorize`. The resulting access token is permanently scoped to that mode, so the previous `X-Livemode` header on OAuth requests is no longer required (or honored). Update your authorization URLs to include `livemode` if your application needs production access. [See authentication](/authentication)
+
+- **New `processing_underpaid` state reason**: Payment intents that are in `processing` but have not yet received the full required amount now report a `state_reason` of `processing_underpaid`, making it easier to distinguish partially-funded payments from those that have already met the required total. [View the full lifecycle](/payment-intents)
+
+- **`failed → refunded` transition**: Payment intents that ended in `failed` (for example, due to underpayment) can now move to `refunded` once the automatic refund completes on-chain. Listen for `payment_intent.refunded` to update order state in your system. [See webhooks](/webhooks)
+
+### Bug fixes
+
+- **Accurate confirmation handling for in-flight transactions**: Fixed an issue where transactions reported as `confirming` by the upstream chain provider were marked as fully confirmed before reaching the required number of block confirmations. Transactions now stay in `confirming` until `confirmations >= required_confirmations`, preventing payments from completing prematurely.
+
+- **Processing transition only on real on-chain activity**: Payment intents now move from `pending` to `processing` only when at least one transaction for the deposit address is `confirming` or `confirmed`. Stray webhook events without on-chain activity no longer flip an intent into `processing`. [View the full lifecycle](/payment-intents)
+
+- **Webhook delivery blocked for private addresses**: Outbound [webhook deliveries](/webhooks) to private, loopback, link-local, and unique-local IP addresses are now rejected before the request is sent, and the endpoint is automatically marked as `error`. This prevents misconfigured endpoints from causing requests to internal networks.
+
+- **Google sign-in rejects mismatched identities**: Fixed an issue where signing in with Google could attach the Google identity to an existing account that had registered with the same email through a different method. Sign-in now fails with a clear error if the email is already registered to a different identity. [See authentication](/authentication)
+
+- **Refund destination address resolution**: Fixed an issue where source addresses delivered as a list (instead of a single value) were not parsed, which could prevent automatic refunds from finding a valid destination. Refunds now correctly extract the sender address from list-style provider payloads.
+
+</Update>
+
+<Update label="April 27, 2026" description="Pass processing fees to customers at checkout" tags={["Feature"]}>
+## Week of April 27
+
+Stores can now opt to have customers cover the Southpay processing fee at checkout instead of absorbing it themselves.
+
+### New features
+
+- **Customer-paid processing fees**: Enable `customer_pays_fee` on your store (or override per payment) and the checkout amount is grossed up so the customer covers the fee. Each crypto payment option on the hosted checkout now includes a `base_crypto_atomic` and `fee_crypto_atomic` breakdown alongside the total `crypto_amount_atomic`, and the fee percentage is locked in at intent creation time so customers always pay the rate they were quoted. Toggle it from store settings or pass `customer_pays_fee` when [creating a payment intent](/payment-intents). [Learn more](/payment-intents)
+
+</Update>
+
+<Update label="April 27, 2026" description="Four new settlement currencies, a payment currencies endpoint, and Google sign-in name fix" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 27
+
+Four additional fiat settlement currencies are now supported, a new endpoint lists every currency you can settle in, and Google sign-in now correctly captures user names.
+
+### New features
+
+- **Four new settlement currencies**: You can now settle payments in Danish Krone (`DKK`), Swiss Franc (`CHF`), Swedish Krona (`SEK`), and Norwegian Krone (`NOK`), in addition to the existing `USD`, `EUR`, `GBP`, `HKD`, `SGD`, and `JPY`. Pass any supported code as the `currency` when [creating a payment intent](/payment-intents) or as the `minimum_fiat_currency` on a payout schedule. [Learn more about payment intents](/payment-intents)
+
+- **List supported payment currencies endpoint**: A new `GET /payment_currencies` endpoint returns every fiat currency you can use for payments and settlement, along with a human-readable label for each (for example, `USD` → "US Dollar"). Use it to populate currency pickers in your own UI without hard-coding the list. [See the API reference](/api-reference/payments)
+
+### Updates
+
+- **Clearer payment notification emails**: Payment status notification emails now show the settlement amount as a formatted decimal (for example, `12.50`) instead of a raw integer in cents, so amounts in your inbox match what customers see at checkout.
+
+### Bug fixes
+
+- **Google sign-in captures first and last name**: Fixed an issue where signing in with Google could leave a new account's first and last name set to "Unknown". Names are now pulled from your Google profile (`given_name` and `family_name`) when available, with a sensible fallback to the full name on the account. Existing accounts keep any name you've already set. [See authentication](/authentication)
+
+- **Underpayment ledger entries on expiry**: Fixed an issue where stores that accept underpayments could complete an expired payment without recording a ledger receipt for the partial amount. Confirmed funds are now always credited to your store's balance when an underpaid payment is accepted.
+
+- **Expired checkout sessions in test mode**: Fixed an issue where expiring a pending payment from the hosted checkout page could be evaluated against the wrong [environment](/environments). Test-mode payments now expire correctly without affecting live data.
+
+- **Manual payouts honor idempotency keys**: Manual payouts created from the dashboard or API now accept an idempotency key, so retrying the same request returns the original payout instead of creating a duplicate. [Learn more about payouts](/api-reference/payments)
+
+</Update>
+
+<Update label="April 27, 2026" description="Resilient exchange rate fallbacks, environment-scoped asset selection, and webhook and payment fixes" tags={["Improvement", "Fix"]}>
+## Week of April 27
+
+Exchange rate lookups are now more resilient with a Binance fallback and stale-rate recovery, store assets are correctly scoped to live or test mode at allocation time, and several payment and webhook edge cases are fixed.
+
+### Updates
+
+- **Binance fallback for exchange rates**: Rate lookups for BTC, SOL, and TRX now automatically fall back to Binance if the primary provider is briefly unavailable. Checkout pricing and payout valuations stay accurate during upstream provider issues. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+- **Stale-rate recovery for exchange rates**: If a fresh exchange rate cannot be fetched, the last known good rate (up to 24 hours old) is used as a fallback so payments and payouts keep working through provider outages. No integration changes required.
+
+- **Resilient payment creation across multiple assets**: When [creating a payment intent](/payment-intents) that accepts multiple crypto assets, a temporary rate lookup failure on a single asset no longer fails the entire request. The unavailable asset is dropped from the payment and the remaining assets are offered to the customer.
+
+### Bug fixes
+
+- **Live and test assets correctly scoped at address allocation**: Fixed an issue where a store could see test-mode assets in live mode (or vice versa) when allocating deposit addresses or listing active store assets. Asset selection now strictly respects the [environment](/environments) of the API key making the request.
+
+- **Avalanche and testnet Ethereum webhook handling**: Fixed an issue where incoming webhooks for Avalanche (`AVAXC`) and Sepolia testnet Ethereum (`SETH`) payments could be misrouted due to internal asset ID remapping. Webhooks for these assets are now matched to the correct payment.
+
+- **TRX exchange rate caching**: Fixed a cache key collision that could cause TRX rates to be fetched or cached incorrectly. TRX pricing is now consistent across checkout and payouts.
+
+- **Testnet rate handling for stablecoins**: Stablecoins in test mode now resolve to their real peg value instead of a generic testnet mock rate, so test payments using USDC and USDT match production behavior more closely.
+
+</Update>
+
+<Update label="April 27, 2026" description="Refreshed transactional emails, auto-swap default for new stores, and environment-scoped store assets" tags={["Improvement"]}>
+## Week of April 27
+
+Account and payment notification emails have been redesigned, new stores ship with a sensible auto-swap default, and store-level asset settings now respect your active environment.
+
+### Updates
+
+- **Refreshed transactional emails**: Welcome, email verification, payment completed, payment overpaid, payment expired, payout disbursed, and webhook delivery failure emails now use a unified Southpay-branded template with a friendlier, more consistent tone across every message. Sign-up verification codes are delivered through the same system, so verification emails arrive with the same look and feel as the rest of your account notifications. No integration changes required. [See authentication](/authentication)
+
+- **Auto-swap to USDC or USDT enabled by default for new stores**: New stores are now created with USDT (Ethereum) pre-selected as the auto-swap target asset. You can change the target asset, or turn auto-swap off entirely, from your store settings at any time. Existing stores are unaffected.
+
+- **Store asset settings scoped to live or test mode**: The list of active assets returned for your store now matches the [environment](/environments) of the API key making the request. Live keys see live-mode assets and test keys see test-mode assets, preventing cross-environment mismatches when configuring which crypto assets your store accepts.
+
+</Update>
+
+<Update label="April 26, 2026" description="Consistent error responses across resource endpoints" tags={["Improvement"]}>
+## Week of April 26
+
+Resource endpoints now return consistent, structured error responses for unexpected failures.
+
+### Updates
+
+- **Unified error handling on resource endpoints**: Payments, payouts, balances, payout schedules, and [webhook endpoints](/api-reference/webhook-endpoints) now share the same error-handling behavior as the rest of the API. Unexpected server errors are returned as structured JSON with a clear message and code instead of generic responses, making failures easier to detect and surface in your integration. No integration changes required.
+
+</Update>
+
+<Update label="April 25, 2026" description="Auto-swap to stablecoins and faster, more resilient exchange rates" tags={["Feature", "Improvement"]}>
+## Week of April 25
+
+Automatically convert incoming crypto payments into a stablecoin, plus faster and more resilient exchange rate lookups across the platform.
+
+### New features
+
+- **Auto-swap to USDC or USDT**: Stores can now opt in to automatically swap incoming crypto payments into a stablecoin on Ethereum. Enable auto-swap from your store settings and pick either USDC or USDT (Ethereum) as your target asset; Southpay handles the on-chain swap and credits the converted balance back to your store. Use it to reduce exposure to crypto price volatility without managing swaps yourself.
+
+### Updates
+
+- **Faster, more resilient exchange rates**: Exchange rates are now pre-fetched on a rolling schedule and served from an in-process cache, with automatic fallback if the upstream rate provider is briefly unavailable. Checkout pricing and payout valuations stay fast and accurate even during provider hiccups. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+</Update>
+
+<Update label="April 25, 2026" description="Reliable payout execution with auto-sweep recovery" tags={["Fix"]}>
+## Week of April 25
+
+Payouts and fee sweeps now execute reliably end-to-end, with automatic recovery when on-chain liquidity needs to be consolidated.
+
+### Bug fixes
+
+- **End-to-end payout reliability**: Fixed an issue where outgoing payouts and fee sweeps could fail to broadcast on-chain due to incorrect source address routing. Payouts and sweeps now consistently complete and confirm. No integration changes required. [Learn more about payouts](/api-reference/payments)
+
+- **Automatic recovery for insufficient on-chain liquidity**: Payouts that previously failed when funds needed to be consolidated across deposit addresses now trigger an automatic on-chain consolidation and retry. Scheduled and one-off payouts complete without manual intervention.
+
+- **Permanent failure handling for stuck payouts**: Payouts that exhaust their retry budget are now marked as permanently failed and the reserved balance is released back to your store. Funds no longer remain locked when a payout cannot be completed.
+
+- **Live and test balances kept separate during payouts**: Fixed an issue where automated payouts could read from the wrong [environment's](/environments) balance. Live and test mode balances are now strictly isolated when payouts are evaluated and executed.
+
+</Update>
+
+<Update label="April 24, 2026" description="Fiat-denominated payout schedule thresholds" tags={["Improvement"]}>
+## Week of April 24
+
+Payout schedule minimum thresholds are now set in fiat amounts instead of crypto atomic units, making them easier to configure and more stable as exchange rates move.
+
+### Updates
+
+- **Fiat-denominated minimum thresholds on payout schedules**: Payout schedules now accept `minimum_fiat_cents` and `minimum_fiat_currency` (one of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`) in place of the previous crypto-denominated `minimum_threshold`. Southpay converts the threshold to the asset's value at payout time using live exchange rates, so a schedule set to "skip payouts below $10" behaves consistently across assets without needing to recalculate atomic amounts. Update any payout schedule requests to send the new fields. [Learn more about payouts](/api-reference/payments)
+
+</Update>
+
+<Update label="April 24, 2026" description="Financial breakdown on payment intents" tags={["Improvement"]}>
+## Week of April 24
+
+Payment intents now return a detailed financial breakdown so you can see exactly how each payment splits between your net revenue and Southpay fees.
+
+### Updates
+
+- **Financial breakdown on payment intents**: Retrieving a payment intent now includes a `financials` object with `gross_amount`, `fee_amount`, `net_amount`, `fee_percentage`, and `currency`. Use it to reconcile payouts, display fee details to your team, or surface net proceeds in your own dashboards. The `amount_paid` field is now computed from the same source, making it more accurate across partial and overpaid payments. [Learn more about payment intents](/payment-intents)
+
+</Update>
+
+<Update label="April 24, 2026" description="Faster checkout payment links and OAuth store selection" tags={["Improvement"]}>
+## Week of April 24
+
+Checkout payment links now load faster, and OAuth authorization lets users pick which store to connect when they own more than one.
+
+### Updates
+
+- **Faster payment link generation**: Creating a payment now generates deposit addresses and fetches exchange rates in parallel. Payment links are noticeably quicker to open, especially for payments that accept multiple crypto assets. No integration changes required. [Learn more about payment intents](/payment-intents)
+
+- **OAuth store selection for multi-store users**: When a user with multiple stores authorizes a third-party application without specifying a `store_id`, they are now shown a consent screen to choose which store to grant access to. Previously, access defaulted to the first store. Users with a single store continue to be auto-authorized as before. [See authentication](/authentication)
+
+</Update>
+
+<Update label="April 24, 2026" description="OAuth tokens now support live mode" tags={["Improvement"]}>
+## Week of April 24
+
+OAuth access tokens can now operate in live mode, giving third-party applications access to production data when explicitly requested.
+
+### Updates
+
+- **Live mode for OAuth tokens**: OAuth access tokens now honor the `X-Livemode` header. Send `X-Livemode: true` on requests authorized with an OAuth token (`spo_...`) to operate against live data; omit the header or send `false` to stay in test mode. Previously, OAuth tokens were always scoped to test mode. [See authentication](/authentication)
+
+</Update>
+
+<Update label="April 23, 2026" description="OAuth connected apps improvements" tags={["Improvement", "Fix"]}>
+## Week of April 23
+
+Improvements to how OAuth connected apps are listed and how access tokens are issued.
+
+### Updates
+
+- **One active token per app per store**: Authorizing a third-party application now automatically revokes any previous active token that app held for the same store. Each connected app holds at most one active token per store, making it easier to reason about which credentials are in use. [See authentication](/authentication)
+
+### Bug fixes
+
+- **Connected apps list scoped to your user**: Fixed an issue where the connected apps list and revoke action were scoped to the current store instead of the user who granted access. You now see every third-party application you've authorized, and revoking a connection works regardless of which store is currently selected.
+
+</Update>
+
+<Update label="April 23, 2026" description="Avalanche payment fix, fee processing resilience, and webhook reliability improvements" tags={["Fix"]}>
+## Week of April 23
+
+Avalanche payments now process correctly, fee collection is more resilient, and webhook handling is more reliable.
+
+### Bug fixes
+
+- **Avalanche (AVAX) payment processing**: Fixed an issue where incoming Avalanche payments were not matched to the correct payment due to an asset identifier mismatch. Additionally, AVAX payments in a pending confirmation state are now resolved correctly instead of getting stuck. AVAX payments are now recognized and processed reliably.
+
+- **Fee collection resilience**: Fee processing for incoming payments no longer blocks payment completion if a fee wallet is unavailable. Payments are credited to your balance even if fee collection is temporarily skipped, and the system retries automatically.
+
+- **Webhook processing reliability**: Improved how incoming payment webhooks are handled when they reference an unrecognized deposit address. These webhooks are now handled gracefully instead of causing errors, improving overall payment processing reliability.
+
+</Update>
+
+<Update label="April 22, 2026" description="Fiat-independent crypto payment options" tags={["Improvement"]}>
+## Week of April 22
+
+Crypto payment options on checkout are no longer restricted by your store's settlement currency.
+
+### Updates
+
+- **All enabled assets available on checkout**: Previously, only crypto assets matching your store's fiat settlement currency were shown as payment options at checkout. Now, all active assets you've enabled appear regardless of which settlement currency you use. This means your customers see every crypto payment method you support, giving them more flexibility to pay with their preferred asset. [Learn more about payment intents](/payment-intents)
+
+</Update>
+
+<Update label="April 21, 2026" description="Shared EVM deposit addresses, faster checkout pricing, and crypto precision improvements" tags={["Improvement", "Fix"]}>
+## Week of April 21
+
+Shared deposit addresses across EVM chains, faster exchange rate lookups during checkout, and improved precision for high-decimal crypto assets.
+
+### Updates
+
+- **Shared deposit addresses for EVM chains**: Payments that accept multiple EVM-compatible assets (such as Ethereum, Polygon, Avalanche, and Base) now share a single deposit address per payment instead of generating one per chain. This simplifies the checkout experience and reduces the number of addresses your customers see.
+
+- **Faster checkout pricing**: Exchange rates are now pre-fetched in batch when a payment is created, so pricing loads faster on the hosted checkout page. You don't need to change anything in your integration.
+
+### Bug fixes
+
+- **Crypto amount precision for high-decimal assets**: Fixed an issue where payment amounts for assets with many decimal places could lose precision due to integer overflow. Amounts are now stored with full precision, ensuring accurate pricing across all supported assets.
+
+</Update>
+
+<Update label="April 20, 2026" description="Email confirmation, payout dust threshold, asset chain validation, EVM payment routing, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 20
+
+Email confirmation for sign-up, minimum payout thresholds per chain, stricter asset activation checks, and reliability fixes for deposit addresses, EVM payment routing, and payment creation.
+
+### New features
+
+- **Email confirmation on sign-up**: New accounts now go through an email verification step. After signing up, you receive a confirmation code by email that must be submitted before your account is fully activated. You can also request a new code if the original expires.
+
+### Updates
+
+- **Minimum payout amounts per chain**: Automated payouts now enforce a per-chain minimum withdrawal amount to prevent uneconomical "dust" payouts. If your balance is below the minimum for a given chain, the payout is skipped until enough funds accumulate. This ensures you are not charged network fees on tiny transfers. [Learn more about payouts](/api-reference/payments)
+
+- **Live-mode chain validation for assets**: When you enable a payment asset in live mode, Southpay now verifies that the asset's blockchain is supported by the payment provider before activation. This prevents enabling assets that cannot process real transactions.
+
+### Bug fixes
+
+- **EVM cross-chain payment routing**: Fixed an issue where incoming payments on EVM-compatible chains (such as Ethereum, Polygon, Arbitrum, and Base) could be matched to the wrong payment when the same deposit address was shared across multiple chains. Payments are now resolved using both the deposit address and the asset, ensuring funds are attributed to the correct transaction.
+
+- **Deposit address chain mismatch**: Fixed an issue where deposit addresses could be generated using an incorrect chain identifier, potentially routing payments to the wrong network. Addresses are now created using the correct chain for each asset.
+
+- **Duplicate deposit address prevention**: Fixed a race condition where concurrent payment requests could receive the same deposit address. The system now retries address generation to guarantee each payment gets a unique address.
+
+- **Idempotent payment creation under concurrency**: Fixed a race condition where simultaneous requests with the same [idempotency key](/idempotency) could fail instead of returning the existing payment. Concurrent requests now resolve correctly.
+
+</Update>
+
+<Update label="April 19, 2026" description="OAuth 2.0, environment-scoped assets, payout destination linking, and reliability fixes" tags={["Feature", "Improvement", "Fix"]}>
+## Week of April 19
+
+Third-party OAuth integrations, environment-scoped asset lists, more flexible payout routing, and fixes to settlement and payout reliability.
+
+### New features
+
+- **OAuth 2.0 authorization**: Southpay now supports the OAuth 2.0 authorization code flow with PKCE. Third-party applications can request scoped access to your account (including reading payments, managing webhooks, and creating payment requests) without ever handling your password. [See authentication](/authentication)
+
+- **Manage connected apps**: You can view and revoke access for any third-party application connected to your store. Revoking a connection immediately invalidates the app's access token.
+
+### Updates
+
+- **Supported assets scoped to environment**: The supported assets list now respects your API key's mode. Live keys return only production-ready assets; test keys return testnet assets. This prevents mismatches when switching between [environments](/environments).
+
+- **Link payout destinations to schedules**: When creating a payout schedule, you can now specify a `crypto_payout_detail_id` or `fiat_payout_detail_id` to route payouts to a specific destination. This gives you more control over where scheduled payouts are sent. [Learn more](/api-reference/payments)
+
+### Bug fixes
+
+- **Settlement currency on payment intents**: Fixed an issue where the settlement currency was not applied correctly when creating payment intents, which could cause amounts to be denominated in the wrong currency.
+
+- **Payout execution reliability**: Resolved a timing issue where scheduled payouts could fail under certain conditions. Payouts now execute more reliably as part of the scheduling flow.
+
+</Update>
+
+<Update label="April 18, 2026" description="Week of April 14-18: Southpay v2, checkout improvements, and reliability updates" tags={["Release", "Feature", "Improvement"]}>
+## Week of April 14-18
+
+Southpay v2 is live. This week we shipped the new platform, improved checkout, and hardened reliability across the board.
+
+### New features
+
+- **Southpay v2**: The platform has been rebuilt from the ground up with a new API, expanded crypto asset support, automated payouts, and white-label checkout.
+
+- **Automated payout schedules**: Set up recurring payouts on a daily, weekly, or monthly cadence with configurable minimum balance thresholds. Payouts execute automatically to your registered crypto wallet or bank account. [Learn more](/api-reference/payments)
+
+- **Fiat payout destinations**: Register bank accounts (IBAN/SWIFT) as payout destinations. Southpay handles conversion and settlement in USD, EUR, GBP, HKD, SGD, or JPY.
+
+- **Crypto payout destinations**: Add and manage crypto wallet addresses for direct on-chain payouts. Select a default address per asset and funds are routed automatically.
+
+- **White-label checkout**: Customize the hosted checkout page with your own logo, brand name, and colors. Optionally remove Southpay branding entirely. Pair with a custom domain (e.g., `pay.yourcompany.com`) for a fully branded experience.
+
+- **Custom domains**: Serve the checkout page from your own domain with DNS-based verification.
+
+- **Webhook endpoint management**: Create, update, and delete [webhook endpoints](/api-reference/webhook-endpoints) via the API. Subscribe to specific event types, rotate signing secrets, send test events, and redeliver failed deliveries.
+
+- **PDF invoices**: Generate and download PDF invoices for any payment, including a full fee breakdown.
+
+- **Google OAuth sign-in**: Authenticate with Google in addition to email and password. New OAuth users are automatically provisioned with a default store. [See authentication](/authentication)
+
+- **Checkout redirect URLs**: Pass `success_url` and `failed_url` when [creating a payment intent](/api-reference/payments). Customers are automatically redirected after completing or failing a payment.
+
+- **Sandbox environment**: Test your integration in a dedicated sandbox without affecting live data. Sandbox users and stores are provisioned on demand.
+
+- **Live and test mode API keys**: Generate separate API keys for live and test environments from the dashboard or via the API. Live keys (`sp_live_`) process real payments; test keys (`sp_test_`) operate against sandbox data. All resources (payments, webhooks, balances) are automatically scoped to the key's mode, so live and test data never mix. [See authentication](/authentication)
+
+- **API key management endpoints**: Create, list, and revoke API keys programmatically. Use the API to generate new keys for live or test mode, view active keys, and revoke keys you no longer need.
+
+### Updates
+
+- **Expanded crypto asset support**: Accept payments across Ethereum, Bitcoin, Solana, Avalanche, BNB Chain, Tron, Polygon, Arbitrum, Base, Optimism, Litecoin, Stellar, Algorand, SUI, TON, and more, including USDC and USDT on multiple chains.
+
+- **Multi-currency settlement**: Set your store's settlement currency to USD, EUR, GBP, HKD, SGD, or JPY. Amounts and balances are denominated in your chosen currency with live exchange rates.
+
+- **Idempotent payment creation**: Pass an `Idempotency-Key` header when [creating payments](/api-reference/payments) to safely retry requests without creating duplicates.
+
+- **Payment status reasons**: The `state_reason` field on payment intents now explains why a payment reached its current state (e.g., `completed_exact`, `failed_underpaid`, `expired_timeout`). [View the full lifecycle](/api-reference/payments)
+
+- **Real-time balance tracking**: Per-asset balances for your store update automatically as payments confirm and payouts execute.
+
+- **Email notifications**: Receive automatic emails when payments are completed, overpaid, or expired.
+
+- **Real-time checkout status**: The hosted checkout page now uses server-sent events for instant payment status updates, replacing polling. Customers see confirmation faster with no extra integration work.
+
+- **Improved checkout payment options**: The checkout page now displays available payment methods in a flat list, making it easier for customers to select their preferred crypto asset.
+
+- **Pre-flight balance validation**: Payment options on checkout are validated against available liquidity before being shown, reducing failed payment attempts.
+
+- **Stricter webhook URL validation**: [Webhook endpoint](/api-reference/webhook-endpoints) URLs are now validated more strictly. URLs with trailing characters after the domain and path are no longer accepted.
+
+- **Improved payment and payout reliability**: Concurrent operations are now handled more reliably under high load, reducing the chance of race conditions during busy periods.
+
+### Bug fixes
+
+- **API key authentication on all endpoints**: Fixed an issue where API key authentication (`sp_live_` / `sp_test_`) did not work consistently across all resource endpoints. API keys now authenticate correctly on payments, payouts, balances, payout schedules, and [webhook endpoints](/api-reference/webhook-endpoints). [See authentication](/authentication)
+
+</Update>
