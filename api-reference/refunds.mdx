@@ -1,6 +1,6 @@
 ---
 title: "Refunds"
-description: "Return crypto to the customer for a completed payment intent, in full or in part."
+description: "Return crypto to the customer for a completed, failed, or expired payment intent, in full or in part."
 sidebarTitle: "Refunds"
 ---
 
@@ -14,16 +14,31 @@ A refund returns funds on-chain to the address the customer paid from. Refunds a
 
 Amounts are expressed in **atomic units** of the asset. Convert with `decimal = atomic / 10^atomic_decimals`.
 
+A refund can be created in two ways:
+
+- **Automatic.** When a payment is rejected (overpaid on a store that does not accept overpayments, or underpaid past expiration on a store that does not accept underpayments), Southpay initiates a full refund of the confirmed funds. These carry a `reason` of `failed_overpaid` or `failed_underpaid`.
+- **Requested.** You call the create endpoint below. These carry a `reason` of `merchant_requested`.
+
 ---
 
 ## Refund lifecycle
 
-| Status | Description |
+| Status | Terminal | Description |
+| --- | --- | --- |
+| `pending` | No | Refund created, queued for execution. |
+| `submitted` | No | Broadcast to the network, awaiting confirmation. |
+| `confirmed` | Yes | On-chain confirmations met. |
+| `failed` | Yes | The refund could not be completed. |
+
+When a refund reaches `confirmed`, its payment intent transitions to `refunded` with `state_reason: refund_completed`.
+
+### `reason`
+
+| Reason | Set when |
 | --- | --- |
-| `pending` | Refund created, queued for execution. |
-| `submitted` | Broadcast to the network, awaiting confirmation. |
-| `confirmed` | Final. On-chain confirmations met. |
-| `failed` | The refund could not be completed. |
+| `merchant_requested` | You requested the refund through the API. |
+| `failed_underpaid` | Automatic refund of an underpaid payment the store does not accept. |
+| `failed_overpaid` | Automatic refund of an overpaid payment the store does not accept. |
 
 ---
 
@@ -40,7 +55,7 @@ Authorization: Bearer <API_KEY>
   {
     "id": "01HZ...",
     "status": "confirmed",
-    "reason": "requested_by_customer",
+    "reason": "merchant_requested",
     "destination_address": "0xabc...",
     "amount_atomic": "49990000",
     "tx_hash": "0xdef...",
@@ -62,7 +77,13 @@ Authorization: Bearer <API_KEY>
 
 Requires an `Idempotency-Key` header. Retrying with the same key returns the original refund instead of creating a duplicate.
 
-Omit `amount` to refund the full received amount. Provide `amount` (decimal) to refund a partial amount. Provide `asset_id` when the intent received more than one asset and you want to refund a specific one.
+An intent is refundable through this endpoint while its status is `completed`, `failed`, or `expired` and it still has confirmed funds that have not already been refunded.
+
+Omit `amount` to refund the full remaining amount. Provide `amount` (decimal) to refund a partial amount. Provide `asset_id` when the intent received more than one asset and you want to refund a specific one.
+
+<Note>
+  Partial refunds (`amount`) and `asset_id` selection apply only to `completed` intents. For `failed` or `expired` intents the endpoint always refunds the full confirmed balance across every asset; sending `amount` on those returns `422`.
+</Note>
 
 <CodeGroup>
 ```bash Request
@@ -84,7 +105,7 @@ Content-Type: application/json
   {
     "id": "01HZ...",
     "status": "pending",
-    "reason": "requested_by_customer",
+    "reason": "merchant_requested",
     "destination_address": "0xabc...",
     "amount_atomic": "10000000",
     "tx_hash": null,
@@ -110,9 +131,19 @@ Content-Type: application/json
 
 **Common errors**
 
-| Status | When |
+All error responses use status `422` with an `{ "error": "..." }` body.
+
+| Condition | Notes |
 | --- | --- |
-| `422` | Missing `Idempotency-Key`, amount exceeds the refundable balance, or the intent is not in a refundable state. |
+| Missing `Idempotency-Key` header | Header is required. |
+| Intent status is not `completed`, `failed`, or `expired` | `NotRefundableError`. |
+| No confirmed funds available to refund | `NothingToRefundError`. |
+| `amount` sent for a `failed` or `expired` intent | Partial refunds are only supported for completed payments. |
+| `amount` is not a valid number, or is not positive and within the refundable balance | `InvalidAmountError`. |
+| `asset_id` does not match any confirmed payment on the intent | `AssetNotFoundError`. |
+| Partial refund requested without `asset_id` when the intent has confirmed funds in multiple assets | `AmbiguousAssetError`. |
+| The source address on the confirmed transaction is missing or fails format validation | `InvalidDestinationError`. |
+| Refund exceeds the merchant's available ledger balance for the asset | `InsufficientBalanceError`. |
 
 <Tip>
   Subscribe to the `payment_intent.refunded` [webhook event](/webhooks) instead of polling for refund status.

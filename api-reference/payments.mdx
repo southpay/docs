@@ -60,7 +60,7 @@ Idempotency-Key: order_123
     {
       "id": "01HX...",
       "address": "0xabc...",
-      "status": "active",
+      "status": "pending",
       "crypto_amount_atomic": "49990000",
       "exchange_rate_snapshot": "1.0000",
       "created_at": "2026-04-10T12:00:00.000Z",
@@ -129,7 +129,7 @@ Authorization: Bearer <API_KEY>
   "settlement_amount": "49.99",
   "terminal": true,
   "expires_at": "2026-04-10T13:00:00.000Z",
-  "reconciliation_status": "matched",
+  "reconciliation_status": "final",
   "created_at": "2026-04-10T12:00:00.000Z",
   "success_url": "https://yourapp.com/orders/123/success",
   "failed_url":  "https://yourapp.com/orders/123/failed",
@@ -156,8 +156,8 @@ Authorization: Bearer <API_KEY>
   "auto_swap_detail": null,
   "payment_addresses": [ { "...": "..." } ],
   "timeline": [
-    { "type": "status_changed", "from": "pending",    "to": "processing", "at": "2026-04-10T12:01:00Z", "payload": {} },
-    { "type": "status_changed", "from": "processing", "to": "completed",  "at": "2026-04-10T12:03:14Z", "payload": {} }
+    { "type": "payment_intent.processing", "from": "pending",    "to": "processing", "at": "2026-04-10T12:01:00Z", "payload": {} },
+    { "type": "payment_intent.completed",  "from": "processing", "to": "completed",  "at": "2026-04-10T12:03:14Z", "payload": {} }
   ]
 }
 ```
@@ -228,11 +228,14 @@ The `status` field is the single source of truth for what happened. `state_reaso
 | Reason | Status | Description |
 | --- | --- | --- |
 | `pending_confirmations` | processing | Crypto received, confirmations pending. |
+| `processing_underpaid` | processing | Confirmed funds received but still below the required amount. |
 | `completed_exact` | completed | Exact required amount received. |
 | `completed_overpaid` | completed | More than required amount received. |
+| `completed_underpaid` | completed | Less than required amount accepted (store accepts underpayments). |
 | `failed_underpaid` | failed | Insufficient funds before expiration. |
 | `failed_overpaid` | failed | Excess funds rejected. |
 | `expired_timeout` | expired | No funds received before timeout. |
+| `refund_completed` | refunded | A refund was confirmed on-chain. |
 
 ---
 
@@ -240,7 +243,7 @@ The `status` field is the single source of truth for what happened. `state_reaso
 
 ### Events
 
-Returns the immutable event log for an intent in chronological order. Each event records a state transition with the payload that triggered it. This is the same data delivered to your [webhook endpoints](/webhooks); use this endpoint to backfill or reconcile event history on demand.
+Returns the immutable event log for an intent in chronological order. Each event records a state transition with the payload that triggered it. This is the underlying log behind your [webhook deliveries](/webhooks); use this endpoint to backfill or reconcile event history on demand. Event names match the [webhook event types](/webhooks) exactly.
 
 <CodeGroup>
 ```bash Request
@@ -277,7 +280,7 @@ Authorization: Bearer <API_KEY>
 | Field | Type | Description |
 | --- | --- | --- |
 | `id` | string | Event identifier |
-| `event_type` | string | Event name, matching the [webhook event types](/webhooks) |
+| `event_type` | string | Event name, matching the [webhook event types](/webhooks) (e.g. `payment_intent.completed`). |
 | `from_status` | string \| null | Intent status before the transition |
 | `to_status` | string | Intent status after the transition |
 | `payload` | object | Event-specific data (transaction hash, amounts, and so on) |

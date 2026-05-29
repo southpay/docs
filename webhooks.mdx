@@ -65,14 +65,13 @@ Every webhook is a `POST` with `Content-Type: application/json` and this envelop
   "type": "payment_intent.completed",
   "created": 1745071260,
   "livemode": false,
+  "api_version": "2026-04-14",
   "data": {
     "object": {
-      "id": "018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b",
-      "reference": "A1B2C3D4E5F6G7H8",
+      "id": "A1B2C3D4E5F6G7H8",
       "status": "completed",
-      "state_reason": "completed_exact",
+      "settlement_amount_cents": 14900,
       "settlement_currency": "USD",
-      "settlement_amount": "149.00",
       "from_status": "processing",
       "to_status": "completed",
       "metadata": {
@@ -89,7 +88,11 @@ Every webhook is a `POST` with `Content-Type: application/json` and this envelop
 | `type` | string | Event type (see [Event types](#event-types)) |
 | `created` | integer | Unix timestamp (seconds) |
 | `livemode` | boolean | `false` for test mode events |
-| `data.object` | object | The resource that changed |
+| `api_version` | string | Payload schema version. |
+| `data.object` | object | The resource that changed. |
+| `data.object.id` | string | The intent `reference` (the checkout token), not its UUID. |
+| `data.object.settlement_amount_cents` | integer | Settlement amount in minor units (e.g. cents). |
+| `data.object.from_status` / `to_status` | string | The transition that produced this event. |
 
 ---
 

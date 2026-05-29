@@ -26,7 +26,7 @@ Authorization: Bearer <API_KEY>
 
 ```json Response
 {
-  "status": "matched",
+  "status": "final",
   "expected_amount": "49.99",
   "received_amount": "49.99",
   "swap_delta": "0",
@@ -43,7 +43,7 @@ When no snapshot exists yet (for example, the intent has not been paid), the end
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `status` | string | Reconciliation outcome. `under_investigation` is returned when no snapshot exists yet. |
+| `status` | string | Reconciliation outcome: `final` (checked and balanced), `under_investigation` (in progress, or no snapshot exists yet), or `disputed` (a discrepancy is being worked). |
 | `expected_amount` | string \| null | Expected amount as a decimal. |
 | `received_amount` | string \| null | Amount actually received as a decimal. |
 | `swap_delta` | string \| null | Difference introduced by an auto-swap, as a decimal. |

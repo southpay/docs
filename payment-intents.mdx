@@ -156,15 +156,20 @@ stateDiagram-v2
 
   pending --> processing : on-chain tx detected
   pending --> expired : 60 min elapsed, no payment
+  pending --> failed : payment rejected
+  pending --> refunded : refund confirmed
 
   processing --> completed : confirmations reached
   processing --> failed : underpayment confirmed
   processing --> failed : overpayment rejected
+  processing --> expired : window elapsed, no full payment
+  processing --> refunded : refund confirmed
 
-  completed --> refunded : manual refund
+  completed --> refunded : refund confirmed
+  expired --> refunded : refund confirmed
+  failed --> refunded : refund confirmed
 
   expired --> [*]
-  failed --> [*]
   completed --> [*]
   refunded --> [*]
 ```
@@ -187,12 +192,14 @@ The `state_reason` field gives machine-readable context for the current status:
 | `state_reason` | Status | Meaning |
 | --- | --- | --- |
 | `pending_confirmations` | `processing` | Transaction seen; waiting for on-chain confirmations |
+| `processing_underpaid` | `processing` | Confirmed funds received but still below the required amount |
 | `completed_exact` | `completed` | Received the exact amount |
 | `completed_overpaid` | `completed` | Received more than required (store has overpayments enabled) |
 | `completed_underpaid` | `completed` | Received less than required (store has underpayments enabled) |
 | `failed_underpaid` | `failed` | Underpayment and store does not accept underpayments |
 | `failed_overpaid` | `failed` | Overpayment and store does not accept overpayments |
 | `expired_timeout` | `expired` | No payment received within 60 minutes |
+| `refund_completed` | `refunded` | A refund was confirmed on-chain |
 
 ---
 
@@ -220,7 +227,7 @@ Returns intents in reverse chronological order for the current store and mode.
 
 ## Payment events
 
-Every status transition creates a `PaymentEvent` record. You can retrieve the full history for any intent:
+Every status transition creates a `PaymentEvent` record. You can retrieve the full history for any intent. Event names match the [webhook event types](/webhooks) exactly, so you can reconcile this log against the deliveries you received.
 
 ```bash
 GET /api/v2/payments/{id}/events
