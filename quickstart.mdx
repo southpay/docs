@@ -70,14 +70,14 @@ The `payment_addresses` array contains one address per blockchain your store has
 
 Construct the hosted checkout URL from the `reference` field:
 
-```
-https://api.southpay.io/api/v2/checkout/{reference}
+```text
+https://pay.southpay.io/{reference}
 ```
 
 For the example above:
 
-```
-https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8
+```text
+https://pay.southpay.io/A1B2C3D4E5F6G7H8
 ```
 
 The checkout page shows a QR code, address, amount, and a 60-minute countdown timer. No frontend integration required. Once the customer pays and the transaction confirms, they are redirected to your `success_url`.
@@ -221,12 +221,15 @@ Check the `terminal` field - when `true`, the payment is in a final state and wi
   <Card title="Payment Intents" icon="bolt" href="/payment-intents">
     Full lifecycle, all statuses, and the events API.
   </Card>
+
   <Card title="Webhooks" icon="webhook" href="/webhooks">
     Signature verification, retries, and all event types.
   </Card>
+
   <Card title="Idempotency" icon="shield" href="/idempotency">
     Safely retry API calls without duplicate charges.
   </Card>
+
   <Card title="Environments" icon="flask" href="/environments">
     Use test mode to develop without real funds.
   </Card>

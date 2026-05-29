@@ -244,7 +244,7 @@ sequenceDiagram
 | | API Key | OAuth |
 | --- | --- | --- |
 | Created by | Store owner | User authorization |
-| Livemode | Yes (live keys) | No (test only) |
+| Livemode | Yes (live keys) | Yes (via `X-Livemode` header) |
 | Store context | Implicit (key's store) | Granted store |
 | Expiry | Until revoked | 90 days (refreshable with `offline_access`) |
 | Best for | Your own backend | Third-party integrations |
