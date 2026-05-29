@@ -1,0 +1,154 @@
+---
+title: "Reports"
+description: "Generate and download accounting transaction reports and merchant statements as PDFs over a date range."
+sidebarTitle: "Reports"
+---
+
+<Warning>
+  Requires authentication. Callable with an API key - the store is implicit. See [Authentication](/authentication).
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+Reports are generated PDFs covering a date range. Two report types are available:
+
+- `accounting_transactions` - a ledger-level transaction listing.
+- `merchant_statement` - a summarized statement for the period.
+
+Generation is asynchronous and cached. The first request for a given (type, date range, currency) enqueues a job and returns `pending`; once the job finishes, the same request returns `generated` with a short-lived download URL. Requesting the same parameters again reuses the existing report rather than regenerating it.
+
+---
+
+## Data availability
+
+Reports only cover dates that have fully closed. The latest available date is:
+
+- **Yesterday** once the current UTC day has passed noon (12:00 UTC).
+- **The day before yesterday** before noon UTC.
+
+Requesting an `end_date` beyond the latest available date returns `422` with `error: "date_range_unavailable"` and an `available_through` date. The `available_through` value is also returned from the [index endpoint](#list-recent-reports).
+
+A single report may span at most **366 days**.
+
+---
+
+## Supported currencies
+
+The optional `currency` filter must be one of: `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK`, `NOK`. The value is uppercased; any unrecognized value is ignored and the report covers all currencies.
+
+---
+
+## Generate or fetch a report
+
+Both report endpoints take the same parameters and return the same response shapes. Substitute the action path:
+
+- `GET /reports/accounting_transactions`
+- `GET /reports/merchant_statement`
+
+<CodeGroup>
+```bash Request
+GET /reports/accounting_transactions?start_date=2026-04-01&end_date=2026-04-30&currency=EUR
+Authorization: Bearer <API_KEY>
+```
+
+```json Generated 200
+{
+  "status": "generated",
+  "url": "https://storage.southpay.io/reports/...&X-Amz-Signature=...",
+  "expires_in": 3600
+}
+```
+
+```json Pending 202
+{
+  "status": "pending",
+  "report_id": "01HX..."
+}
+```
+</CodeGroup>
+
+**Query parameters**
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `start_date` | Yes | Inclusive start of the period, `YYYY-MM-DD`. |
+| `end_date` | Yes | Inclusive end of the period, `YYYY-MM-DD`. Must be on or after `start_date` and not beyond the latest available date. |
+| `currency` | No | One of the [supported currencies](#supported-currencies). Omit to cover all currencies. |
+
+**Responses**
+
+| Status | Body | When |
+| --- | --- | --- |
+| `200` | `{ "status": "generated", "url", "expires_in" }` | The report is ready. `url` is a presigned download link valid for `expires_in` seconds (`3600`). |
+| `202` | `{ "status": "pending", "report_id" }` | Generation is in progress. Retry the same request shortly. |
+| `422` | `{ "status": "no_data", "error" }` | The period contains no data to report. |
+| `422` | `{ "status": "failed", "report_id", "error" }` | Generation failed. Retrying the same request re-enqueues the job. |
+
+**Date and range errors**
+
+| Status | Body | When |
+| --- | --- | --- |
+| `422` | `{ "error": "start_date must be on or before end_date" }` | `start_date` is after `end_date`. |
+| `422` | `{ "error": "date_range_too_large", "max_days": 366 }` | The period exceeds 366 days. |
+| `422` | `{ "error": "date_range_unavailable", "available_through": "2026-05-28" }` | `end_date` is beyond the latest available date. |
+
+<Tip>
+  Poll with the same `start_date`, `end_date`, and `currency` until the response flips from `pending` to `generated`. A stuck `pending` report (older than 5 minutes) is automatically retried on the next request, as is a `failed` one.
+</Tip>
+
+---
+
+## List recent reports
+
+Returns the 50 most recent reports for the store, newest first, plus the latest date the data covers.
+
+<CodeGroup>
+```bash Request
+GET /reports
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "reports": [
+    {
+      "id": "01HX...",
+      "report_type": "accounting_transactions",
+      "status": "generated",
+      "period_from": "2026-04-01",
+      "period_to": "2026-04-30",
+      "currency": "EUR",
+      "generated_at": "2026-05-01T06:00:00.000Z",
+      "error": null,
+      "url": "https://storage.southpay.io/reports/...&X-Amz-Signature=...",
+      "expires_in": 3600
+    },
+    {
+      "id": "01HY...",
+      "report_type": "merchant_statement",
+      "status": "pending",
+      "period_from": "2026-05-01",
+      "period_to": "2026-05-15",
+      "currency": null,
+      "generated_at": null,
+      "error": null
+    }
+  ],
+  "available_through": "2026-05-28"
+}
+```
+</CodeGroup>
+
+**Response fields**
+
+| Field | Description |
+| --- | --- |
+| `reports[]` | The 50 most recent reports. |
+| `reports[].report_type` | `accounting_transactions` or `merchant_statement`. |
+| `reports[].status` | `pending`, `generated`, `failed`, or `no_data`. |
+| `reports[].period_from` / `period_to` | The report's date range. |
+| `reports[].currency` | The currency filter, or `null` for all currencies. |
+| `reports[].generated_at` | When generation completed, or `null`. |
+| `reports[].error` | Error message for `failed` or `no_data` reports, otherwise `null`. |
+| `reports[].url` / `expires_in` | Present only when `status` is `generated`: a presigned download link valid for `expires_in` seconds. |
+| `available_through` | The latest date reports can currently cover. |

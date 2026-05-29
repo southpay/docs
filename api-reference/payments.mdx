@@ -5,100 +5,12 @@ sidebarTitle: "Payment Intents"
 ---
 
 <Warning>
-  All endpoints require authentication. See [Authentication](/authentication) for details.
+  All endpoints require authentication. With an API key the store is implicit; dashboard sessions must add `X-Store-Id`. See [Authentication](/authentication).
 </Warning>
 
 Base URL: `https://api.southpay.io/api/v2`
 
----
-
-## List payment intents
-
-<CodeGroup>
-```bash Request
-GET /payments
-Authorization: Bearer <API_KEY>
-```
-
-```json Response
-[
-  {
-    "id": "pi_abc123",
-    "reference": "tok_xyz789",
-    "status": "paid",
-    "state_reason": null,
-    "settlement_currency": "USD",
-    "settlement_amount": "49.99",
-    "terminal": false,
-    "created_at": "2026-04-10T12:00:00.000Z"
-  }
-]
-```
-</CodeGroup>
-
----
-
-## Get a payment intent
-
-<CodeGroup>
-```bash Request
-GET /payments/:id
-Authorization: Bearer <API_KEY>
-```
-
-```json Response
-{
-  "id": "pi_abc123",
-  "reference": "tok_xyz789",
-  "status": "pending",
-  "state_reason": null,
-  "settlement_currency": "USD",
-  "settlement_amount": "49.99",
-  "terminal": false,
-  "expires_at": "2026-04-10T13:00:00.000Z",
-  "created_at": "2026-04-10T12:00:00.000Z",
-  "payment_addresses": [
-    {
-      "asset_id": "ETH_USDC",
-      "coin_symbol": "USDC",
-      "chain_symbol": "ETH",
-      "address": "0xabc...",
-      "amount": "49.99"
-    }
-  ]
-}
-```
-</CodeGroup>
-
----
-
-## PaymentIntent lifecycle
-
-A PaymentIntent has a single `status` field that represents its lifecycle.
-
-Always rely on `status` as the source of truth.
-
-| Status | Terminal | Description |
-| --- | --- | --- |
-| `pending` | No | Created, awaiting customer payment |
-| `processing` | No | Crypto received, blockchain confirmations in progress |
-| `completed` | Yes | Required funds received and confirmed |
-| `expired` | Yes | Payment window elapsed before funds were received |
-| `failed` | Yes | Payment could not be completed (under/overpaid) |
-| `refunded` | Yes | Funds were returned to the customer |
-
-### status_reason
-
-`status_reason` explains why the PaymentIntent reached its current state.
-
-| Reason | Status | Description |
-| --- | --- | --- |
-| `pending_confirmations` | processing | Crypto received, confirmations pending |
-| `completed_exact` | completed | Exact required amount received |
-| `completed_overpaid` | completed | More than required amount received |
-| `failed_underpaid` | failed | Insufficient funds before expiration |
-| `failed_overpaid` | failed | Excess funds rejected |
-| `expired_timeout` | expired | No funds received before timeout |
+A Payment Intent is the single resource you need to accept a crypto payment. You submit a fiat amount; Southpay locks an exchange rate, allocates a deposit address per enabled asset, and returns a hosted checkout URL. See the [Payment Intents guide](/payment-intents) for the integration walkthrough.
 
 ---
 
@@ -109,14 +21,19 @@ Always rely on `status` as the source of truth.
 POST /payments
 Authorization: Bearer <API_KEY>
 Content-Type: application/json
-Idempotency-Key: order_123  # optional
+Idempotency-Key: order_123
 
 {
   "payment_intent": {
     "amount": "49.99",
     "currency": "USD",
+    "success_url": "https://yourapp.com/orders/123/success",
+    "failed_url":  "https://yourapp.com/orders/123/failed",
+    "order_id": "order_123",
+    "title": "Order #123",
+    "description": "2x Widget, 1x Gadget",
     "metadata": {
-      "order_id": "order_123"
+      "cart_id": "cart_abc"
     }
   }
 }
@@ -124,17 +41,38 @@ Idempotency-Key: order_123  # optional
 
 ```json Response 201
 {
-  "id": "pi_abc123",
-  "reference": "tok_xyz789",
+  "id": "01HX...",
+  "reference": "A1B2C3D4E5F6G7H8",
   "status": "pending",
   "state_reason": null,
   "settlement_currency": "USD",
   "settlement_amount": "49.99",
   "terminal": false,
-  "checkout_url": "https://checkout.southpay.io/pay/tok_xyz789",
+  "reconciliation_status": null,
   "expires_at": "2026-04-10T13:00:00.000Z",
   "created_at": "2026-04-10T12:00:00.000Z",
-  "payment_addresses": [...]
+  "success_url": "https://yourapp.com/orders/123/success",
+  "failed_url":  "https://yourapp.com/orders/123/failed",
+  "order_id": "order_123",
+  "title": "Order #123",
+  "description": "2x Widget, 1x Gadget",
+  "payment_addresses": [
+    {
+      "id": "01HX...",
+      "address": "0xabc...",
+      "status": "active",
+      "crypto_amount_atomic": "49990000",
+      "exchange_rate_snapshot": "1.0000",
+      "created_at": "2026-04-10T12:00:00.000Z",
+      "supported_asset": {
+        "asset_id": "ETH_USDC",
+        "coin_symbol": "USDC",
+        "chain_symbol": "ETH",
+        "token_standard": "ERC20",
+        "atomic_decimals": 6
+      }
+    }
+  ]
 }
 ```
 </CodeGroup>
@@ -143,11 +81,231 @@ Idempotency-Key: order_123  # optional
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `payment_intent[amount]` | string | Yes | Decimal amount (e.g. `"49.99"`) |
-| `payment_intent[currency]` | string | Yes | ISO 4217 fiat code, uppercase (e.g. `"USD"`) |
-| `payment_intent[metadata]` | object | No | Arbitrary key-value pairs attached to the payment |
-| `Idempotency-Key` | header | No | Pass your order ID to safely retry without creating duplicates |
+| `payment_intent[amount]` | string | Yes | Decimal fiat amount (e.g. `"49.99"`). |
+| `payment_intent[currency]` | string | Yes | ISO 4217 fiat code, uppercase (e.g. `"USD"`). Determines pricing only - not which assets the customer can pay with. |
+| `payment_intent[success_url]` | string | No | Redirect after successful payment. |
+| `payment_intent[failed_url]` | string | No | Redirect after failure/expiration. |
+| `payment_intent[order_id]` | string | No | Your own order reference. Max 255 characters. Filterable on the list endpoint. |
+| `payment_intent[title]` | string | No | Short label shown on the checkout page. Max 150 characters. |
+| `payment_intent[description]` | string | No | Longer description shown on the checkout page. Max 500 characters. |
+| `payment_intent[metadata]` | object | No | Arbitrary key-value pairs returned in every payment-intent webhook. |
+| `Idempotency-Key` | header | No, but **strongly recommended** | Re-sending the same value returns the existing intent instead of creating a duplicate. See [Idempotency](/idempotency). |
+
+<Note>
+  `amount` must be a positive decimal. Sending a missing or non-positive amount returns `422`. `title`, `description`, and `order_id` over their length limits also return `422`.
+</Note>
+
+**Building the checkout URL.** The `reference` field is the checkout token. The customer URL is:
+
+```
+https://api.southpay.io/api/v2/checkout/{reference}
+```
+
+If your store has a verified custom domain (configured in the dashboard), substitute that hostname.
 
 <Tip>
-  Redirect your customer to `checkout_url` — no frontend integration required.
+  Redirect your customer to the checkout URL - no frontend integration required. Southpay handles QR codes, asset selection, and the countdown timer.
 </Tip>
+
+---
+
+## Get a payment intent
+
+Returns the intent with full lifecycle detail: ledger-derived financials, the auto-swap status if any, and the full event timeline.
+
+<CodeGroup>
+```bash Request
+GET /payments/:id
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "id": "01HX...",
+  "reference": "A1B2C3D4E5F6G7H8",
+  "status": "completed",
+  "state_reason": "completed_exact",
+  "settlement_currency": "USD",
+  "settlement_amount": "49.99",
+  "terminal": true,
+  "expires_at": "2026-04-10T13:00:00.000Z",
+  "reconciliation_status": "matched",
+  "created_at": "2026-04-10T12:00:00.000Z",
+  "success_url": "https://yourapp.com/orders/123/success",
+  "failed_url":  "https://yourapp.com/orders/123/failed",
+  "order_id": "order_123",
+  "title": "Order #123",
+  "description": "2x Widget, 1x Gadget",
+  "checkout_url": "https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8",
+  "amount_paid": "49.99",
+  "customer_pays_fee": false,
+  "fee": {
+    "fee_atomic": "499900",
+    "fee_percentage": "0.01",
+    "asset_id": "ETH_USDC"
+  },
+  "financials": {
+    "gross_amount": "49.99",
+    "fee_amount":   "0.50",
+    "net_amount":   "49.49",
+    "fee_percentage": "1.00",
+    "currency": "USD",
+    "asset_id": "ETH_USDC"
+  },
+  "auto_swap_status": "completed",
+  "auto_swap_detail": null,
+  "payment_addresses": [ { "...": "..." } ],
+  "timeline": [
+    { "type": "status_changed", "from": "pending",    "to": "processing", "at": "2026-04-10T12:01:00Z", "payload": {} },
+    { "type": "status_changed", "from": "processing", "to": "completed",  "at": "2026-04-10T12:03:14Z", "payload": {} }
+  ]
+}
+```
+</CodeGroup>
+
+---
+
+## List payment intents
+
+<CodeGroup>
+```bash Request
+GET /payments?status=completed&order_id=order_123&page=1&per_page=25
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "data": [
+    {
+      "id": "01HX...",
+      "reference": "A1B2C3D4E5F6G7H8",
+      "status": "completed",
+      "state_reason": "completed_exact",
+      "settlement_currency": "USD",
+      "settlement_amount": "49.99",
+      "terminal": true,
+      "settlement_status": "settled",
+      "auto_swap_status": null,
+      "created_at": "2026-04-10T12:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "per_page": 25,
+    "total_pages": 1
+  }
+}
+```
+</CodeGroup>
+
+**Query parameters**
+
+| Parameter | Description |
+| --- | --- |
+| `status` | One of `pending`, `processing`, `completed`, `failed`, `expired`, `refunded`, `confirming`. Unknown values are ignored. |
+| `q` | Substring match against `reference`. |
+| `order_id` | Exact match against the `order_id` you set on create. |
+| `page`, `per_page` | Pagination. `per_page` defaults to 10, capped at 100. |
+
+---
+
+## Lifecycle
+
+The `status` field is the single source of truth for what happened. `state_reason` further explains why a state was reached. The `terminal` flag is a convenience - once `true`, the intent will not change again.
+
+| Status | Terminal | Description |
+| --- | --- | --- |
+| `pending` | No | Created, awaiting customer payment. |
+| `processing` | No | Crypto received, blockchain confirmations in progress. |
+| `completed` | Yes | Required funds received and confirmed. |
+| `expired` | Yes | Payment window elapsed before funds were received. |
+| `failed` | Yes | Payment could not be completed (under/overpaid). |
+| `refunded` | Yes | Funds were returned to the customer. |
+
+### `state_reason`
+
+| Reason | Status | Description |
+| --- | --- | --- |
+| `pending_confirmations` | processing | Crypto received, confirmations pending. |
+| `completed_exact` | completed | Exact required amount received. |
+| `completed_overpaid` | completed | More than required amount received. |
+| `failed_underpaid` | failed | Insufficient funds before expiration. |
+| `failed_overpaid` | failed | Excess funds rejected. |
+| `expired_timeout` | expired | No funds received before timeout. |
+
+---
+
+## Sub-resources
+
+### Events
+
+Returns the immutable event log for an intent in chronological order. Each event records a state transition with the payload that triggered it. This is the same data delivered to your [webhook endpoints](/webhooks); use this endpoint to backfill or reconcile event history on demand.
+
+<CodeGroup>
+```bash Request
+GET /payments/:id/events
+Authorization: Bearer <API_KEY>
+```
+
+```json Response 200
+[
+  {
+    "id": "01HX...",
+    "event_type": "payment_intent.processing",
+    "from_status": "pending",
+    "to_status": "processing",
+    "payload": {
+      "address": "0xabc...",
+      "tx_hash": "0x9f8e...",
+      "amount_atomic": "49990000"
+    },
+    "created_at": "2026-04-10T12:04:11.000Z"
+  },
+  {
+    "id": "01HX...",
+    "event_type": "payment_intent.completed",
+    "from_status": "processing",
+    "to_status": "completed",
+    "payload": {},
+    "created_at": "2026-04-10T12:09:44.000Z"
+  }
+]
+```
+</CodeGroup>
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Event identifier |
+| `event_type` | string | Event name, matching the [webhook event types](/webhooks) |
+| `from_status` | string \| null | Intent status before the transition |
+| `to_status` | string | Intent status after the transition |
+| `payload` | object | Event-specific data (transaction hash, amounts, and so on) |
+| `created_at` | string | ISO 8601 timestamp |
+
+### Refunds
+
+List refunds for an intent, or request a new one. See the [Refunds reference](/api-reference/refunds) for full detail.
+
+```bash
+GET  /payments/:id/refunds
+POST /payments/:id/refunds
+```
+
+### Reconciliation
+
+Returns the latest reconciliation snapshot for an intent: the expected vs received on-chain amount and any auto-swap delta. See the [Reconciliation reference](/api-reference/reconciliation).
+
+```bash
+GET /payments/:id/reconciliation
+```
+
+### Invoice (PDF)
+
+Downloads a PDF invoice for the intent. Useful for accounting export.
+
+```bash
+GET /payments/:id/invoice
+```
+
+Returns `application/pdf` as an attachment.

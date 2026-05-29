@@ -6,7 +6,7 @@ description: "Receive signed HTTP notifications for every payment event. Retried
 ## How webhooks work
 
 1. You register an HTTPS endpoint and specify which event types to subscribe to
-2. Southpay generates a signing secret and returns it **once** — store it immediately
+2. Southpay generates a signing secret and returns it **once** - store it immediately
 3. When an event occurs, Southpay `POST`s a signed JSON payload to your endpoint
 4. Your server verifies the signature, returns `2xx`, and processes the event
 5. If delivery fails, Southpay retries automatically up to 10 times
@@ -353,8 +353,29 @@ end
 | Event | Triggered when |
 | --- | --- |
 | `payout.created` | A payout is initiated |
-| `payout.confirmed` | Payout transaction confirmed on-chain |
-| `payout.failed` | Payout transaction failed |
+| `payout.confirmed` | Payout transaction confirmed (on-chain for crypto, settled for fiat) |
+| `payout.failed` | Payout rejected by the rail or expired |
+
+### Fee sweep events
+
+Emitted when Southpay sweeps accrued fees from your store's crypto-received account to fee revenue. You typically don't need to subscribe - included for auditability.
+
+| Event | Triggered when |
+| --- | --- |
+| `fee_sweep.confirmed` | Fee sweep transaction confirmed |
+| `fee_sweep.failed` | Fee sweep transaction failed |
+
+### Billing events
+
+Only emitted for stores with billing enabled. See the [Billing reference](/api-reference/billing).
+
+| Event | Triggered when |
+| --- | --- |
+| `invoice.finalized` | An invoice is finalized and ready to be paid |
+| `invoice.paid` | An invoice is paid in full |
+| `invoice.voided` | An invoice is voided |
+| `subscription.past_due` | A subscription cycle was not paid within its grace period |
+| `subscription.canceled` | A subscription is canceled |
 
 ---
 
@@ -379,7 +400,7 @@ If your endpoint returns a non-`2xx` status, times out, or is unreachable, the d
 
 After 10 failed attempts, the endpoint is marked `error` and you receive an email notification. Use the dashboard to redeliver individual events or re-enable the endpoint.
 
-**`4xx` responses (except `429`)** are not retried — they indicate a client error (bad signature, endpoint logic error). Fix the issue and use the redeliver endpoint.
+**`4xx` responses (except `429`)** are not retried - they indicate a client error (bad signature, endpoint logic error). Fix the issue and use the redeliver endpoint.
 
 ---
 
@@ -395,7 +416,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/rede
 
 ## Rotate your signing secret
 
-Rotate without downtime — the new secret takes effect immediately:
+Rotate without downtime - the new secret takes effect immediately:
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/rotate_secret \
@@ -433,7 +454,7 @@ Sends a `payment_intent.completed` event with a synthetic payload. Useful for va
 
 ## Deduplication
 
-Southpay guarantees **at-least-once delivery** — a successful delivery may occasionally be sent more than once during retries. Use the `id` field to deduplicate:
+Southpay guarantees **at-least-once delivery** - a successful delivery may occasionally be sent more than once during retries. Use the `id` field to deduplicate:
 
 ```typescript
 const eventId = event.id;
@@ -449,9 +470,9 @@ await processEvent(event);
 ## Security checklist
 
 - Always verify `Southpay-Signature` before processing
-- Use timing-safe comparison (`timingSafeEqual`, `hmac.compare_digest`) — never string equality
-- Read the raw request body before parsing JSON — do not re-serialize for signature verification
+- Use timing-safe comparison (`timingSafeEqual`, `hmac.compare_digest`) - never string equality
+- Read the raw request body before parsing JSON - do not re-serialize for signature verification
 - Store the signing secret in an environment variable, never in source code
 - Your endpoint must use **HTTPS**
-- Return `2xx` quickly (< 30s) — offload heavy work to a background queue
+- Return `2xx` quickly (< 30s) - offload heavy work to a background queue
 - Implement deduplication using the event `id`

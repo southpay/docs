@@ -44,6 +44,12 @@
             ]
           },
           {
+            "group": "OAuth Integrations",
+            "pages": [
+              "oauth-apps"
+            ]
+          },
+          {
             "group": "Integration",
             "pages": [
               "idempotency",
@@ -65,27 +71,9 @@
           {
             "group": "Payments",
             "pages": [
-              "api-reference/payments"
-            ]
-          },
-          {
-            "group": "Stores",
-            "pages": [
-              "api-reference/stores"
-            ]
-          },
-          {
-            "group": "Balances & Assets",
-            "pages": [
-              "api-reference/assets"
-            ]
-          },
-          {
-            "group": "Payouts",
-            "pages": [
-              "api-reference/payout-schedules",
-              "api-reference/payouts",
-              "api-reference/payout-details"
+              "api-reference/payments",
+              "api-reference/refunds",
+              "api-reference/reconciliation"
             ]
           },
           {
@@ -95,9 +83,28 @@
             ]
           },
           {
-            "group": "White Label",
+            "group": "Balances",
             "pages": [
-              "api-reference/custom-domains"
+              "api-reference/balances"
+            ]
+          },
+          {
+            "group": "Payouts",
+            "pages": [
+              "api-reference/payouts",
+              "api-reference/payout-schedules"
+            ]
+          },
+          {
+            "group": "Billing",
+            "pages": [
+              "api-reference/billing"
+            ]
+          },
+          {
+            "group": "Reports",
+            "pages": [
+              "api-reference/reports"
             ]
           }
         ]

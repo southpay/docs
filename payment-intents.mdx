@@ -146,7 +146,7 @@ After payment confirms, the customer is redirected to your `success_url`.
 
 ## Lifecycle
 
-A Payment Intent transitions through states as the payment progresses. Each transition is final in one direction — status never moves backward.
+A Payment Intent transitions through states as the payment progresses. Each transition is final in one direction - status never moves backward.
 
 ```mermaid
 stateDiagram-v2
@@ -309,9 +309,9 @@ sequenceDiagram
 ## Best practices
 
 - Use an `Idempotency-Key` on every create request to safely handle network retries
-- Use webhooks instead of polling — the `payment_intent.completed` event fires within seconds of confirmation
+- Use webhooks instead of polling - the `payment_intent.completed` event fires within seconds of confirmation
 - Store the `id` and `reference` in your order record at creation time
-- Check `terminal: true` before marking an order as final — only terminal intents have a definitive outcome
+- Check `terminal: true` before marking an order as final - only terminal intents have a definitive outcome
 - Test every status transition (completed, failed, expired) against your webhook handler using test mode
 
 See [Best Practices](/best-practices) for a complete checklist.

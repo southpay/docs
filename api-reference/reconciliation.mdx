@@ -1,0 +1,56 @@
+---
+title: "Reconciliation"
+description: "Compare the amount a payment intent expected against what actually arrived on-chain."
+sidebarTitle: "Reconciliation"
+---
+
+<Warning>
+  All endpoints require authentication. See [Authentication](/authentication).
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+Reconciliation answers one question for a payment intent: did the on-chain funds that arrived match what was expected, and if an auto-swap ran, what was the delta? Southpay records a snapshot whenever it checks. This endpoint returns the most recent snapshot.
+
+Amounts are returned both as human-readable decimals (`expected_amount`, `received_amount`, `swap_delta`) and as atomic-unit strings (`*_atomic`). The `currency` is the coin symbol of the asset the intent was paid in.
+
+---
+
+## Get the reconciliation snapshot
+
+<CodeGroup>
+```bash Request
+GET /payments/:payment_intent_id/reconciliation
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "status": "matched",
+  "expected_amount": "49.99",
+  "received_amount": "49.99",
+  "swap_delta": "0",
+  "currency": "USDC",
+  "expected_amount_atomic": "49990000",
+  "received_amount_atomic": "49990000",
+  "swap_delta_atomic": "0",
+  "last_checked_at": "2026-05-12T12:05:00.000Z"
+}
+```
+</CodeGroup>
+
+When no snapshot exists yet (for example, the intent has not been paid), the endpoint returns a placeholder with `status: "under_investigation"`, null amounts, and `"0"` atomic values.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `status` | string | Reconciliation outcome. `under_investigation` is returned when no snapshot exists yet. |
+| `expected_amount` | string \| null | Expected amount as a decimal. |
+| `received_amount` | string \| null | Amount actually received as a decimal. |
+| `swap_delta` | string \| null | Difference introduced by an auto-swap, as a decimal. |
+| `currency` | string \| null | Coin symbol of the paid asset (e.g. `USDC`). |
+| `expected_amount_atomic` | string | Expected amount in atomic units. |
+| `received_amount_atomic` | string | Received amount in atomic units. |
+| `swap_delta_atomic` | string | Auto-swap delta in atomic units. |
+| `last_checked_at` | string \| null | ISO 8601 timestamp of the snapshot. |
+
+Returns `404` if the payment intent does not exist in the current mode.

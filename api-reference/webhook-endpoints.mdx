@@ -30,7 +30,7 @@ Authorization: Bearer <API_KEY>
     "description": "Production handler",
     "status": "active",
     "subscribed_events": ["payment_intent.completed", "payment_intent.failed"],
-    "delivery_success_rate": 0.98,
+    "delivery_success_rate": 97.5,
     "created_at": "2026-04-01T00:00:00.000Z"
   }
 ]
@@ -62,7 +62,7 @@ Authorization: Bearer <API_KEY>
   "description": "Production handler",
   "status": "active",
   "subscribed_events": ["payment_intent.completed"],
-  "delivery_success_rate": 0.98,
+  "delivery_success_rate": 97.5,
   "created_at": "2026-04-01T00:00:00.000Z",
   "available_events": ["payment_intent.completed", "payment_intent.failed", "payment_intent.expired"],
   "recent_deliveries": [
@@ -84,7 +84,7 @@ Authorization: Bearer <API_KEY>
 
 ## Create a webhook endpoint
 
-The signing secret is only returned on creation — store it securely.
+The signing secret is only returned on creation - store it securely.
 
 <CodeGroup>
 ```bash Request
@@ -119,11 +119,11 @@ Content-Type: application/json
 | --- | --- | --- |
 | `webhook_endpoint[url]` | Yes | HTTPS URL to receive events |
 | `webhook_endpoint[description]` | No | Internal label |
-| `webhook_endpoint[subscribed_events][]` | No | Event types to receive. Defaults to all events. |
+| `webhook_endpoint[subscribed_events][]` | No | Event types to receive. Must be values from the [available events](/webhooks#event-types) list. If omitted, no events are subscribed and you should set them with a follow-up `PATCH`. |
 | `webhook_endpoint[metadata]` | No | Arbitrary key-value pairs |
 
 <Warning>
-  Save the `signing_secret` — it is only returned once. Use it to verify incoming requests. See the [Webhooks guide](/webhooks).
+  Save the `signing_secret` - it is only returned once. Use it to verify incoming requests. See the [Webhooks guide](/webhooks).
 </Warning>
 
 ---
@@ -176,7 +176,7 @@ Both return the updated endpoint object.
 
 ## Rotate signing secret
 
-Issues a new signing secret. Update your server immediately — the old secret stops working.
+Issues a new signing secret. Update your server immediately - the old secret stops working.
 
 <CodeGroup>
 ```bash Request
@@ -197,7 +197,7 @@ Authorization: Bearer <API_KEY>
 
 ## Send a test event
 
-Sends a test delivery to verify your endpoint is reachable.
+Sends a test delivery to verify your endpoint is reachable. The optional `event_type` query parameter must be one of the [available events](/webhooks#event-types); an unknown value returns `422`. If omitted, the endpoint's first subscribed event is used, falling back to `payment_intent.completed`.
 
 <CodeGroup>
 ```bash Request
@@ -209,7 +209,7 @@ Authorization: Bearer <API_KEY>
 {
   "delivery_id": "del_test123",
   "event_type": "payment_intent.completed",
-  "message": "Test event sent"
+  "message": "Test delivery queued"
 }
 ```
 </CodeGroup>
@@ -228,6 +228,6 @@ Content-Type: application/json
 ```
 
 ```json Response
-{ "message": "Redelivery scheduled" }
+{ "message": "Redelivery queued" }
 ```
 </CodeGroup>

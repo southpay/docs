@@ -62,7 +62,7 @@ curl -X POST https://api.southpay.io/api/v2/payments \
 }
 ```
 
-The `payment_addresses` array contains one address per blockchain your store has enabled. Each address has a `crypto_amount_atomic` — the exact amount the customer must send in the asset's smallest unit (e.g. wei for ETH).
+The `payment_addresses` array contains one address per blockchain your store has enabled. Each address has a `crypto_amount_atomic` - the exact amount the customer must send in the asset's smallest unit (e.g. wei for ETH).
 
 ---
 
@@ -100,7 +100,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
   }'
 ```
 
-The response includes a `signing_secret` — **save it immediately, it is only shown once.**
+The response includes a `signing_secret` - **save it immediately, it is only shown once.**
 
 When the payment confirms, Southpay sends a `POST` to your endpoint:
 
@@ -123,7 +123,7 @@ When the payment confirms, Southpay sends a `POST` to your endpoint:
 }
 ```
 
-Verify the signature before processing (see [Webhooks — Signature verification](/webhooks#verifying-signatures)):
+Verify the signature before processing (see [Webhooks - Signature verification](/webhooks#verifying-signatures)):
 
 <CodeGroup>
 
@@ -211,7 +211,7 @@ curl https://api.southpay.io/api/v2/payments/018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6
   -H "Authorization: Bearer sp_test_YOUR_API_KEY"
 ```
 
-Check the `terminal` field — when `true`, the payment is in a final state and will not change.
+Check the `terminal` field - when `true`, the payment is in a final state and will not change.
 
 ---
 

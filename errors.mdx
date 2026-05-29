@@ -123,8 +123,8 @@ Returns `404`. The resource does not exist within your store and mode scope.
 | Status | Retry? | Notes |
 | --- | --- | --- |
 | `4xx` (except 409, 429) | No | Fix the request before retrying |
-| `409` | No | Idempotency key conflict — check your parameters |
-| `429` | Yes | Rate limited — respect `Retry-After` header |
+| `409` | No | Idempotency key conflict - check your parameters |
+| `429` | Yes | Rate limited - respect `Retry-After` header |
 | `502` | Yes | Use same `Idempotency-Key` with backoff |
 | `500` | Yes | Use same `Idempotency-Key` with backoff |
 | Network timeout | Yes | Use same `Idempotency-Key` |

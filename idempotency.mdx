@@ -5,7 +5,7 @@ description: "Safely retry any API request without risk of duplicate charges."
 
 ## What is idempotency?
 
-An idempotent request produces the same result no matter how many times it is submitted. This is essential for handling network timeouts, connection drops, and retries safely — you can always retry a request without worrying about creating duplicate payments.
+An idempotent request produces the same result no matter how many times it is submitted. This is essential for handling network timeouts, connection drops, and retries safely - you can always retry a request without worrying about creating duplicate payments.
 
 ---
 
@@ -50,7 +50,7 @@ idempotency_key = f"order_{order_id}_payment_v1"
 - Append a version suffix if you intentionally want to retry with new parameters
 - Use a new key if you are creating a genuinely new payment for the same order (e.g. after the first one expired)
 
-**Do not** use random UUIDs generated at request time — that defeats the purpose, since a new UUID on each retry means a new payment intent each time.
+**Do not** use random UUIDs generated at request time - that defeats the purpose, since a new UUID on each retry means a new payment intent each time.
 
 ---
 
@@ -120,13 +120,13 @@ async function createPaymentWithRetry(
 ```
 
 <Note>
-  `5xx` server errors can always be retried with the same `Idempotency-Key`. `4xx` errors indicate a client-side issue (bad parameters, auth failure) — retrying with the same key will produce the same error.
+  `5xx` server errors can always be retried with the same `Idempotency-Key`. `4xx` errors indicate a client-side issue (bad parameters, auth failure) - retrying with the same key will produce the same error.
 </Note>
 
 ---
 
 ## Idempotency in webhooks
 
-Webhook deliveries are also idempotent — Southpay uses an internal idempotency key per `(endpoint, event)` pair, so the same event is never delivered twice to the same endpoint under normal conditions.
+Webhook deliveries are also idempotent - Southpay uses an internal idempotency key per `(endpoint, event)` pair, so the same event is never delivered twice to the same endpoint under normal conditions.
 
 However, at-least-once delivery means rare duplicates can occur during retries. Always [deduplicate on the event `id`](/webhooks#deduplication) in your webhook handler.

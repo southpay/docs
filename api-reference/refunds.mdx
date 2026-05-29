@@ -1,0 +1,119 @@
+---
+title: "Refunds"
+description: "Return crypto to the customer for a completed payment intent, in full or in part."
+sidebarTitle: "Refunds"
+---
+
+<Warning>
+  All endpoints require authentication. See [Authentication](/authentication).
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+A refund returns funds on-chain to the address the customer paid from. Refunds are scoped to a payment intent. A single refund request can produce more than one refund record when the original payment arrived across multiple assets or addresses, so both endpoints return an array.
+
+Amounts are expressed in **atomic units** of the asset. Convert with `decimal = atomic / 10^atomic_decimals`.
+
+---
+
+## Refund lifecycle
+
+| Status | Description |
+| --- | --- |
+| `pending` | Refund created, queued for execution. |
+| `submitted` | Broadcast to the network, awaiting confirmation. |
+| `confirmed` | Final. On-chain confirmations met. |
+| `failed` | The refund could not be completed. |
+
+---
+
+## List refunds for an intent
+
+<CodeGroup>
+```bash Request
+GET /payments/:payment_intent_id/refunds
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+[
+  {
+    "id": "01HZ...",
+    "status": "confirmed",
+    "reason": "requested_by_customer",
+    "destination_address": "0xabc...",
+    "amount_atomic": "49990000",
+    "tx_hash": "0xdef...",
+    "attempts": 1,
+    "asset_id": "ETH_USDC",
+    "coin_symbol": "USDC",
+    "chain_symbol": "ETH",
+    "atomic_decimals": 6,
+    "created_at": "2026-05-12T12:00:00.000Z",
+    "updated_at": "2026-05-12T12:04:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Request a refund
+
+Requires an `Idempotency-Key` header. Retrying with the same key returns the original refund instead of creating a duplicate.
+
+Omit `amount` to refund the full received amount. Provide `amount` (decimal) to refund a partial amount. Provide `asset_id` when the intent received more than one asset and you want to refund a specific one.
+
+<CodeGroup>
+```bash Request
+POST /payments/:payment_intent_id/refunds
+Authorization: Bearer <API_KEY>
+Idempotency-Key: refund_order_123
+Content-Type: application/json
+
+{
+  "refund": {
+    "amount": "10.00",
+    "asset_id": "ETH_USDC"
+  }
+}
+```
+
+```json Response 201
+[
+  {
+    "id": "01HZ...",
+    "status": "pending",
+    "reason": "requested_by_customer",
+    "destination_address": "0xabc...",
+    "amount_atomic": "10000000",
+    "tx_hash": null,
+    "attempts": 0,
+    "asset_id": "ETH_USDC",
+    "coin_symbol": "USDC",
+    "chain_symbol": "ETH",
+    "atomic_decimals": 6,
+    "created_at": "2026-05-12T12:00:00.000Z",
+    "updated_at": "2026-05-12T12:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+**Request fields**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `refund[amount]` | string | No | Decimal amount to refund. Defaults to the full received amount. |
+| `refund[asset_id]` | string | No | Restrict the refund to one asset when the intent received several. |
+| `Idempotency-Key` | header | Yes | Missing key returns `422`. |
+
+**Common errors**
+
+| Status | When |
+| --- | --- |
+| `422` | Missing `Idempotency-Key`, amount exceeds the refundable balance, or the intent is not in a refundable state. |
+
+<Tip>
+  Subscribe to the `payment_intent.refunded` [webhook event](/webhooks) instead of polling for refund status.
+</Tip>

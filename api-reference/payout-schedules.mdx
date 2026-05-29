@@ -1,0 +1,119 @@
+---
+title: "Payout Schedules"
+description: "Automatically disburse your accumulated crypto balance on a recurring schedule to a fiat bank account or external crypto address."
+sidebarTitle: "Payout Schedules"
+---
+
+<Warning>
+  All endpoints require authentication. See [Authentication](/authentication).
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+A payout schedule defines, for one asset, **how often** the store's accumulated balance is paid out and **where** the proceeds go. The destination is either:
+
+- A **fiat payout detail** - funds are off-ramped and arrive as fiat in your bank account.
+- A **crypto payout detail** - funds are sent on-chain to an external wallet you control.
+
+Schedules are evaluated continuously. If a schedule's `next_payout_at` has passed and the accrued balance meets `minimum_fiat_cents`, a payout is created automatically.
+
+---
+
+## List schedules
+
+<CodeGroup>
+```bash Request
+GET /payout_schedules
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+[
+  {
+    "id": "01HX...",
+    "frequency": "weekly",
+    "minimum_fiat_cents": 50000,
+    "minimum_fiat_currency": "USD",
+    "destination_address": "GB29NWBK60161331926819",
+    "destination_type": "fiat",
+    "next_payout_at": "2026-05-19T23:59:59.000Z",
+    "active": true,
+    "livemode": true,
+    "fiat_payout_detail_id": "01HX...",
+    "crypto_payout_detail_id": null,
+    "asset": {
+      "asset_id": "ETH_USDC",
+      "coin_symbol": "USDC",
+      "chain_symbol": "ETH"
+    },
+    "created_at": "2026-04-01T00:00:00.000Z",
+    "updated_at": "2026-04-01T00:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Get a schedule
+
+Returns the schedule with all payouts it has produced.
+
+```bash
+GET /payout_schedules/:id
+```
+
+---
+
+## Create a schedule
+
+<CodeGroup>
+```bash Request
+POST /payout_schedules
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "payout_schedule": {
+    "asset_id": "ETH_USDC",
+    "frequency": "weekly",
+    "minimum_fiat_cents": 50000,
+    "minimum_fiat_currency": "USD",
+    "fiat_payout_detail_id": "01HX..."
+  }
+}
+```
+</CodeGroup>
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `asset_id` | string | Yes | Asset whose balance this schedule drains (e.g. `ETH_USDC`). |
+| `frequency` | string | Yes | `daily`, `weekly`, `monthly`. |
+| `minimum_fiat_cents` | integer | Yes | Minimum balance in fiat cents required to trigger a payout. |
+| `minimum_fiat_currency` | string | No | ISO 4217 fiat code for the minimum threshold. Defaults to `USD`. |
+| `fiat_payout_detail_id` | string | One of | Send proceeds as fiat to this bank account. |
+| `crypto_payout_detail_id` | string | One of | Send proceeds on-chain to this address. |
+| `swap_target_asset_id` | string | No | For crypto destinations: auto-swap the source asset into this target before payout. |
+| `next_payout_at` | ISO 8601 | No | First scheduled run. Defaults to end of the current day. |
+
+Exactly one of `fiat_payout_detail_id` or `crypto_payout_detail_id` must be set.
+
+---
+
+## Update a schedule
+
+```bash
+PATCH /payout_schedules/:id
+```
+
+Same fields as create, except `asset_id` cannot be changed. Pass `active: false` to pause without deleting.
+
+---
+
+## Delete a schedule
+
+```bash
+DELETE /payout_schedules/:id
+```
+
+Marks the schedule inactive. History (existing payouts) is preserved.

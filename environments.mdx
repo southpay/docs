@@ -5,7 +5,7 @@ description: "Use test mode to develop and validate your integration before acce
 
 ## Test mode vs. live mode
 
-Every Southpay resource exists in either **test mode** or **live mode**. The two environments are completely isolated — test payments, balances, and webhooks never appear in live mode, and vice versa.
+Every Southpay resource exists in either **test mode** or **live mode**. The two environments are completely isolated - test payments, balances, and webhooks never appear in live mode, and vice versa.
 
 | | Test mode | Live mode |
 | --- | --- | --- |
@@ -61,10 +61,10 @@ The delivery is logged and visible in your dashboard. The event type is `payment
 Before switching to live mode:
 
 1. **Verify your webhook endpoint** handles all event types and returns `2xx` reliably
-2. **Test idempotency** — retry the same request with the same `Idempotency-Key` and confirm you get the same response
+2. **Test idempotency** - retry the same request with the same `Idempotency-Key` and confirm you get the same response
 3. **Generate a live API key** from the dashboard
 4. **Configure a live webhook endpoint** (test and live endpoints are separate)
-5. **Set up a payout destination** — add a fiat or crypto payout detail and activate it
+5. **Set up a payout destination** - add a fiat or crypto payout detail and activate it
 
 <Warning>
   Live API keys and live webhook signing secrets are different from test ones. Update all environment variables before deploying.

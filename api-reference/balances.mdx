@@ -1,0 +1,69 @@
+---
+title: "Balances"
+description: "Read your store's accumulated crypto balances per asset, plus a stablecoin rollup."
+sidebarTitle: "Balances"
+---
+
+<Warning>
+  Requires authentication. Callable with an API key - the store is implicit. See [Authentication](/authentication).
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+Balances are **derived from the ledger**, not stored. Every confirmed receipt and disbursement is reflected at read time.
+
+Amounts are returned in **atomic units** (the smallest indivisible unit of the asset). Use `atomic_decimals` to convert to a decimal value:
+
+```text
+decimal_amount = atomic_amount / 10^atomic_decimals
+```
+
+---
+
+## List balances
+
+<CodeGroup>
+```bash Request
+GET /balances
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "balances": [
+    {
+      "asset_id": "ETH_USDC",
+      "coin_symbol": "USDC",
+      "chain_symbol": "ETH",
+      "atomic_decimals": 6,
+      "balance_atomic": "1499870000"
+    },
+    {
+      "asset_id": "TRON_USDT",
+      "coin_symbol": "USDT",
+      "chain_symbol": "TRON",
+      "atomic_decimals": 6,
+      "balance_atomic": "892410000"
+    }
+  ],
+  "stablecoin_summary": [
+    { "coin_symbol": "USDC", "total_atomic": "1499870000", "atomic_decimals": 6 },
+    { "coin_symbol": "USDT", "total_atomic": "892410000",  "atomic_decimals": 6 }
+  ],
+  "settlement_balance": {
+    "currency": "USD",
+    "amount_cents": 239228
+  }
+}
+```
+</CodeGroup>
+
+**Response fields**
+
+| Field | Description |
+| --- | --- |
+| `balances[]` | One entry per asset with a non-zero or tracked balance, with `asset_id`, `coin_symbol`, `chain_symbol`, `atomic_decimals`, and `balance_atomic`. |
+| `stablecoin_summary[]` | Rollup of USDC and USDT totals across chains, in atomic units. |
+| `settlement_balance` | Your stablecoin balance converted to the store's settlement currency, in cents. `amount_cents` is `null` if a conversion rate could not be resolved. |
+
+The `asset_id` is the canonical reference for any asset across the API (e.g. when filtering payouts by asset). It uses the `CHAIN_COIN` form: `ETH_USDC`, `TRON_USDT`, `BSC_USDT`.

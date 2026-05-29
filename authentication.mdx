@@ -22,8 +22,8 @@ API keys are the fastest way to integrate. Create one from the dashboard under *
 
 Each key is tied to a specific store and mode (live or test). The key format encodes the mode:
 
-- `sp_live_...` — live mode, real funds
-- `sp_test_...` — test mode, synthetic transactions
+- `sp_live_...` - live mode, real funds
+- `sp_test_...` - test mode, synthetic transactions
 
 ### Using an API key
 
@@ -32,7 +32,21 @@ curl https://api.southpay.io/api/v2/payments \
   -H "Authorization: Bearer sp_test_your_key_here"
 ```
 
-No `X-Store-Id` header is required when using an API key — the store is implicit in the key.
+No `X-Store-Id` header is required when using an API key - the store is implicit in the key. Mode (live vs test) is also implicit, so no `X-Livemode` header is needed.
+
+### What API keys can access
+
+API keys can call the **public API surface**: payment intents, balances, payouts, payout schedules, webhook endpoints, and verification requests.
+
+A handful of dashboard-only endpoints - listing/managing API keys themselves, payout details (bank/wallet), custom domains, store records, store settings, and the catalog endpoints (`supported_assets`, `networks`, `payment_currencies`) - require a logged-in dashboard session (JWT). These pages are flagged with a "Dashboard sessions only" callout in the API reference.
+
+### Dashboard sessions
+
+When you sign in to the Southpay dashboard you receive a JWT bearer token. Dashboard requests must include:
+
+- `Authorization: Bearer <jwt_token>`
+- `X-Store-Id: <store_id>` - selects which of your stores the request acts on
+- `X-Livemode: true` - opt into live mode. Defaults to test mode (`false`) when the header is absent.
 
 ### Managing API keys
 
@@ -79,8 +93,9 @@ Use OAuth when building a third-party application that needs to access a merchan
 | `payments:write` | Create payment intents |
 | `webhooks:read` | Read webhook endpoints and deliveries |
 | `webhooks:write` | Create and manage webhook endpoints |
+| `offline_access` | Issue a refresh token alongside the access token |
 
-### Step 1 — Generate a PKCE code verifier and challenge
+### Step 1 - Generate a PKCE code verifier and challenge
 
 ```typescript
 import { randomBytes, createHash } from "crypto";
@@ -99,7 +114,7 @@ digest = hashlib.sha256(code_verifier.encode()).digest()
 code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 ```
 
-### Step 2 — Redirect the user to the authorization endpoint
+### Step 2 - Redirect the user to the authorization endpoint
 
 ```
 GET /api/v2/oauth/authorize
@@ -136,7 +151,7 @@ https://yourapp.com/callback?code=AUTH_CODE&state=RANDOM_CSRF_TOKEN
 
 Verify `state` matches what you sent to prevent CSRF attacks.
 
-### Step 3 — Exchange the code for an access token
+### Step 3 - Exchange the code for an access token
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/oauth/token \
@@ -157,20 +172,39 @@ curl -X POST https://api.southpay.io/api/v2/oauth/token \
   "access_token": "spo_a1b2c3d4e5f6...",
   "token_type": "Bearer",
   "expires_in": 7776000,
-  "scope": "profile payments:read payments:write"
+  "scope": "profile payments:read payments:write offline_access",
+  "store_id": "STORE_UUID",
+  "refresh_token": "spr_...",
+  "refresh_token_expires_in": 7776000
 }
 ```
 
-Tokens are valid for **90 days**. There is no refresh token — when the token expires, re-initiate the authorization flow.
+Access tokens are valid for **90 days**. The `store_id` identifies which store the token acts on.
 
-### Step 4 — Use the token
+### Refresh tokens
+
+Request the `offline_access` scope to receive a `refresh_token` alongside the access token. Refresh tokens are also valid for 90 days and are **single-use**: each refresh rotates the token and returns a new one. Without `offline_access`, no refresh token is issued and you must re-run the authorization flow when the access token expires.
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_id": "YOUR_CLIENT_ID",
+    "grant_type": "refresh_token",
+    "refresh_token": "spr_..."
+  }'
+```
+
+Confidential clients also send `client_secret` (in the body or via HTTP Basic auth).
+
+### Step 4 - Use the token
 
 ```bash
 curl https://api.southpay.io/api/v2/payments \
   -H "Authorization: Bearer spo_a1b2c3d4e5f6..."
 ```
 
-OAuth tokens always operate in **test mode**. For live mode access, use an API key.
+OAuth tokens operate in **test mode** by default. For live mode access, use an API key.
 
 ### Revoking a token
 
@@ -212,5 +246,5 @@ sequenceDiagram
 | Created by | Store owner | User authorization |
 | Livemode | Yes (live keys) | No (test only) |
 | Store context | Implicit (key's store) | Granted store |
-| Expiry | Until revoked | 90 days |
+| Expiry | Until revoked | 90 days (refreshable with `offline_access`) |
 | Best for | Your own backend | Third-party integrations |

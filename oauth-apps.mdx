@@ -1,0 +1,193 @@
+---
+title: "Registering an OAuth App"
+description: "Create and manage the OAuth client applications you use to act on behalf of merchants."
+sidebarTitle: "OAuth Apps"
+---
+
+<Warning>
+  This is a developer-portal task, not a runtime API. Managing OAuth apps requires a dashboard session (JWT bearer token); these endpoints are not callable with an `sp_*` API key or an `spo_*` OAuth token. Once your app is registered, the runtime flow (exchanging codes, refreshing tokens, calling the API with `spo_*` tokens) is documented in [Authentication](/authentication).
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2/merchants/oauth_apps`
+
+An **OAuth application** is the developer-side record (`client_id`, redirect URIs, scopes) that lets you perform the OAuth 2.0 + PKCE Authorization Code flow against a merchant's Southpay account.
+
+There are two kinds:
+
+- **Public** - used by browser/mobile/desktop clients with PKCE only. No client secret. Set `confidential: false`.
+- **Confidential** - used by server-side clients that can keep a secret. A `client_secret` is returned **once** at creation and again only when you rotate it.
+
+Tokens issued by these apps look like `spo_...` and can be sent as `Authorization: Bearer spo_...` to any public API endpoint that the granted scopes permit.
+
+---
+
+## Available scopes
+
+| Scope | Grants |
+| --- | --- |
+| `profile` | Read the merchant's user profile (name, email). |
+| `stores:read` | List and read the merchant's store record(s). |
+| `payments:read` | List and read payment intents. |
+| `payments:write` | Create payment intents. |
+| `webhooks:read` | Read webhook endpoints and delivery history. |
+| `webhooks:write` | Create, update, and delete webhook endpoints. |
+| `offline_access` | Issue a refresh token alongside the access token. |
+
+---
+
+## List your apps
+
+<CodeGroup>
+```bash Request
+GET /merchants/oauth_apps
+Authorization: Bearer <JWT_TOKEN>
+```
+
+```json Response
+[
+  {
+    "id": "01HX...",
+    "name": "Acme Commerce Plugin",
+    "client_id": "spo_app_dev_a1b2c3d4e5f6",
+    "website_url": "https://acme.example.com",
+    "logo_url": null,
+    "redirect_uris": ["https://acme.example.com/oauth/callback"],
+    "scopes": ["payments:write", "webhooks:write", "offline_access"],
+    "confidential": true,
+    "active": true,
+    "has_secret": true,
+    "created_at": "2026-04-19T10:00:00.000Z"
+  }
+]
+```
+</CodeGroup>
+
+---
+
+## Create an app
+
+<CodeGroup>
+```bash Request
+POST /merchants/oauth_apps
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+
+{
+  "oauth_application": {
+    "name": "Acme Commerce Plugin",
+    "website_url": "https://acme.example.com",
+    "logo_url": "https://acme.example.com/logo.png",
+    "confidential": true,
+    "redirect_uris": ["https://acme.example.com/oauth/callback"],
+    "scopes": ["payments:write", "webhooks:write", "offline_access"]
+  }
+}
+```
+
+```json Response 201
+{
+  "id": "01HX...",
+  "name": "Acme Commerce Plugin",
+  "client_id": "spo_app_dev_a1b2c3d4e5f6",
+  "client_secret": "spo_secret_...",
+  "redirect_uris": ["https://acme.example.com/oauth/callback"],
+  "scopes": ["payments:write", "webhooks:write", "offline_access"],
+  "confidential": true,
+  "active": true,
+  "has_secret": true,
+  "created_at": "2026-05-12T12:00:00.000Z"
+}
+```
+</CodeGroup>
+
+<Warning>
+  `client_secret` is only returned **on creation** and after `rotate_secret`. Store it immediately.
+</Warning>
+
+**Fields**
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `name` | Yes | Display name shown to the merchant on the consent screen. |
+| `confidential` | Yes | `true` for server-side apps (issues a secret), `false` for public PKCE-only clients. |
+| `redirect_uris` | Yes | Whitelisted callback URLs. The `redirect_uri` parameter on the authorize call must match exactly. |
+| `scopes` | Yes | Subset of [available scopes](#available-scopes) the app may request. |
+| `website_url` | No | Public marketing URL. |
+| `logo_url` | No | URL of a logo to display on the consent screen. |
+
+---
+
+## Get an app
+
+```bash
+GET /merchants/oauth_apps/:id
+```
+
+Returns the same shape as the list entry. The `client_secret` field is **never** included after creation.
+
+---
+
+## Update an app
+
+<CodeGroup>
+```bash Request
+PATCH /merchants/oauth_apps/:id
+Authorization: Bearer <JWT_TOKEN>
+Content-Type: application/json
+
+{
+  "oauth_application": {
+    "name": "Acme Commerce - Production",
+    "redirect_uris": [
+      "https://acme.example.com/oauth/callback",
+      "https://staging.acme.example.com/oauth/callback"
+    ],
+    "scopes": ["payments:write", "webhooks:write", "offline_access"],
+    "active": true
+  }
+}
+```
+</CodeGroup>
+
+`client_id` and `confidential` are immutable. To change them, create a new app.
+
+---
+
+## Rotate the secret
+
+Confidential apps only. Issues a new `client_secret` and invalidates the old one immediately. Update your servers in lockstep.
+
+<CodeGroup>
+```bash Request
+POST /merchants/oauth_apps/:id/rotate_secret
+Authorization: Bearer <JWT_TOKEN>
+```
+
+```json Response
+{
+  "id": "01HX...",
+  "client_id": "spo_app_dev_a1b2c3d4e5f6",
+  "client_secret": "spo_secret_...",
+  "has_secret": true,
+  "...": "..."
+}
+```
+</CodeGroup>
+
+Returns `422` if the app is public (`confidential: false`).
+
+---
+
+## Delete an app
+
+```bash
+DELETE /merchants/oauth_apps/:id
+```
+
+Soft-deactivates the app (`active: false`). Existing access tokens issued by this app stop working at their next refresh attempt; in-flight tokens remain valid until they expire.
+
+---
+
+## Discovery document
+
+For dynamic client configuration, the [OAuth 2.0 / OIDC discovery document](https://api.southpay.io/.well-known/oauth-authorization-server) lists the authorization, token, revocation, and userinfo endpoints, plus the supported response types, grant types, scopes, and PKCE methods.

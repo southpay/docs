@@ -1,0 +1,194 @@
+---
+title: "Payouts"
+description: "Trigger on-demand fiat off-ramp payouts, quote them ahead of time, and inspect history."
+sidebarTitle: "Payouts"
+---
+
+<Warning>
+  All endpoints require authentication. The store must have completed KYC verification before any payout endpoint will accept a request.
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+A payout disburses funds from your store balance. Payouts come from two sources:
+
+- **Automatic** - triggered by a [payout schedule](/api-reference/payout-schedules) on a recurring cadence.
+- **Manual** - created on demand via `POST /payouts`. This page documents the manual flow.
+
+Currently only **fiat off-ramp** payouts are exposed via the public API for manual creation. Crypto-rail payouts are configured via payout schedules.
+
+---
+
+## Payout lifecycle
+
+| Status | Description |
+| --- | --- |
+| `pending` | Created and queued for execution. |
+| `submitted` | Submitted to the underlying rail, awaiting confirmation. |
+| `confirmed` | Final. Crypto: on-chain confirmations met. Fiat: settlement confirmed. |
+| `failed` | Rail rejected or expired the payout. Ledger entries are reversed. |
+| `retrying` | A retry is in flight after a prior failure (see [Retry a payout](#retry-a-payout)). |
+| `requires_review` | Held for manual review before it can proceed. |
+
+The `payout_rail` field tells you how the payout is moving: `crypto` (on-chain to an external wallet), `fiat_autoswap` (swap to a stablecoin then off-ramp), or `fiat_manual` (off-ramp from an existing stablecoin balance). The public `POST /payouts` endpoint creates `fiat_manual` payouts; `crypto` and `fiat_autoswap` payouts are produced by [payout schedules](/api-reference/payout-schedules).
+
+---
+
+## Quote a fiat payout
+
+Returns the expected fiat amount, fee, and exchange rate for a hypothetical payout - without creating one. Quotes are valid for a short window (see `expires_at`) and use a fresh FX rate snapshot.
+
+<CodeGroup>
+```bash Request
+POST /payouts/quote
+Authorization: Bearer <API_KEY>
+Content-Type: application/json
+
+{
+  "asset_id": "ETH_USDC",
+  "amount_atomic": "150000000",
+  "fiat_payout_detail_id": "01HX..."
+}
+```
+
+```json Response
+{
+  "asset_id":             "ETH_USDC",
+  "coin_symbol":          "USDC",
+  "amount_atomic":        "150000000",
+  "estimated_fiat_cents": 14820,
+  "estimated_fee_cents":  180,
+  "exchange_rate":        "0.988",
+  "fiat_currency":        "EUR",
+  "source_currency":      "USDC",
+  "minimum_atomic":       "5000000",
+  "meets_minimum":        true,
+  "expires_at":           "2026-05-12T13:05:00.000Z"
+}
+```
+</CodeGroup>
+
+---
+
+## Create a payout
+
+Triggers a fiat off-ramp. Requires an `Idempotency-Key` header - retrying with the same key returns the original payout instead of creating a duplicate.
+
+<CodeGroup>
+```bash Request
+POST /payouts
+Authorization: Bearer <API_KEY>
+Idempotency-Key: payout_2026_05_12_01
+Content-Type: application/json
+
+{
+  "asset_id": "ETH_USDC",
+  "amount_atomic": "150000000",
+  "fiat_payout_detail_id": "01HX..."
+}
+```
+
+```json Response 201
+{
+  "id": "01HY...",
+  "status": "pending",
+  "payout_rail": "fiat_manual",
+  "amount_atomic": "150000000",
+  "amount_decimal": "150.000000",
+  "destination_address": "**** **** **** **** 6819",
+  "provider_tx_id": null,
+  "tx_hash": null,
+  "fiat_currency": "EUR",
+  "paid_fiat_amount_cents": null,
+  "paid_fx_rate": null,
+  "paid_fee_cents": null,
+  "paid_at": null,
+  "paid_external_reference": null,
+  "network_fee_decimal": null,
+  "livemode": true,
+  "asset": {
+    "asset_id": "ETH_USDC",
+    "coin_symbol": "USDC",
+    "chain_symbol": "ETH",
+    "atomic_decimals": 6
+  },
+  "created_at": "2026-05-12T12:00:00.000Z",
+  "updated_at": "2026-05-12T12:00:00.000Z"
+}
+```
+</CodeGroup>
+
+The `paid_*` fields are populated once the rail settles. For a fiat off-ramp, `paid_fiat_amount_cents`, `paid_fx_rate`, and `paid_fee_cents` reflect the actual settled values (which can differ from the quote), and `paid_external_reference` carries the bank reference.
+
+**Required fields**
+
+| Field | Description |
+| --- | --- |
+| `asset_id` | Must be a coin eligible for fiat off-ramp (e.g. `USDC`, `USDT`). |
+| `amount_atomic` | Positive integer string - amount in atomic units of the asset. |
+| `fiat_payout_detail_id` | An active fiat payout detail (bank account) you've already saved. |
+| `Idempotency-Key` header | Required. Choose a value unique per logical payout. |
+
+**Common errors**
+
+| Status | When |
+| --- | --- |
+| `403` | Store KYC is not confirmed. |
+| `404` | Asset or fiat payout detail not found / not active. |
+| `422` | Amount below minimum, insufficient balance, ineligible coin, or missing idempotency key. |
+
+---
+
+## List payouts
+
+<CodeGroup>
+```bash Request
+GET /payouts?status=confirmed&asset_id=ETH_USDC&page=1&per_page=25
+Authorization: Bearer <API_KEY>
+```
+
+```json Response
+{
+  "data": [ { "id": "01HY...", "status": "confirmed", "...": "..." } ],
+  "pagination": { "page": 1, "per_page": 25, "total": 12, "total_pages": 1 }
+}
+```
+</CodeGroup>
+
+**Query parameters**
+
+| Parameter | Description |
+| --- | --- |
+| `status` | Filter by lifecycle status. |
+| `payout_rail` | Filter by rail: `crypto`, `fiat_autoswap`, or `fiat_manual`. |
+| `asset_id` | Restrict to one asset. |
+| `page`, `per_page` | Pagination. `per_page` defaults to 25, capped at 100. |
+
+---
+
+## Get a payout
+
+```bash
+GET /payouts/:id
+```
+
+Returns the same shape as the create response, reflecting current status. Subscribe to `payout.created`, `payout.confirmed`, and `payout.failed` [webhook events](/webhooks) instead of polling.
+
+---
+
+## Retry a payout
+
+Re-attempts a payout that failed. Only payouts in a retryable state can be retried.
+
+```bash
+POST /payouts/:id/retry
+Authorization: Bearer <API_KEY>
+```
+
+Returns the updated payout object.
+
+| Status | When |
+| --- | --- |
+| `409` | A retry is already in progress (`code: retry_in_progress`). |
+| `422` | The payout is not in a retryable state (`code: not_retryable`). |
+| `404` | Payout not found in the current mode. |
