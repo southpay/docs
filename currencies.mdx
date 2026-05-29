@@ -1,0 +1,104 @@
+---
+title: "Supported currencies and assets"
+description: "The fiat currencies you can charge in, and the blockchain networks and tokens your customers can pay with."
+---
+
+Southpay separates two ideas: the **fiat currency you price a payment in**, and the **crypto assets a customer can pay with**. You always set the price in fiat. Southpay handles the conversion to crypto and tells the customer exactly how much to send.
+
+## How currency works in a payment
+
+When you create a [payment intent](/payment-intents), you pass a fiat `amount` and `currency`:
+
+```json
+{ "payment_intent": { "amount": "149.00", "currency": "EUR" } }
+```
+
+That `currency` does two things:
+
+1. It sets the price the customer sees and the `settlement_currency` on the intent. A `149.00 EUR` intent always settles as `149.00 EUR`, whatever crypto the customer sends.
+2. It is the basis for the exchange rate. Southpay converts the fiat amount to the equivalent crypto amount for each asset at a rate it locks at creation time (the `exchange_rate_snapshot` on every payment address).
+
+You do not pick the crypto asset. The customer does, at checkout, from the assets your store has enabled.
+
+## How payment addresses get created
+
+On every payment intent, Southpay generates one deposit address per crypto asset your store has enabled. Each address carries the exact crypto amount due at the locked rate.
+
+```json
+"payment_addresses": [
+  {
+    "address": "0xAbCdEf...",
+    "crypto_amount_atomic": "67215000000000000",
+    "exchange_rate_snapshot": "2218.50",
+    "supported_asset": { "asset_id": "ETH", "coin_symbol": "ETH", "chain_symbol": "ETH" }
+  },
+  {
+    "address": "0xAbCdEf...",
+    "crypto_amount_atomic": "149000000",
+    "exchange_rate_snapshot": "1.00",
+    "supported_asset": { "asset_id": "ETH_USDC", "coin_symbol": "USDC", "chain_symbol": "ETH" }
+  }
+]
+```
+
+A few things follow from this:
+
+- **The token list is per store, not per request.** If an intent has addresses for ETH and USDC on Ethereum, it is because the store enabled those two assets. Enable or disable assets from the dashboard; you do not choose them in the API call.
+- **One address per enabled asset.** Enable five assets and every intent returns five addresses. The customer pays exactly one of them.
+- **Amounts are atomic.** `crypto_amount_atomic` is in the asset's smallest unit. Divide by `10^atomic_decimals` for a human-readable amount.
+- **An asset is skipped if no rate is available.** If a live rate cannot be fetched for an enabled asset at creation time, that address is left off the intent rather than failing the whole request.
+
+<Note>
+  The definitive list of assets a given store accepts is whatever that store has enabled. The tables below are the full catalog you can enable from, not what any single store accepts by default.
+</Note>
+
+## Fiat currencies
+
+These are the values accepted for `currency` on a payment intent. The intent settles in the same currency.
+
+| Code | Currency |
+| --- | --- |
+| `USD` | US Dollar |
+| `EUR` | Euro |
+| `GBP` | British Pound |
+| `HKD` | Hong Kong Dollar |
+| `SGD` | Singapore Dollar |
+| `JPY` | Japanese Yen |
+| `DKK` | Danish Krone |
+| `CHF` | Swiss Franc |
+| `SEK` | Swedish Krona |
+| `NOK` | Norwegian Krone |
+
+## Crypto assets
+
+Customers can pay with any of the assets below that your store has enabled. The `asset_id` is the value returned under `supported_asset.asset_id` on each payment address, so you can match an address back to its network and token.
+
+| Network | Token | Standard | `asset_id` |
+| --- | --- | --- | --- |
+| Bitcoin | BTC | Native | `BTC` |
+| Ethereum | ETH | Native | `ETH` |
+| Ethereum | USDT | ERC-20 | `ETH_USDT` |
+| Ethereum | USDC | ERC-20 | `ETH_USDC` |
+| Ethereum | USDS | ERC-20 | `ETH_USDS` |
+| Solana | SOL | Native | `SOL` |
+| Solana | USDT | SPL | `SOL_USDT` |
+| Solana | USDC | SPL | `SOL_USDC` |
+| Tron | TRX | Native | `TRON` |
+| Tron | USDT | TRC-20 | `TRON_USDT` |
+| Avalanche (C-Chain) | AVAX | Native | `AVAXC` |
+| Avalanche (C-Chain) | ETH | ERC-20 | `AVAXC_WETH` |
+| Avalanche (C-Chain) | USDT | ERC-20 | `AVAXC_USDT` |
+| Avalanche (C-Chain) | USDT.e | ERC-20 | `AVAXC_USDTE` |
+| Avalanche (C-Chain) | USDC | ERC-20 | `AVAXC_USDC2` |
+| Avalanche (C-Chain) | USDC.e | ERC-20 | `AVAXC_USDC` |
+| Ethereum Classic | ETC | Native | `ETC` |
+| Litecoin | LTC | Native | `LTC` |
+| TON | USDT | Jetton | `TON_USDT` |
+
+### Testnet
+
+In test mode, payments run on Ethereum Sepolia so you can integrate without moving real funds. See [Environments](/environments) for how test and live mode differ.
+
+| Network | Token | `asset_id` |
+| --- | --- | --- |
+| Ethereum Sepolia | ETH | `SETH` |

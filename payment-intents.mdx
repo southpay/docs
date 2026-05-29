@@ -5,9 +5,9 @@ description: "Create and manage crypto payment requests. The central resource in
 
 ## What is a Payment Intent?
 
-A Payment Intent represents a single, atomic payment request. You specify a fiat amount and currency; Southpay calculates the equivalent crypto amount at the current exchange rate and allocates a deposit address for each blockchain your store supports.
+A Payment Intent represents a single, atomic payment request. You specify a fiat amount and currency; Southpay calculates the equivalent crypto amount at the current exchange rate and allocates a deposit address for each crypto asset your store has enabled.
 
-The intent captures a rate snapshot at creation time, so the customer always knows the exact crypto amount to send.
+The intent captures a rate snapshot at creation time, so the customer always knows the exact crypto amount to send. Which tokens appear on the intent depends on what your store enabled, not on the request. See [Supported currencies and assets](/currencies) for the full catalog and how this works.
 
 ---
 
@@ -40,7 +40,7 @@ Idempotency-Key: order_8721_attempt_1   # optional but recommended
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `amount` | string | Yes | Decimal fiat amount (e.g. `"149.00"`) |
-| `currency` | string | Yes | ISO 4217 fiat code. Supported: `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY` |
+| `currency` | string | Yes | ISO 4217 fiat code. One of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK`, `NOK`. See [supported currencies](/currencies). |
 | `success_url` | string | No | Redirect URL after confirmed payment |
 | `failed_url` | string | No | Redirect URL after failed or expired payment |
 | `metadata` | object | No | Up to 50 key-value pairs (string values). Returned verbatim in all events. |
@@ -69,7 +69,7 @@ Idempotency-Key: order_8721_attempt_1   # optional but recommended
       "crypto_amount_atomic": "67215000000000000",
       "exchange_rate_snapshot": "2218.50",
       "supported_asset": {
-        "asset_id": "ETH_ETH",
+        "asset_id": "ETH",
         "coin_symbol": "ETH",
         "chain_symbol": "ETH",
         "atomic_decimals": 18
@@ -82,7 +82,7 @@ Idempotency-Key: order_8721_attempt_1   # optional but recommended
       "crypto_amount_atomic": "149000000",
       "exchange_rate_snapshot": "1.00",
       "supported_asset": {
-        "asset_id": "USDC_ETH_ERC20",
+        "asset_id": "ETH_USDC",
         "coin_symbol": "USDC",
         "chain_symbol": "ETH",
         "token_standard": "ERC20",
