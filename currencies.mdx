@@ -71,38 +71,38 @@ These are the values accepted for `currency` on a payment intent. The intent set
 
 ## Crypto assets
 
-Customers can pay with any of the assets below that your store has enabled. The `asset_id` is the value returned under `supported_asset.asset_id` on each payment address, so you can match an address back to its network and token.
+Customers can pay with any of the assets below that your store has enabled. The list is grouped by token, so you can scan for the coin first and see which networks carry it. The `asset_id` is the value returned under `supported_asset.asset_id` on each payment address, so you can match an address back to its token and network.
 
 <Info>
   Need a network or token that is not listed here? Email [support@southpay.io](mailto:support@southpay.io) and ask for it. We add assets on request.
 </Info>
 
-| Network | Token | Standard | `asset_id` |
+| Token | Network | Standard | `asset_id` |
 | --- | --- | --- | --- |
-| Bitcoin | BTC | Native | `BTC` |
-| Ethereum | ETH | Native | `ETH` |
-| Ethereum | USDT | ERC-20 | `ETH_USDT` |
-| Ethereum | USDC | ERC-20 | `ETH_USDC` |
-| Ethereum | USDS | ERC-20 | `ETH_USDS` |
-| Solana | SOL | Native | `SOL` |
-| Solana | USDT | SPL | `SOL_USDT` |
-| Solana | USDC | SPL | `SOL_USDC` |
-| Tron | TRX | Native | `TRON` |
-| Tron | USDT | TRC-20 | `TRON_USDT` |
-| Avalanche (C-Chain) | AVAX | Native | `AVAXC` |
-| Avalanche (C-Chain) | ETH | ERC-20 | `AVAXC_WETH` |
-| Avalanche (C-Chain) | USDT | ERC-20 | `AVAXC_USDT` |
-| Avalanche (C-Chain) | USDT.e | ERC-20 | `AVAXC_USDTE` |
-| Avalanche (C-Chain) | USDC | ERC-20 | `AVAXC_USDC2` |
-| Avalanche (C-Chain) | USDC.e | ERC-20 | `AVAXC_USDC` |
-| Ethereum Classic | ETC | Native | `ETC` |
-| Litecoin | LTC | Native | `LTC` |
-| TON | USDT | Jetton | `TON_USDT` |
+| USDT | Ethereum | ERC-20 | `ETH_USDT` |
+| USDT | Tron | TRC-20 | `TRON_USDT` |
+| USDT | Solana | SPL | `SOL_USDT` |
+| USDT | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDT` |
+| USDT | TON | Jetton | `TON_USDT` |
+| USDT.e | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDTE` |
+| USDC | Ethereum | ERC-20 | `ETH_USDC` |
+| USDC | Solana | SPL | `SOL_USDC` |
+| USDC | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDC2` |
+| USDC.e | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDC` |
+| USDS | Ethereum | ERC-20 | `ETH_USDS` |
+| BTC | Bitcoin | Native | `BTC` |
+| ETH | Ethereum | Native | `ETH` |
+| ETH | Avalanche (C-Chain) | ERC-20 (wrapped) | `AVAXC_WETH` |
+| SOL | Solana | Native | `SOL` |
+| AVAX | Avalanche (C-Chain) | Native | `AVAXC` |
+| TRX | Tron | Native | `TRON` |
+| LTC | Litecoin | Native | `LTC` |
+| ETC | Ethereum Classic | Native | `ETC` |
 
 ### Testnet
 
 In test mode, payments run on Ethereum Sepolia so you can integrate without moving real funds. See [Environments](/environments) for how test and live mode differ.
 
-| Network | Token | `asset_id` |
+| Token | Network | `asset_id` |
 | --- | --- | --- |
-| Ethereum Sepolia | ETH | `SETH` |
+| ETH | Ethereum Sepolia | `SETH` |
