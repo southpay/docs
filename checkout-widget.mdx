@@ -114,21 +114,24 @@ const handle = southpay.mount({ reference, container: "#checkout" });
 handle.unmount();
 ```
 
-## Confirm the payment on your server
+## Verify the payment on your server
 
-`onCompleted` runs in the buyer's browser, so use it to update the UI, not to release goods. Treat the browser as untrusted and confirm the payment server-side before fulfilling.
+Southpay sets the payment status from the on-chain payment. As funds arrive and confirm, Southpay moves the intent through `pending → processing → confirming → completed`. You never set the status yourself; you read it.
 
-Either listen for the [`payment_intent.completed` webhook](/webhooks), or re-fetch the intent with your secret key:
+`onCompleted` runs in the buyer's browser, so use it for the UI only, not to release goods. Before fulfilling, read the status from Southpay:
+
+- listen for the [`payment_intent.completed` webhook](/webhooks), or
+- re-fetch the intent with your secret key:
 
 ```bash
 curl https://api.southpay.io/api/v2/payments/{id} \
   -H "Authorization: Bearer sp_sk_live_..."
 ```
 
-Fulfill the order only when the intent's `status` is `completed`.
+Fulfill the order only when Southpay reports `status: completed`.
 
 <Warning>
-  Never fulfill an order based on a client-side callback alone. A page can call `onCompleted` without a real payment.
+  Never fulfill based on the browser callback alone. A page can call `onCompleted` without a real payment. Southpay marking the intent `completed`, after on-chain confirmation, is the source of truth.
 </Warning>
 
 ## Errors
