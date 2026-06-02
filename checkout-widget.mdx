@@ -1,0 +1,142 @@
+---
+title: "Checkout widget (southpay.js)"
+description: "Embed crypto checkout in the browser with the @southpay/js SDK and a publishable key."
+---
+
+## Overview
+
+`@southpay/js` renders the Southpay hosted checkout inside your page, either inline or as a modal. It runs in the browser with a [publishable key](/authentication#key-types) (`sp_pk_...`). All payment UI (QR code, wallet connect, status, countdown) lives in a sandboxed iframe served from the checkout origin, so the SDK itself stays small and has no dependencies.
+
+There are two flows:
+
+- **Server-created** - your server creates the payment intent with a secret key, then passes the `reference` to the page and the browser mounts it. The buyer cannot change the amount. Use this for fixed-price goods.
+- **Browser-created** - the browser creates the intent with a publishable key. Use this for donations or pay-what-you-want, where a buyer-chosen amount is intended.
+
+<Warning>
+  The amount in a browser-created checkout is set on the client and can be altered by the buyer. For fixed prices, create the intent on your server (see [Payment intents](/payment-intents)) and mount the `reference`.
+</Warning>
+
+## Install
+
+Load the hosted script, which exposes a global `SouthPay`:
+
+```html
+<script src="https://integrate.southpay.io/widgets/v2.js"></script>
+```
+
+Or install from npm:
+
+```bash
+npm install @southpay/js
+```
+
+```ts
+import { SouthPay } from "@southpay/js";
+```
+
+## Create a client
+
+```ts
+const southpay = SouthPay("sp_pk_live_...");
+```
+
+`SouthPay()` throws if the value is not a publishable key, so a secret key can never be used by mistake.
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `apiBase` | `https://api.southpay.io` | API base URL. |
+| `checkoutOrigin` | `https://pay.southpay.io` | Origin that serves the checkout iframe. |
+
+```ts
+const southpay = SouthPay("sp_pk_test_...", {
+  apiBase: "http://localhost:3000",
+  checkoutOrigin: "http://localhost:5173",
+});
+```
+
+## Server-created checkout
+
+Create the intent on your server, send the `reference` to the page, then mount it. No key is needed for `mount`.
+
+```ts
+southpay.mount({
+  reference: "REFERENCE_FROM_YOUR_SERVER",
+  container: "#checkout",
+  onCompleted: ({ successUrl }) => {
+    if (successUrl) window.location.assign(successUrl);
+  },
+});
+```
+
+## Browser-created checkout
+
+```ts
+await southpay.createCheckout({
+  amount: 1000,
+  currency: "EUR",
+  container: "#checkout",
+  onCompleted: ({ reference }) => console.log("paid", reference),
+});
+```
+
+`amount` is in the minor unit of the currency (`1000` is `10.00` EUR; zero-decimal currencies like JPY use whole units). Omit `container` to open the checkout as a modal overlay.
+
+The create request is idempotent: a key is generated per call, or pass your own `idempotencyKey`. It times out after 20 seconds (`timeoutMs`) and accepts an `AbortSignal` via `signal`.
+
+## Options
+
+Both `createCheckout` and `mount` accept:
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `container` | `string \| HTMLElement` | Element or CSS selector to mount into. Omit for a modal. |
+| `minHeight` | `number` | Minimum iframe height in pixels. Defaults to 560. |
+
+`createCheckout` also accepts `amount`, `currency`, and the optional `orderId`, `title`, `description`, `imageUrl`, `successUrl`, `failedUrl`, `metadata`, `idempotencyKey`, `signal`, and `timeoutMs`. `mount` accepts `reference`.
+
+## Callbacks
+
+| Callback | Payload |
+| --- | --- |
+| `onReady` | none |
+| `onStatusChange` | `{ reference, status }` |
+| `onCompleted` | `{ reference, successUrl }` |
+| `onFailed` | `{ reference, status }` |
+| `onExpired` | `{ reference }` |
+| `onError` | `SouthpayError` |
+
+`status` is one of `created`, `pending`, `confirming`, `processing`, `completed`, `failed`, `expired`. When `onCompleted` is not provided, the SDK redirects to `successUrl` if one is present.
+
+Both methods return a handle:
+
+```ts
+const handle = southpay.mount({ reference, container: "#checkout" });
+handle.unmount();
+```
+
+## Errors
+
+`SouthPay()`, `createCheckout`, and `mount` throw `SouthpayError`, which has a `code`:
+
+| Code | Meaning |
+| --- | --- |
+| `invalid_publishable_key` | The key is missing or is not a publishable key. |
+| `invalid_config` | `apiBase` or `checkoutOrigin` is not a valid http(s) URL. |
+| `invalid_amount` | `amount` is not a positive integer. |
+| `missing_currency` | `currency` was not provided. |
+| `missing_reference` | `reference` was not provided to `mount`. |
+| `container_not_found` | The `container` selector matched no element. |
+| `network_error` | The create request failed to reach the API. |
+| `timeout` | The create request exceeded `timeoutMs`. |
+| `request_failed` | The API returned an error; `message` carries the detail. |
+| `invalid_response` | The API response did not include a reference. |
+| `widget_load_failed` | The checkout iframe failed to load. |
+
+Use the `isSouthpayError` guard to narrow caught values.
+
+## Security
+
+- The SDK accepts publishable keys only; a secret key throws at construction.
+- The checkout runs in a sandboxed iframe. Inbound events are accepted only from the configured `checkoutOrigin` and the checkout window, and every payload is validated.
+- Completion redirects are restricted to http(s) URLs.
+- For fixed prices, fix the amount on your server and mount the `reference`. Do not rely on a browser-set amount.

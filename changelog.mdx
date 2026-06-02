@@ -3,6 +3,21 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the Southpay API and platform"
 ---
 
+<Update label="June 2, 2026" description="Publishable API keys, scoped secret keys, and a browser checkout SDK" tags={["Feature"]}>
+## Week of June 2
+
+You can now scope API keys to least privilege, mint publishable keys for the browser, and embed checkout with a JavaScript SDK.
+
+### New features
+
+- **Publishable API keys**: A new key type (`sp_pk_live_...` / `sp_pk_test_...`) is safe to use in browser and client-side code. Publishable keys can only create checkouts. Create one from **Settings → API Keys** by choosing the **Publishable** type, or via the API with `"key_type": "publishable"`. [See authentication](/authentication#key-types)
+
+- **Scoped secret keys**: Secret keys now carry scopes (`payments:write`, `refunds:read`, `payouts:write`, and more). Restrict a key to least privilege by passing a `scopes` array when you create it. A request missing a required scope returns `403` with code `insufficient_scope`. [See scopes](/authentication#scopes)
+
+- **Checkout widget (`@southpay/js`)**: Embed the hosted checkout inline or as a modal with a few lines of JavaScript, using a publishable key. Create checkouts in the browser, or mount a checkout your server created. [Read the guide](/checkout-widget)
+
+</Update>
+
 <Update label="April 28, 2026" description="Automatic refunds for failed payments, OAuth livemode at authorization, and confirmation accuracy fixes" tags={["Feature", "Improvement", "Fix"]}>
 ## Week of April 28
 

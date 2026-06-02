@@ -5,11 +5,12 @@ description: "API keys for server-side integrations. OAuth 2.0 with PKCE for thi
 
 ## Overview
 
-Southpay supports two authentication methods:
+Southpay supports three authentication methods:
 
 | Method | Format | Use case |
 | --- | --- | --- |
-| **API Key** | `sp_live_...` / `sp_test_...` | Server-side integrations you control |
+| **Secret API key** | `sp_sk_live_...` / `sp_sk_test_...` | Server-side integrations you control |
+| **Publishable API key** | `sp_pk_live_...` / `sp_pk_test_...` | Browser and client-side code (checkout creation only) |
 | **OAuth 2.0** | `spo_...` | Third-party applications acting on behalf of a merchant |
 
 All requests must include an `Authorization: Bearer <token>` header. HTTPS is required on all endpoints.
@@ -18,25 +19,51 @@ All requests must include an `Authorization: Bearer <token>` header. HTTPS is re
 
 ## API Keys
 
-API keys are the fastest way to integrate. Create one from the dashboard under **Settings → API Keys**.
+API keys are the fastest way to integrate. Create one from the dashboard under **Settings → API Keys**. Each key is tied to a single store and a mode (live or test). The prefix encodes both the type and the mode.
 
-Each key is tied to a specific store and mode (live or test). The key format encodes the mode:
+### Key types
 
-- `sp_live_...` - live mode, real funds
-- `sp_test_...` - test mode, synthetic transactions
+| Type | Prefix | Where it runs | Can do |
+| --- | --- | --- | --- |
+| **Secret** | `sp_sk_live_...` / `sp_sk_test_...` | Server-side only | Full API access, subject to scopes |
+| **Publishable** | `sp_pk_live_...` / `sp_pk_test_...` | Browser and client-side | Create checkouts only |
+
+<Warning>
+  Secret keys grant access to your account. Keep them on your server and never ship them in client-side code, mobile apps, or version control. Rotate immediately if a secret key is exposed. Publishable keys are safe to embed in a web page; they can only create checkouts.
+</Warning>
+
+Keys created before key types were introduced use the `sp_live_...` / `sp_test_...` prefix. They behave like secret keys with full access and continue to work.
 
 ### Using an API key
 
 ```bash
 curl https://api.southpay.io/api/v2/payments \
-  -H "Authorization: Bearer sp_test_your_key_here"
+  -H "Authorization: Bearer sp_sk_test_your_key_here"
 ```
 
 No `X-Store-Id` header is required when using an API key - the store is implicit in the key. Mode (live vs test) is also implicit, so no `X-Livemode` header is needed.
 
+### Scopes
+
+A secret key carries a set of scopes that bound what it can do. By default a new secret key has full access. Restrict a key to least privilege by passing an explicit `scopes` array when you create it.
+
+| Scope | Access |
+| --- | --- |
+| `payments:read` / `payments:write` | Read or create payment intents |
+| `refunds:read` / `refunds:write` | Read or create refunds |
+| `payouts:read` / `payouts:write` | Read or trigger payouts and schedules |
+| `balances:read` | Read balances and reports |
+| `billing:read` / `billing:write` | Read or manage billing (customers, invoices, products, prices, subscriptions) |
+| `webhooks:read` / `webhooks:write` | Read or manage webhook endpoints |
+| `stores:read` | List and read store details |
+
+Write implies read for the same resource. A request that needs a scope the key lacks returns `403` with code `insufficient_scope`.
+
+Publishable keys are fixed to creating checkouts and cannot be widened. They are rejected on every endpoint except `POST /api/v2/payments`.
+
 ### What API keys can access
 
-API keys can call the **public API surface**: payment intents, balances, payouts, payout schedules, webhook endpoints, and verification requests.
+Secret API keys can call the **public API surface**: payment intents, balances, payouts, payout schedules, webhook endpoints, and verification requests.
 
 A handful of dashboard-only endpoints - listing/managing API keys themselves, payout details (bank/wallet), custom domains, store records, store settings, and the catalog endpoints (`supported_assets`, `networks`, `payment_currencies`) - require a logged-in dashboard session (JWT). These pages are flagged with a "Dashboard sessions only" callout in the API reference.
 
@@ -50,7 +77,7 @@ When you sign in to the Southpay dashboard you receive a JWT bearer token. Dashb
 
 ### Managing API keys
 
-**Create a key:**
+**Create a secret key:**
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/api_keys \
@@ -59,12 +86,31 @@ curl -X POST https://api.southpay.io/api/v2/api_keys \
   -d '{
     "api_key": {
       "name": "Production Server",
-      "mode": "live"
+      "mode": "live",
+      "key_type": "secret",
+      "scopes": ["payments:read", "payments:write"]
     }
   }'
 ```
 
-The `secret` field in the response is the full key. **It is only shown once.** Store it in a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.).
+`key_type` defaults to `secret`. Omit `scopes` to grant full access, or pass an array to restrict the key. The `secret` field in the response is the full key. **It is only shown once.** Store it in a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.).
+
+**Create a publishable key** for the browser SDK:
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/api_keys \
+  -H "Authorization: Bearer <jwt_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": {
+      "name": "Web checkout",
+      "mode": "live",
+      "key_type": "publishable"
+    }
+  }'
+```
+
+Publishable keys are scoped to checkout creation automatically. See [Checkout widget](/checkout-widget).
 
 **Revoke a key:**
 

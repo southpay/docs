@@ -45,6 +45,12 @@
             ]
           },
           {
+            "group": "Checkout widget",
+            "pages": [
+              "checkout-widget"
+            ]
+          },
+          {
             "group": "OAuth Integrations",
             "pages": [
               "oauth-apps"
