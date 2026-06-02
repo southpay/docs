@@ -40,12 +40,13 @@ import { SouthPay } from "@southpay/js";
 const southpay = SouthPay("sp_pk_live_...");
 ```
 
-`SouthPay()` throws if the value is not a publishable key, so a secret key can never be used by mistake.
+`SouthPay()` throws if the value is not a publishable key, so a secret key can never be used by mistake. It returns a client with two resources: `southpay.paymentIntents` (create an intent) and `southpay.checkout` (mount the widget).
 
 | Option | Default | Description |
 | --- | --- | --- |
 | `apiBase` | `https://api.southpay.io` | API base URL. |
 | `checkoutOrigin` | `https://pay.southpay.io` | Origin that serves the checkout iframe. |
+| `nonce` | none | CSP nonce. When set, the SDK emits a single nonce'd `<style>` and no inline styles, so it works under a strict `style-src`. |
 
 ```ts
 const southpay = SouthPay("sp_pk_test_...", {
@@ -59,7 +60,7 @@ const southpay = SouthPay("sp_pk_test_...", {
 Create the intent on your server, send the `reference` to the page, then mount it. No key is needed for `mount`.
 
 ```ts
-southpay.mount({
+southpay.checkout.mount({
   reference: "REFERENCE_FROM_YOUR_SERVER",
   container: "#checkout",
   onCompleted: ({ successUrl }) => {
@@ -70,29 +71,38 @@ southpay.mount({
 
 ## Browser-created checkout
 
+Create the intent with the publishable key, then mount the returned `reference`:
+
 ```ts
-await southpay.createCheckout({
-  amount: 1000,
+const { reference } = await southpay.paymentIntents.create({
+  amount: "10.00",
   currency: "EUR",
+});
+
+southpay.checkout.mount({
+  reference,
   container: "#checkout",
   onCompleted: ({ reference }) => console.log("paid", reference),
 });
 ```
 
-`amount` is in the minor unit of the currency (`1000` is `10.00` EUR; zero-decimal currencies like JPY use whole units). Omit `container` to open the checkout as a modal overlay.
+`amount` is a decimal string in the major unit of the currency (`"10.00"` is 10 EUR). A `number` is rejected at compile time. Zero-decimal currencies like JPY take whole units (`"1000"`), and the SDK validates the number of decimal places against the currency's ISO-4217 exponent. Omit `container` on `mount` to open the checkout as a modal overlay.
 
 The create request is idempotent: a key is generated per call, or pass your own `idempotencyKey`. It times out after 20 seconds (`timeoutMs`) and accepts an `AbortSignal` via `signal`.
 
 ## Options
 
-Both `createCheckout` and `mount` accept:
+`checkout.mount` takes a `reference` plus the embed options:
 
 | Option | Type | Description |
 | --- | --- | --- |
+| `reference` | `string` | The payment intent reference to render. Required. |
 | `container` | `string \| HTMLElement` | Element or CSS selector to mount into. Omit for a modal. |
 | `minHeight` | `number` | Minimum iframe height in pixels. Defaults to 560. |
 
-`createCheckout` also accepts `amount`, `currency`, and the optional `orderId`, `title`, `description`, `imageUrl`, `successUrl`, `failedUrl`, `metadata`, `idempotencyKey`, `signal`, and `timeoutMs`. `mount` accepts `reference`.
+It also accepts the [callbacks](#callbacks) below.
+
+`paymentIntents.create` takes `amount` and `currency` (both required) plus the optional `orderId`, `title`, `description`, `imageUrl`, `successUrl`, `failedUrl`, `metadata`, `idempotencyKey`, `signal`, and `timeoutMs`. It returns `{ reference }`.
 
 ## Callbacks
 
@@ -107,10 +117,10 @@ Both `createCheckout` and `mount` accept:
 
 `status` is one of `created`, `pending`, `confirming`, `processing`, `completed`, `failed`, `expired`. When `onCompleted` is not provided, the SDK redirects to `successUrl` if one is present.
 
-Both methods return a handle:
+`checkout.mount` returns a handle (`paymentIntents.create` returns a `Promise<{ reference }>`):
 
 ```ts
-const handle = southpay.mount({ reference, container: "#checkout" });
+const handle = southpay.checkout.mount({ reference, container: "#checkout" });
 handle.unmount();
 ```
 
@@ -136,13 +146,13 @@ Fulfill the order only when Southpay reports `status: completed`.
 
 ## Errors
 
-`SouthPay()`, `createCheckout`, and `mount` throw `SouthpayError`, which has a `code`:
+`SouthPay()`, `paymentIntents.create`, and `checkout.mount` throw `SouthpayError`, which has a `code`:
 
 | Code | Meaning |
 | --- | --- |
 | `invalid_publishable_key` | The key is missing or is not a publishable key. |
 | `invalid_config` | `apiBase` or `checkoutOrigin` is not a valid http(s) URL. |
-| `invalid_amount` | `amount` is not a positive integer. |
+| `invalid_amount` | `amount` is not a positive decimal string in major units, or has more decimal places than the currency allows. |
 | `missing_currency` | `currency` was not provided. |
 | `missing_reference` | `reference` was not provided to `mount`. |
 | `container_not_found` | The `container` selector matched no element. |
