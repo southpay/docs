@@ -14,14 +14,16 @@ A single row updated under one transaction with a `CHECK` constraint is genuinel
 Correctness stops being a property of one transaction the moment money moves between more than one place.
 
 <Info>
-  Once money moves between more than one account, or crosses a system boundary (an API retry, an external processor, a cached balance), you are in ledger territory. Correctness now lives across transactions, across processes, and across time, which is exactly where a single database transaction stops protecting you.
+  **Stop hand-rolling ledger logic on Postgres the moment money moves between more than one account or crosses a system boundary (a retry, an external system, a cached balance).** Before that, a table and a `CHECK` constraint are genuinely enough. After it, correctness lives across transactions, across processes, and across time, which is exactly where a single database transaction stops protecting you.
 </Info>
 
 This is the inflection point engineers look for, and it arrives earlier than most expect: the first time you have two accounts, or the first time a client can retry a request. After that, "we will add a real ledger later" means shipping on top of a foundation that can already corrupt itself.
 
 ## ACID is not a financial correctness system
 
-The strongest objection to this page is true: Postgres gives you ACID, plus constraints, plus careful design. You should use all of it. But ACID's guarantees apply to a single database transaction, and financial correctness lives in the gaps ACID was never meant to cover.
+**ACID guarantees are necessary but not sufficient for financial correctness.** They protect a single transaction. They do not protect a ledger.
+
+The strongest objection to this page is true: Postgres gives you ACID, plus constraints, plus careful design. You should use all of it. But ACID's scope is one database transaction, and financial correctness lives in the gaps ACID was never meant to cover.
 
 - **Across transactions over time.** ACID makes each write atomic. It does not make a sequence of writes economically coherent. That a reversal exactly offsets its original, that a closed period stays closed, that a refund never exceeds what was captured: these are invariants over the history, not properties of one row update.
 - **Across retries and external systems.** A client sends a request, the network times out after the row commits but before the response, and the client retries. ACID has no idea those two HTTP calls are the same intent. Deduplication across that boundary is yours to build: idempotency keys, a uniqueness guarantee, and a replay path that returns the original.
@@ -30,9 +32,9 @@ The strongest objection to this page is true: Postgres gives you ACID, plus cons
 
 So ACID is not the financial correctness system. It is the primitive you then have to build the financial correctness system on top of. The work is the part ACID does not do for you.
 
-## What actually goes wrong
+## What eventually breaks when money scales
 
-These are the production failures, and what makes them dangerous is that every one of them returns `200 OK` at the time.
+These are not risks you might hit. Under load they are scheduled events. The concurrency you never reproduce at ten writes a second arrives on its own at a thousand, and the retry your tests never fired, a flaky network fires a hundred times a day. It is a question of throughput and time, not luck. And every one of these failures returns `200 OK` at the moment it happens.
 
 - **A retry duplicates a charge.** The insert commits, the response is lost, the client retries. With no idempotency key enforced by a unique index, the same economic event is recorded twice. The customer is debited twice and you hear about it from support.
 - **Concurrent writes drive a balance negative.** Two requests debit one account at once. Each reads a sufficient balance, each passes the non-negative check, both commit. The account goes negative. A `CHECK` on a stored balance column would only catch it by reintroducing a stored balance that can drift; the correct fix is serializing writes per account, which is a concurrency-control system, not a constraint.

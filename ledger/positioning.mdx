@@ -1,6 +1,6 @@
 ---
 title: "Where Southpay Ledger fits"
-description: "If you build a product that moves or holds money, a correct ledger is not a choice you make. It is a need you arrive at. This page is about that need, and where each path leaves you when you reach it."
+description: "If you build a product that moves or holds money, a correct ledger is not a choice you make. It is a need you arrive at. This page is about that need, where each path leaves you, and the hard axes that separate one ledger API from another."
 ---
 
 Build a product that moves or holds money and, usually sooner than you planned, you reach questions it cannot answer on its own. Why is this balance what it is. Which entry changed it. What happened between two dates. Does it reconcile with your processor and your bank. These questions do not show up because you adopted a ledger. They show up because you are building this class of product.
@@ -8,6 +8,10 @@ Build a product that moves or holds money and, usually sooner than you planned, 
 A correct, auditable, double-entry ledger is the thing that answers them. You will need one. The only real decision is whether you build and maintain it yourself or adopt it as a primitive. So this page is less about how we compare and more about the need you are heading toward, and where each common path leaves you when you get there.
 
 Southpay Ledger is a developer ledger API: primitives (accounts, postings, transactions, balances), you write the business logic, and the platform guarantees the [invariants](/ledger/invariants). It is self-serve and API-first. You sign up, get OAuth client credentials, and ship without a sales call.
+
+<Info>
+  **The decision boundary.** The moment money moves between more than one account, party, or system in real time and you need an auditable record of what it meant, you are at the layer this product serves. Before that, a table is fine. After it, the question is no longer whether you have a ledger but who maintains it.
+</Info>
 
 ## You start on Postgres
 
@@ -31,11 +35,17 @@ Accounting software like QuickBooks or Xero maintains your company's books, prod
 
 Your product asks different questions, at a different speed. It needs a programmable system of record it writes to in real time over an API, as transactions happen, at the granularity of your application's own accounts. That is a developer ledger. Many companies run both, with the ledger feeding summarized figures into their accounting system.
 
-## Once you accept you need a ledger API
+## Versus other developer ledger APIs
 
-Fragment.dev and similar developer ledger APIs sit in the same category as Southpay Ledger. If you are weighing them, you have already arrived at the need this whole page is about. From here it is a question of approach, not category.
+Fragment.dev and similar developer ledger APIs sit in the same category as Southpay Ledger, so here the question is not category but where each one draws its lines. Compare on the axes that change how your system behaves under real money, not on surface ergonomics.
 
-Southpay Ledger is developer-first: API keys in minutes, no sales call, primitives over opinions. The platform stays neutral, so it bakes in no domain-specific vocabulary, and it makes its guarantees explicit rather than implicit (see the [invariants](/ledger/invariants) page). If you compare us against another ledger API, compare on exactly that: how fast you get keys, how few assumptions the primitives make about your domain, and how clearly the invariants are stated and enforced.
+- **Where correctness is enforced.** Southpay enforces the invariants in the database itself, with deferred Postgres triggers that reject an unbalanced or mutated write at `COMMIT`, not only in an application layer a future code path can route around. The guarantees are published on the [invariants](/ledger/invariants) page so you can hold the platform to them rather than infer them.
+- **Opinionated or unopinionated semantics.** Southpay ships primitives, not a vertical. It bakes in no domain vocabulary: you define the accounting graph with account templates, and the platform guarantees the invariants, never the business meaning. A ledger that models your domain for you is faster on day one and a wall on day one hundred, when your model and its model disagree.
+- **Reconciliation as a primitive, not a report.** Reconciliation here is a first-class operation: replayable runs that match an external snapshot against postings and mark what tied out. For most teams reconciliation is the actual job, so whether it is a primitive or a spreadsheet you rebuild each month is a real axis.
+- **Event and state model.** Every write emits a durable, replayable event, and balances are derived rather than stored, so consumers can rebuild their view from the log and you can always reconstruct state exactly. A ledger whose balances are stored is a ledger that can disagree with itself.
+- **Multi-currency depth.** No code path assumes a single currency, and a cross-currency transaction records an FX snapshot at write time, so a restatement years later reproduces the original rate instead of guessing.
+
+**Pick Southpay if** you want correctness guaranteed at the database layer, a ledger that stays out of your domain model, and reconciliation plus a replayable event log as primitives rather than homework. **Look elsewhere if** you want a turnkey product that models a specific vertical for you and you are willing to inherit its assumptions to move faster on day one.
 
 ## Is this for you?
 
@@ -47,7 +57,7 @@ Southpay Ledger is developer-first: API keys in minutes, no sales call, primitiv
 
 <CardGroup cols={2}>
   <Card title="Invariants" icon="shield-check" href="/ledger/invariants">
-    The guarantees the platform enforces for you.
+    The states the platform makes impossible.
   </Card>
   <Card title="Why not just use Postgres?" icon="database" href="/ledger/why-not-postgres">
     What rolling your own ledger costs.
