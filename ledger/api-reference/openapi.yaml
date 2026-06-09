@@ -108,10 +108,10 @@ info:
     url: https://ledger.southpay.io/legal/terms
 
 servers:
-  - url: http://localhost:4000/api
-    description: Local development
   - url: https://ledger.southpay.io/api
     description: Production
+  - url: http://localhost:4000/api
+    description: Local development
 
 security:
   - oauth2_read: [ledger:read]
