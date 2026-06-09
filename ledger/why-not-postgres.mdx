@@ -1,51 +1,82 @@
 ---
 title: "Why not just use Postgres?"
-description: "Postgres is the right tool for a ledger. The question is who maintains the invariants."
+description: "Postgres is the right tool. The trap is assuming a ledger is a schema problem. It is a distributed correctness problem, and getting it wrong corrupts money silently."
 ---
 
-This is a fair question, and the honest answer starts by agreeing with the premise. Postgres is an excellent foundation for a ledger. Southpay Ledger itself runs on Postgres. So this page is not "why avoid Postgres"; it is "why not roll your own ledger on Postgres".
+This is a fair question, and the honest answer starts by agreeing. Postgres is an excellent foundation for a ledger. Southpay Ledger runs on Postgres. So this page is not "avoid Postgres". It is about what you are actually signing up to build when you decide to roll your own ledger on top of it, and why that is more than it looks.
 
-You can absolutely start with a couple of tables: an `accounts` table and a `postings` table, with a transaction id grouping postings together. That gets you a demo. The gap between that demo and a correct ledger is the part teams underestimate, because a correct ledger means building and maintaining, yourself, every guarantee on the [invariants](/ledger/invariants) page.
+The trap is treating a ledger as a schema problem: a couple of tables and some constraints. It is not. A correct ledger is a distributed correctness system, and the failure mode when you get it wrong is the worst kind. It does not crash. It returns success and silently corrupts money, and you find out weeks later when the numbers do not add up.
 
-## What you take on
+## The breaking point: when Postgres stops being enough
 
-Each item below is something you would have to build, test, and keep correct as your schema and team change.
+A single row updated under one transaction with a `CHECK` constraint is genuinely safe. Postgres handles that perfectly, and you do not need a ledger for it.
 
-- **Balanced per currency.** You need triggers that enforce `sum(debit) == sum(credit)` per currency at `COMMIT`, deferred so multi-posting writes are checked as a whole. Get the trigger timing wrong and an unbalanced transaction slips through.
-- **Append-only enforcement.** You need a `BEFORE UPDATE` trigger that freezes the economic columns while still allowing the operational fields to change. A missing constraint here means history can be quietly rewritten.
-- **Idempotency.** You need a unique index on `(ledger_id, idempotency_key)` and a write path that returns the original transaction on replay instead of erroring or double-posting. This has to survive concurrent identical requests, which is where naive "check then insert" logic races.
-- **Atomic multi-posting writes.** Every posting in a transaction must land in one database transaction, with the balance check rolling the whole thing back on failure. One stray code path that inserts postings outside the transaction breaks the guarantee.
-- **Derived balances that stay fast.** Balances must be computable from postings (so they can never drift), yet fast enough to read on the hot path. That usually means a cache layer that you have to keep consistent with the underlying postings.
+Correctness stops being a property of one transaction the moment money moves between more than one place.
 
-That is the core. A production ledger also needs more.
+<Info>
+  Once money moves between more than one account, or crosses a system boundary (an API retry, an external processor, a cached balance), you are in ledger territory. Correctness now lives across transactions, across processes, and across time, which is exactly where a single database transaction stops protecting you.
+</Info>
 
-- **Multi-currency throughout.** No code path can assume a single currency. Cross-currency transactions need an FX snapshot recorded at write time so restatements are reproducible.
-- **A stable HTTP API and error contract.** Other services and teammates need an interface with versioned shapes, machine-readable error codes, pagination, and expansion, so callers are not coupled to your table layout.
-- **Webhooks and an events tail.** Consumers need to react to writes and to replay a durable history when they fall behind.
-- **Point-in-time history.** Balances and statements "as of" a date require value-date semantics, not insertion time, so an auditor can reproduce a number.
-- **Reconciliation.** Comparing your ledger against an external system requires matching logic and a record of what was matched.
+This is the inflection point engineers look for, and it arrives earlier than most expect: the first time you have two accounts, or the first time a client can retry a request. After that, "we will add a real ledger later" means shipping on top of a foundation that can already corrupt itself.
 
-## The real cost
+## ACID is not a financial correctness system
 
-None of these are exotic. The problem is that each one is a place to get money math subtly wrong, and the failures are quiet: a balance that drifts by a cent, a duplicate posting under retry, a reversal that does not quite offset. You find them in production, against real money, often months later.
+The strongest objection to this page is true: Postgres gives you ACID, plus constraints, plus careful design. You should use all of it. But ACID's guarantees apply to a single database transaction, and financial correctness lives in the gaps ACID was never meant to cover.
 
-Every hour spent building and maintaining this plumbing is an hour not spent on your product. The ledger is critical, but it is rarely your differentiator.
+- **Across transactions over time.** ACID makes each write atomic. It does not make a sequence of writes economically coherent. That a reversal exactly offsets its original, that a closed period stays closed, that a refund never exceeds what was captured: these are invariants over the history, not properties of one row update.
+- **Across retries and external systems.** A client sends a request, the network times out after the row commits but before the response, and the client retries. ACID has no idea those two HTTP calls are the same intent. Deduplication across that boundary is yours to build: idempotency keys, a uniqueness guarantee, and a replay path that returns the original.
+- **Across derived state.** A cached balance and the postings it summarizes are two representations of the same fact. ACID keeps one transaction internally consistent. It does not keep a materialized total in sync with the rows beneath it as both evolve.
+- **Across concurrency on business rules.** Isolation stops dirty reads. It does not stop a "check the balance, then post" sequence from racing two concurrent debits that each saw enough funds. Preventing that is concurrency control you design, not a flag you set.
+
+So ACID is not the financial correctness system. It is the primitive you then have to build the financial correctness system on top of. The work is the part ACID does not do for you.
+
+## What actually goes wrong
+
+These are the production failures, and what makes them dangerous is that every one of them returns `200 OK` at the time.
+
+- **A retry duplicates a charge.** The insert commits, the response is lost, the client retries. With no idempotency key enforced by a unique index, the same economic event is recorded twice. The customer is debited twice and you hear about it from support.
+- **Concurrent writes drive a balance negative.** Two requests debit one account at once. Each reads a sufficient balance, each passes the non-negative check, both commit. The account goes negative. A `CHECK` on a stored balance column would only catch it by reintroducing a stored balance that can drift; the correct fix is serializing writes per account, which is a concurrency-control system, not a constraint.
+- **A partial failure leaves the ledger unbalanced.** A write lands some postings and then the process dies, or one code path inserts a posting outside the surrounding transaction. Debits and credits no longer match. Conservation is broken and the gap is permanent.
+- **A race creates phantom funds.** Operations across accounts interleave in an order no one intended, and value appears that was never deposited. These are the worst bugs: nondeterministic, timing-dependent, and invisible to a single-threaded test.
+- **A reconciliation mismatch surfaces weeks later.** None of the above fails loudly. The system keeps returning success while the corruption sits in the data, and thousands of later transactions build on the bad state before anyone compares totals against a bank or a processor and finds they do not agree.
+
+```mermaid
+flowchart LR
+  A[Write returns 200 OK] --> B[Corruption is latent in the data]
+  B --> C[Thousands of transactions build on it]
+  C --> D[Weeks later, reconciliation does not tie out]
+  D --> E[You unwind state with real money on it]
+```
+
+The throughline is silence. A ledger built wrong does not page you. It keeps working, and the cost compounds with every transaction written on top of the corruption.
+
+## What you are actually signing up to build
+
+Said plainly: not a schema, a distributed correctness system that holds money invariants across retries, concurrency, external systems, derived state, and time. Each piece below is one part of that system, and getting any single one wrong silently corrupts money.
+
+- Balanced-per-currency enforcement, deferred to `COMMIT` so multi-posting writes check as a whole.
+- Append-only history with the economic columns frozen, so the past cannot be rewritten.
+- Idempotency that survives concurrent identical requests across the network boundary.
+- Atomic multi-posting writes that roll back entirely on any failure.
+- Per-account serialization so balance-dependent decisions cannot race.
+- Derived balances that stay fast without becoming a second source of truth.
+- Multi-currency with an FX snapshot recorded at write time, a stable API and error contract, webhooks and a replayable events tail, value-date point-in-time history, and reconciliation against external systems.
+
+Every hour spent building and maintaining that system is an hour not spent on your product, and the ledger is rarely your differentiator.
 
 ## Where Southpay Ledger fits
 
-Southpay Ledger is that correctness layer, offered as an API. The invariants are enforced for you in application code and in Postgres triggers, multi-currency is first class, the HTTP contract is stable, and webhooks, point-in-time history, and reconciliation are built in. Your team writes the business logic and we guarantee the ledger holds.
-
-If you are weighing this against other approaches, see [where Southpay Ledger fits](/ledger/positioning) for how it compares to processors, accounting software, and other developer ledger APIs.
+Southpay Ledger is that correctness system, offered as an API. The [invariants](/ledger/invariants) are enforced for you in application code and in Postgres triggers, idempotency holds across the network boundary, writes are serialized per account, balances are derived, and multi-currency, point-in-time history, and reconciliation are built in. You write the business logic, and the ledger cannot enter an impossible state.
 
 <CardGroup cols={2}>
   <Card title="Invariants" icon="shield-check" href="/ledger/invariants">
-    The exact guarantees you would otherwise build yourself.
+    The states the ledger makes impossible.
   </Card>
   <Card title="Where Southpay Ledger fits" icon="map" href="/ledger/positioning">
-    The category and how it compares.
+    The category and where you arrive at the need.
   </Card>
   <Card title="Reconciliation" icon="scale-balanced" href="/ledger/reconciliation">
-    Comparing against an external system, built in.
+    Where silent corruption would otherwise surface.
   </Card>
   <Card title="Quickstart" icon="rocket" href="/ledger/quickstart">
     From credentials to a posted transaction in four calls.

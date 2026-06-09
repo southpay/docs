@@ -1,66 +1,135 @@
 ---
 title: "Invariants"
-description: "The guarantees the platform enforces so you do not have to. Each one lets you trust the ledger without auditing our code."
+description: "A ledger is not a set of rules we promise to follow. It is a system built so that certain financial states cannot exist. Each invariant makes a class of corruption impossible."
 ---
 
-These are guarantees, not conventions. The platform enforces every statement on this page in application code and, where money correctness depends on it, in the database itself. You do not opt in to them and you cannot turn them off. They hold for every write, in every mode, for every tenant.
+Most systems store state and hope it stays correct. A ledger inverts that. It is built so that incorrect states cannot be represented in the first place. Each invariant on this page is not a guideline we try to honor. It is a constraint that makes a specific kind of money corruption impossible, so that when the invariant holds, the meaning of every balance stays unambiguous.
 
-Read each invariant as a trust statement followed by how it is enforced. Taken together, they let you trust the ledger without reading our source.
+Read each one as a guarantee followed by the failure it removes: the bug class that becomes possible the moment the invariant does not hold. Infrastructure is judged on its failure modes, not its definitions, so that is how this page is written.
 
-## Total debits equal total credits, per currency
+## The root invariant: the ledger is always replayable
 
-A transaction is correct only when its debits equal its credits in every currency it touches. There is no "almost balanced" state and no way to persist one.
+There is one principle underneath all the others. The postings are the only source of truth, and every balance, statement, and report is a deterministic function of them. State is never authoritative on its own. It can always be thrown away and reconstructed by replaying the postings, and the reconstruction is always identical.
 
-This is enforced in two places. Application code checks the balance before the write. The database checks it again with deferred Postgres triggers on the postings table, firing on `INSERT`, on `UPDATE` of `amount`, `direction`, or `currency`, and on `DELETE`. Because the trigger is deferred, it runs at `COMMIT`, so a multi-posting transaction is checked as a whole. An unbalanced write never commits.
+If that holds, you can always answer "is this number real?" by recomputing it from the entries. Every other invariant on this page exists to keep the log clean enough that the replay is always exact: the entries must be immutable (so the past does not move), value must be conserved (so the total is meaningful), writes must be atomic and idempotent (so the log has no torn or duplicated entries), and history must be deterministic (so two replays agree). Lose replayability and the ledger stops being a system of record and becomes just another database you have to trust.
 
-## Entries are immutable and append-only
+The invariants below are grouped by what they protect: the shape of the log, the conservation of value, the way writes happen, and the ability to reconstruct and reconcile.
 
-Once a posting is written, its economic meaning never changes. You do not edit history; you append to it.
+## Structural invariants: the shape of the log
 
-The economic columns of a posting (`amount`, `direction`, `currency`, and `account_id`) are immutable, enforced by a `BEFORE UPDATE` trigger that rejects any change to them. Only two operational fields may be updated: a commit-pending flag (flipped when a pending transaction commits) and the reconciliation fields (written by the reconciliation loop). Everything else about a posting is frozen at write time. You correct a mistake by posting a new reversal or refund transaction that references the original, never by editing the original.
+These keep the log itself well-formed, so that what you replay is the same thing that was written.
 
-## Transactions are atomic
+### Entries are immutable and append-only
 
-A transaction and all of its postings land together or not at all. You never observe a half-written transaction.
+A posting's economic meaning never changes once written. You correct by appending a reversal or refund that references the original, never by editing it. The economic columns (`amount`, `direction`, `currency`, `account_id`) are frozen by a `BEFORE UPDATE` trigger; only a commit-pending flag and the reconciliation fields may ever change.
 
-The write coordinator inserts the transaction row and every posting inside a single database transaction. If any part fails, including the balance check at `COMMIT`, the whole write rolls back. There is no path that commits some postings and drops others.
+**What breaks if it fails:** the past becomes editable. An audit can no longer trust that an entry says today what it said when it was written, a dispute has no fixed record to point at, and replay produces a different history every time you run it. Append-only is what makes the log a record rather than a guess.
 
-## Operations are idempotent
+### Live and test data never interleave
 
-Retrying a write never double-posts. The same logical operation maps to the same transaction forever.
+Each OAuth client is bound to one mode, and live and test data are segregated at the storage level. The mode of your token decides which dataset you touch.
 
-Each `(ledger_id, idempotency_key)` pair maps to exactly one transaction, backed by a unique index. Replaying a write with the same key returns the original transaction instead of creating a new one, and the response carries an idempotent-replayed marker so you can tell a replay from a fresh write. Because the uniqueness is enforced by the database, a race between two identical requests still results in exactly one transaction.
+**What breaks if it fails:** test traffic contaminates real balances. A load test or a demo could inflate a production total, and you could no longer tell synthetic movements from real ones.
 
-## Balances are derived, never stored
+### Amounts are integer minor units, and currency is immutable
 
-A balance is always a function of the postings beneath it. There is no balance column that could drift out of sync with history.
+Every amount is a `BIGINT` in the currency's smallest unit (cents, satoshis); floats are rejected at the schema. An account's `currency` is set at creation and can never change.
 
-The durable source of truth is the postings. A balance is computed from the account's postings, so it can always be recomputed from scratch and reconciled against the underlying entries. A hot account keeps a running total in memory as a cache for speed, but that cache is derived from the same postings and is never the authority. If the cache and the postings ever disagreed, the postings win.
+**What breaks if it fails:** floating point reintroduces sub-cent drift that accumulates and never reconciles, and a mutable currency would silently reinterpret every historical posting on the account, changing what past entries mean after the fact.
 
-## Supporting invariants
+## Financial invariants: conservation of value
 
-These hold alongside the five above and are enforced the same way.
+These are the accounting laws. They make value behave like a conserved quantity that can move but cannot appear or vanish.
 
-- **Live and test data are physically separate.** Each OAuth client is bound to one mode. Live and test data are mode-segregated at the storage level and never interleave. The mode of your token decides which dataset you touch.
-- **Amounts are integer minor units only.** Every amount is a `BIGINT` in the currency's smallest unit (cents for `USD`, satoshis for `BTC`). Floats are rejected at the schema, so there is no floating-point rounding in the wire format or the store.
-- **An account's currency is immutable.** You set `currency` when you create an account, and it can never change. A posting's currency must match its account.
-- **Point-in-time queries use `value_date`.** Historical balances and statements are computed from each posting's `value_date` (when the movement is economically effective), not from when the row happened to be inserted. The same query at the same instant always returns the same answer.
+### Debits equal credits, per currency
 
-## Why this matters
+Every transaction balances in every currency it touches. Value is only ever moved between accounts, never created or destroyed. This is checked in application code and again by deferred Postgres triggers that fire at `COMMIT`, so a multi-posting transaction is validated as a whole.
 
-You are building a money system on top of this ledger. Each statement on this page is something you would otherwise have to build and maintain yourself, and each is a place where money math goes subtly wrong. Because the platform enforces them, you can reason about your integration in terms of the guarantees rather than in terms of our internals.
+**What breaks if it fails:** money is conjured or lost. The trial balance stops summing to zero, no total can be trusted, and you are left unable to prove that the funds you report actually exist.
+
+### Balances are derived, never stored
+
+A balance is a function of the postings beneath it. There is no balance column. A hot account keeps a running total in memory as a cache, but the postings are always the authority; if the cache and the postings ever disagreed, the postings win.
+
+**What breaks if it fails:** a stored balance becomes a second source of truth that can drift from the entries it claims to summarize. You end up with two numbers that disagree and no principled way to say which is real. A derived balance cannot drift, because there is nothing to drift from.
+
+```mermaid
+flowchart LR
+  A[Balance stored as a column] --> B[Entries update but the cached total does not]
+  B --> C[Stored balance drifts from its postings]
+  C --> D[Two sources of truth disagree]
+  D --> E[No way to tell which number is real]
+```
+
+## Execution invariants: how writes happen
+
+These govern the act of writing, so that the log never ends up with a torn, duplicated, or race-corrupted entry.
+
+### Transactions are atomic
+
+A transaction and all of its postings commit together or not at all. The coordinator writes them inside a single database transaction; if any part fails, including the balance check at `COMMIT`, the whole write rolls back.
+
+**What breaks if it fails:** a half-written transaction lands, with some postings present and their counterparties missing. That single torn write violates conservation directly: the ledger no longer balances, and the gap is permanent.
+
+```mermaid
+flowchart LR
+  A[No atomicity] --> B[Some postings commit, others fail]
+  B --> C[Transaction no longer balances]
+  C --> D[Value created or destroyed]
+  D --> E[Trial balance stops summing to zero]
+```
+
+### Operations are idempotent
+
+Each `(ledger_id, idempotency_key)` maps to exactly one transaction forever, enforced by a unique index. A replay returns the original transaction and a replayed marker, and because the database enforces uniqueness, a race between two identical requests still yields exactly one transaction.
+
+**What breaks if it fails:** a retry under failure double-posts. This is the classic duplicate-charge bug: the network times out, the client retries, and the same economic event is recorded twice.
+
+```mermaid
+flowchart LR
+  A[No idempotency] --> B[Client retries after a timeout]
+  B --> C[Same operation posts twice]
+  C --> D[Balance inflated]
+  D --> E[Reconciliation never ties out]
+```
+
+### Writes to an account are serialized
+
+Every active account is served by a single process that serializes the writes to it, so concurrent operations on one account apply in a defined order rather than racing.
+
+**What breaks if it fails:** balance-dependent decisions race. Two concurrent debits could both read a sufficient balance and both succeed, driving a non-negative account below zero. Serialization is what makes "check the balance, then post" safe under concurrency.
+
+## Reconciliation invariants: the log proves itself
+
+These make the ledger auditable: the same data always tells the same story, today and a year from now.
+
+### Replay is deterministic
+
+Recomputing balances and reports from the postings always produces the same result, and the events stream (`GET /v1/events`) is a durable, replayable tail of every state change. This is the root invariant in practice.
+
+**What breaks if it fails:** an audit run today and the same audit run tomorrow over unchanged data disagree. You can report a number but you cannot prove it, which is the one thing a system of record exists to do.
+
+### Point-in-time history is stable
+
+Historical balances and statements are computed from each posting's `value_date`, when the movement is economically effective, not from when the row happened to be inserted. The same question at the same instant always returns the same answer.
+
+**What breaks if it fails:** "what was my balance on March 1" has no stable answer. Restating a period later, or simply inserting a backdated correction, would shift historical balances depending on insertion timing rather than economic date.
+
+## Why this framing matters
+
+Taken together, these are not features you switch on. They are constraints that remove whole categories of failure from the space of things that can happen: no torn writes, no duplicated charges, no drifting balances, no editable history, no value created from nothing, no number you cannot reconstruct. You get to reason about your integration in terms of what the ledger makes impossible, which is a much stronger position than trusting that it usually does the right thing.
 
 <CardGroup cols={2}>
   <Card title="Why not just use Postgres?" icon="database" href="/ledger/why-not-postgres">
     What you would have to build to enforce these invariants yourself.
   </Card>
-  <Card title="Core concepts" icon="book" href="/ledger/concepts">
-    Double-entry, corrections, idempotency, multi-currency, and value dates.
-  </Card>
   <Card title="Money flows" icon="arrow-right-arrow-left" href="/ledger/money-flows">
     How value moves through accounts as balanced postings.
   </Card>
   <Card title="Reconciliation" icon="scale-balanced" href="/ledger/reconciliation">
-    Answer "why is this balance what it is?" with real primitives.
+    The replay and audit invariants put to work.
+  </Card>
+  <Card title="Core concepts" icon="book" href="/ledger/concepts">
+    Double-entry, corrections, idempotency, multi-currency, value dates.
   </Card>
 </CardGroup>
