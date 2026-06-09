@@ -1,0 +1,53 @@
+---
+title: "Why not just use Postgres?"
+description: "Postgres is the right tool for a ledger. The question is who maintains the invariants."
+---
+
+This is a fair question, and the honest answer starts by agreeing with the premise. Postgres is an excellent foundation for a ledger. Southpay Ledger itself runs on Postgres. So this page is not "why avoid Postgres"; it is "why not roll your own ledger on Postgres".
+
+You can absolutely start with a couple of tables: an `accounts` table and a `postings` table, with a transaction id grouping postings together. That gets you a demo. The gap between that demo and a correct ledger is the part teams underestimate, because a correct ledger means building and maintaining, yourself, every guarantee on the [invariants](/ledger/invariants) page.
+
+## What you take on
+
+Each item below is something you would have to build, test, and keep correct as your schema and team change.
+
+- **Balanced per currency.** You need triggers that enforce `sum(debit) == sum(credit)` per currency at `COMMIT`, deferred so multi-posting writes are checked as a whole. Get the trigger timing wrong and an unbalanced transaction slips through.
+- **Append-only enforcement.** You need a `BEFORE UPDATE` trigger that freezes the economic columns while still allowing the operational fields to change. A missing constraint here means history can be quietly rewritten.
+- **Idempotency.** You need a unique index on `(ledger_id, idempotency_key)` and a write path that returns the original transaction on replay instead of erroring or double-posting. This has to survive concurrent identical requests, which is where naive "check then insert" logic races.
+- **Atomic multi-posting writes.** Every posting in a transaction must land in one database transaction, with the balance check rolling the whole thing back on failure. One stray code path that inserts postings outside the transaction breaks the guarantee.
+- **Derived balances that stay fast.** Balances must be computable from postings (so they can never drift), yet fast enough to read on the hot path. That usually means a cache layer that you have to keep consistent with the underlying postings.
+
+That is the core. A production ledger also needs more.
+
+- **Multi-currency throughout.** No code path can assume a single currency. Cross-currency transactions need an FX snapshot recorded at write time so restatements are reproducible.
+- **A stable HTTP API and error contract.** Other services and teammates need an interface with versioned shapes, machine-readable error codes, pagination, and expansion, so callers are not coupled to your table layout.
+- **Webhooks and an events tail.** Consumers need to react to writes and to replay a durable history when they fall behind.
+- **Point-in-time history.** Balances and statements "as of" a date require value-date semantics, not insertion time, so an auditor can reproduce a number.
+- **Reconciliation.** Comparing your ledger against an external system requires matching logic and a record of what was matched.
+
+## The real cost
+
+None of these are exotic. The problem is that each one is a place to get money math subtly wrong, and the failures are quiet: a balance that drifts by a cent, a duplicate posting under retry, a reversal that does not quite offset. You find them in production, against real money, often months later.
+
+Every hour spent building and maintaining this plumbing is an hour not spent on your product. The ledger is critical, but it is rarely your differentiator.
+
+## Where Southpay Ledger fits
+
+Southpay Ledger is that correctness layer, offered as an API. The invariants are enforced for you in application code and in Postgres triggers, multi-currency is first class, the HTTP contract is stable, and webhooks, point-in-time history, and reconciliation are built in. Your team writes the business logic and we guarantee the ledger holds.
+
+If you are weighing this against other approaches, see [where Southpay Ledger fits](/ledger/positioning) for how it compares to processors, accounting software, and other developer ledger APIs.
+
+<CardGroup cols={2}>
+  <Card title="Invariants" icon="shield-check" href="/ledger/invariants">
+    The exact guarantees you would otherwise build yourself.
+  </Card>
+  <Card title="Where Southpay Ledger fits" icon="map" href="/ledger/positioning">
+    The category and how it compares.
+  </Card>
+  <Card title="Reconciliation" icon="scale-balanced" href="/ledger/reconciliation">
+    Comparing against an external system, built in.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/ledger/quickstart">
+    From credentials to a posted transaction in four calls.
+  </Card>
+</CardGroup>

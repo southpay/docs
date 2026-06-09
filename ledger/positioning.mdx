@@ -1,0 +1,59 @@
+---
+title: "Where Southpay Ledger fits"
+description: "The category this product sits in, and how it compares to building your own, processors, accounting software, and other developer ledger APIs."
+---
+
+Southpay Ledger is a developer ledger API. You get primitives (accounts, postings, transactions, balances), you write the business logic, and the platform guarantees the ledger invariants. It is self-serve and API-first: you sign up, get OAuth client credentials, and ship without a sales call.
+
+This page places the product against the alternatives you are likely weighing. The goal is an accurate map, not a takedown. Several of these tools are excellent at what they do; the point is that they sit in different categories.
+
+## Versus building it yourself on Postgres
+
+You can build a ledger on Postgres, and many teams start there. The catch is that a correct ledger means maintaining, yourself, every invariant on the [invariants](/ledger/invariants) page: balanced-per-currency enforcement, append-only history, idempotency, atomic multi-posting writes, derived balances that stay fast, plus multi-currency, an API contract, webhooks, point-in-time history, and reconciliation.
+
+Southpay Ledger is that correctness layer as an API, so your team ships product instead of maintaining ledger plumbing. The full argument, including where Postgres genuinely is the right tool, is on the [why not just use Postgres?](/ledger/why-not-postgres) page.
+
+## Versus a payment processor
+
+A payment processor (for example Stripe) moves money. It authorizes, captures, and settles payments through the card networks and bank rails.
+
+A ledger is different: it is your system of record for what the money means. The processor tells you a charge succeeded; the ledger records which accounts that charge affected, in what currency, and what your balances are as a result. The two are complementary, not substitutes. A common setup is to take payments through a processor and write the corresponding transactions into Southpay Ledger as the system of record.
+
+<Info>
+  Southpay Ledger is not a payment processor. It does not touch card or bank rails. It records and proves the accounting behind whatever moved the money.
+</Info>
+
+## Versus accounting software
+
+Accounting software (for example QuickBooks or Xero) is a finance-team tool. It maintains your company's books, produces statements for tax and compliance, and is operated by humans through a UI on a periodic close cycle.
+
+A developer ledger is a programmable system of record your product writes to in real time over an API, as transactions happen, at the granularity of your application's accounts. The audiences differ: accounting software serves your finance team's books; Southpay Ledger serves your product's money logic. Many companies run both, with the ledger feeding summarized figures into their accounting system.
+
+## Versus other developer ledger APIs
+
+Fragment.dev and similar developer ledger APIs are the same category as Southpay Ledger. We do not position against them by disparagement; we position on approach.
+
+Southpay Ledger is developer-first: API keys in minutes, no sales call, primitives over opinions. The platform stays neutral, so it bakes in no domain-specific vocabulary, and it makes its guarantees explicit rather than implicit (see the [invariants](/ledger/invariants) page). If you are evaluating us against another ledger API, compare on exactly that: how fast you can get keys, how few assumptions the primitives make about your domain, and how clearly the invariants are stated and enforced.
+
+## Is this for you?
+
+**Good fit.** You are building a fintech product that needs an auditable money system of record: a treasury startup, a marketplace splitting funds across parties, an FX desk, or a SaaS company billing its own usage. You want the ledger invariants guaranteed while you write the business logic on top.
+
+**Not a fit.** You only need bookkeeping for your own company's taxes and statements. That is what accounting software is for; reach for QuickBooks or Xero instead. You do not need a programmable ledger to close your own books.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Invariants" icon="shield-check" href="/ledger/invariants">
+    The guarantees the platform enforces for you.
+  </Card>
+  <Card title="Why not just use Postgres?" icon="database" href="/ledger/why-not-postgres">
+    What rolling your own ledger costs.
+  </Card>
+  <Card title="Reconciliation" icon="scale-balanced" href="/ledger/reconciliation">
+    Proving your ledger agrees with the outside world.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/ledger/quickstart">
+    From credentials to a posted transaction in four calls.
+  </Card>
+</CardGroup>

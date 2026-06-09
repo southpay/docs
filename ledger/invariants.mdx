@@ -1,0 +1,66 @@
+---
+title: "Invariants"
+description: "The guarantees the platform enforces so you do not have to. Each one lets you trust the ledger without auditing our code."
+---
+
+These are guarantees, not conventions. The platform enforces every statement on this page in application code and, where money correctness depends on it, in the database itself. You do not opt in to them and you cannot turn them off. They hold for every write, in every mode, for every tenant.
+
+Read each invariant as a trust statement followed by how it is enforced. Taken together, they let you trust the ledger without reading our source.
+
+## Total debits equal total credits, per currency
+
+A transaction is correct only when its debits equal its credits in every currency it touches. There is no "almost balanced" state and no way to persist one.
+
+This is enforced in two places. Application code checks the balance before the write. The database checks it again with deferred Postgres triggers on the postings table, firing on `INSERT`, on `UPDATE` of `amount`, `direction`, or `currency`, and on `DELETE`. Because the trigger is deferred, it runs at `COMMIT`, so a multi-posting transaction is checked as a whole. An unbalanced write never commits.
+
+## Entries are immutable and append-only
+
+Once a posting is written, its economic meaning never changes. You do not edit history; you append to it.
+
+The economic columns of a posting (`amount`, `direction`, `currency`, and `account_id`) are immutable, enforced by a `BEFORE UPDATE` trigger that rejects any change to them. Only two operational fields may be updated: a commit-pending flag (flipped when a pending transaction commits) and the reconciliation fields (written by the reconciliation loop). Everything else about a posting is frozen at write time. You correct a mistake by posting a new reversal or refund transaction that references the original, never by editing the original.
+
+## Transactions are atomic
+
+A transaction and all of its postings land together or not at all. You never observe a half-written transaction.
+
+The write coordinator inserts the transaction row and every posting inside a single database transaction. If any part fails, including the balance check at `COMMIT`, the whole write rolls back. There is no path that commits some postings and drops others.
+
+## Operations are idempotent
+
+Retrying a write never double-posts. The same logical operation maps to the same transaction forever.
+
+Each `(ledger_id, idempotency_key)` pair maps to exactly one transaction, backed by a unique index. Replaying a write with the same key returns the original transaction instead of creating a new one, and the response carries an idempotent-replayed marker so you can tell a replay from a fresh write. Because the uniqueness is enforced by the database, a race between two identical requests still results in exactly one transaction.
+
+## Balances are derived, never stored
+
+A balance is always a function of the postings beneath it. There is no balance column that could drift out of sync with history.
+
+The durable source of truth is the postings. A balance is computed from the account's postings, so it can always be recomputed from scratch and reconciled against the underlying entries. A hot account keeps a running total in memory as a cache for speed, but that cache is derived from the same postings and is never the authority. If the cache and the postings ever disagreed, the postings win.
+
+## Supporting invariants
+
+These hold alongside the five above and are enforced the same way.
+
+- **Live and test data are physically separate.** Each OAuth client is bound to one mode. Live and test data are mode-segregated at the storage level and never interleave. The mode of your token decides which dataset you touch.
+- **Amounts are integer minor units only.** Every amount is a `BIGINT` in the currency's smallest unit (cents for `USD`, satoshis for `BTC`). Floats are rejected at the schema, so there is no floating-point rounding in the wire format or the store.
+- **An account's currency is immutable.** You set `currency` when you create an account, and it can never change. A posting's currency must match its account.
+- **Point-in-time queries use `value_date`.** Historical balances and statements are computed from each posting's `value_date` (when the movement is economically effective), not from when the row happened to be inserted. The same query at the same instant always returns the same answer.
+
+## Why this matters
+
+You are building a money system on top of this ledger. Each statement on this page is something you would otherwise have to build and maintain yourself, and each is a place where money math goes subtly wrong. Because the platform enforces them, you can reason about your integration in terms of the guarantees rather than in terms of our internals.
+
+<CardGroup cols={2}>
+  <Card title="Why not just use Postgres?" icon="database" href="/ledger/why-not-postgres">
+    What you would have to build to enforce these invariants yourself.
+  </Card>
+  <Card title="Core concepts" icon="book" href="/ledger/concepts">
+    Double-entry, corrections, idempotency, multi-currency, and value dates.
+  </Card>
+  <Card title="Money flows" icon="arrow-right-arrow-left" href="/ledger/money-flows">
+    How value moves through accounts as balanced postings.
+  </Card>
+  <Card title="Reconciliation" icon="scale-balanced" href="/ledger/reconciliation">
+    Answer "why is this balance what it is?" with real primitives.
+  </Card>
+</CardGroup>

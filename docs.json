@@ -131,9 +131,19 @@
                 ]
               },
               {
+                "group": "Why Southpay Ledger",
+                "pages": [
+                  "ledger/positioning",
+                  "ledger/why-not-postgres",
+                  "ledger/invariants"
+                ]
+              },
+              {
                 "group": "Core Concepts",
                 "pages": [
                   "ledger/concepts",
+                  "ledger/money-flows",
+                  "ledger/reconciliation",
                   "ledger/pagination",
                   "ledger/webhooks"
                 ]
