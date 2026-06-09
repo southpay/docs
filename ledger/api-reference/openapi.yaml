@@ -160,7 +160,7 @@ tags:
   - name: Reserves
     description: |
       Sweep / release / claw funds held against a counterparty.
-      Reserves are accounts with `account_kind = "reserve"` and a
+      Reserves are accounts with `account_kind = "restricted"` and a
       `counterparty_ref`; listing and balance reads use the standard
       `/v1/accounts` surface. New event types `reserve.swept`,
       `reserve.released`, `reserve.clawed`.
@@ -506,12 +506,13 @@ components:
               example: "0"
             account_kind:
               type: string
-              enum: [standard, reserve]
+              enum: [standard, restricted]
               default: standard
               description: |
-                `reserve` is set by the platform on accounts created via
-                `POST /v1/reserves`. Customers can also pass it explicitly
-                to model reserves they build by hand.
+                `restricted` marks an account whose balance is held back
+                from general use. The platform sets it on accounts created
+                via `POST /v1/reserves`; customers can also pass it
+                explicitly to model restricted balances they build by hand.
             counterparty_ref:
               type: string
               nullable: true
@@ -1218,9 +1219,6 @@ components:
                 - refund_currency_required
                 - rotation_in_progress
                 - webhook_endpoint_disabled
-                - reserve_insufficient_funds
-                - reserve_currency_mismatch
-                - reserve_release_exceeds_balance
                 - account_template_unknown
                 - invalid_state
                 - unsupported_grant_type
@@ -1413,15 +1411,15 @@ paths:
         - name: kind
           in: query
           required: false
-          schema: { type: string, enum: [standard, reserve] }
+          schema: { type: string, enum: [standard, restricted] }
           description: |
-            Filter by `account_kind`. Use `kind=reserve` to list reserve
+            Filter by `account_kind`. Use `kind=restricted` to list reserve
             accounts, optionally narrowed by `counterparty_ref`.
         - name: counterparty_ref
           in: query
           required: false
           schema: { type: string }
-          description: Filter by `counterparty_ref` (typically combined with `kind=reserve`).
+          description: Filter by `counterparty_ref` (typically combined with `kind=restricted`).
         - name: fund_classification
           in: query
           required: false
@@ -2124,7 +2122,7 @@ paths:
         named counterparty.
 
         Listing and balance reads use the standard `/v1/accounts`
-        surface (`?kind=reserve&counterparty_ref=<x>`). The platform
+        surface (`?kind=restricted&counterparty_ref=<x>`). The platform
         does NOT auto-release on `expires_at`; that's customer policy.
       security:
         - oauth2_write: [ledger:write]
@@ -2152,8 +2150,8 @@ paths:
               schema: { $ref: "#/components/schemas/ReserveOpResult" }
         "422":
           description: |
-            `reserve_insufficient_funds` (source would go negative),
-            `reserve_currency_mismatch` (source currency != reserve
+            `insufficient_funds` (source would go negative),
+            `currency_mismatch` (source currency != reserve
             currency), or `account_template_unknown`.
           content:
             application/json:
@@ -2162,15 +2160,15 @@ paths:
                 insufficient_funds:
                   value:
                     error:
-                      code: reserve_insufficient_funds
+                      code: insufficient_funds
                       message: the source account would exceed its overdraft policy
-                      docs_url: https://docs.southpay.io/ledger/errors#reserve_insufficient_funds
+                      docs_url: https://docs.southpay.io/ledger/errors#insufficient_funds
                 currency_mismatch:
                   value:
                     error:
-                      code: reserve_currency_mismatch
+                      code: currency_mismatch
                       message: currency does not match
-                      docs_url: https://docs.southpay.io/ledger/errors#reserve_currency_mismatch
+                      docs_url: https://docs.southpay.io/ledger/errors#currency_mismatch
                 template_unknown:
                   value:
                     error:
@@ -2205,8 +2203,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
           description: |
-            `reserve_release_exceeds_balance` when amount exceeds the
-            reserve's posted balance, or `reserve_currency_mismatch`.
+            `insufficient_funds` when amount exceeds the
+            reserve's posted balance, or `currency_mismatch`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2214,9 +2212,9 @@ paths:
                 exceeds:
                   value:
                     error:
-                      code: reserve_release_exceeds_balance
+                      code: insufficient_funds
                       message: amount exceeds the reserve's posted balance
-                      docs_url: https://docs.southpay.io/ledger/errors#reserve_release_exceeds_balance
+                      docs_url: https://docs.southpay.io/ledger/errors#insufficient_funds
 
   /v1/reserves/{id}/claw:
     post:
@@ -2247,7 +2245,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
           description: |
-            `reserve_release_exceeds_balance` when amount exceeds the
+            `insufficient_funds` when amount exceeds the
             reserve's posted balance.
           content:
             application/json:
@@ -2427,7 +2425,7 @@ paths:
       tags: [Reports, Reserves]
       summary: Total reserved per currency per counterparty
       description: |
-        Sums the posted balance of every `account_kind = "reserve"`
+        Sums the posted balance of every `account_kind = "restricted"`
         account in the ledger, grouped by `(counterparty_ref, currency)`.
         Empty when no reserves exist.
       responses:

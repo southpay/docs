@@ -108,18 +108,6 @@ Switch on `code`. It is stable across versions. Do not parse `message`; it is fo
 
 `409` - The webhook endpoint is disabled. Re-enable it via `PATCH /v1/webhook_endpoints/{id}` before sending.
 
-### reserve_insufficient_funds
-
-`422` - The source account does not have enough available balance to sweep this amount into reserve.
-
-### reserve_currency_mismatch
-
-`422` - The source account currency must match the reserve currency. Reserves are pinned to one currency at creation.
-
-### reserve_release_exceeds_balance
-
-`422` - The requested release or claw-back amount exceeds the reserve's current balance. Fetch `GET /v1/accounts/{id}/balance` for the available amount.
-
 ### account_template_unknown
 
 `422` - The referenced account template does not exist. Create it first via `POST /v1/account_templates`, or omit `template` to use raw account fields.
