@@ -1,0 +1,167 @@
+---
+title: "Webhooks"
+description: "Subscribe to events, verify HMAC-SHA256 signatures, and replay from the events tail."
+---
+
+Webhooks push a signed copy of every state-changing event to an endpoint you control. The same payloads are also available to pull from the [events tail](#events-tail-and-replay), so you can choose push, pull, or both.
+
+## Register an endpoint
+
+Create a webhook endpoint with the URL to deliver to and the events you want. The response includes a `signing_secret` used to verify deliveries.
+
+```bash
+curl -X POST https://ledger.southpay.io/api/v1/webhook_endpoints \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://app.example.com/webhooks/southpay",
+    "enabled_events": ["transaction.created", "transaction.reversed"]
+  }'
+```
+
+```json
+{
+  "data": {
+    "object": "webhook_endpoint",
+    "id": "whe_...",
+    "url": "https://app.example.com/webhooks/southpay",
+    "enabled_events": ["transaction.created", "transaction.reversed"],
+    "signing_secret": "whsec_test_4bSFH1YTkjwsgiMrHMwWJfJTIzsov60WxxsziZAE"
+  },
+  "livemode": false,
+  "request_id": "req_..."
+}
+```
+
+<Warning>
+  The `signing_secret` is returned only once, at creation. Store it immediately. If you lose it, rotate the endpoint's secret to mint a new one.
+</Warning>
+
+## Event types
+
+Each delivery carries an event whose `type` names what happened. The available types include:
+
+| Type | Fires when |
+| --- | --- |
+| `account.created` | An account is created |
+| `account.classification_changed` | An account's classification changes |
+| `transaction.created` | A transaction is written |
+| `transaction.updated` | A transaction's metadata is patched |
+| `transaction.committed` | A pending transaction is committed |
+| `transaction.reversal_created` | A reversal transaction is created (fires before `transaction.reversed`) |
+| `transaction.reversed` | The original is linked to its reversal |
+| `transaction.refund_created` | A refund transaction is created; payload carries `refunds` (original id) and `refund_amount` |
+| `webhook_endpoint.secret_rotated` | An endpoint's signing secret is rotated |
+
+Additional `oauth_client.*`, `member.*`, `tenant.*`, and `reconciliation.*` events exist for account-management surfaces. Subscribe only to the types you handle by listing them in `enabled_events`.
+
+<Info>
+  `transaction.reversal_created` is emitted before `transaction.reversed` on purpose. A subscriber rebuilding state from the tail can apply the new transaction before applying the link from the original to its reversal.
+</Info>
+
+## Verify the signature
+
+Each delivery includes a `Southpay-Signature` header. The signature is an HMAC-SHA256 over the string `<timestamp>.<raw_body>`, keyed by your endpoint's signing secret:
+
+```
+signature = HMAC-SHA256(signing_secret, "<timestamp>.<raw_body>")
+```
+
+Verify against the raw request body (not a re-serialized object) before trusting the payload. Use a constant-time comparison.
+
+<CodeGroup>
+
+```typescript Node.js
+import { createHmac, timingSafeEqual } from "crypto";
+
+function verifySignature(rawBody: string, header: string, secret: string): boolean {
+  const parts = Object.fromEntries(
+    header.split(",").map((p) => p.split("=") as [string, string])
+  );
+  const timestamp = parts["t"];
+  const expected = parts["v1"];
+  if (!timestamp || !expected) return false;
+
+  const computed = createHmac("sha256", secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest("hex");
+
+  const a = Buffer.from(computed);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+app.post(
+  "/webhooks/southpay",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    const sig = req.headers["southpay-signature"] as string;
+    const secret = process.env.LEDGER_WEBHOOK_SECRET!;
+    if (!verifySignature(req.body.toString(), sig, secret)) {
+      return res.status(401).json({ error: "invalid signature" });
+    }
+    const event = JSON.parse(req.body.toString());
+    if (event.type === "transaction.created") {
+      // handle the event
+    }
+    res.json({ received: true });
+  }
+);
+```
+
+```python Python
+import hmac, hashlib, os
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+def verify_signature(raw_body: bytes, header: str, secret: str) -> bool:
+    parts = dict(p.split("=", 1) for p in header.split(","))
+    timestamp = parts.get("t")
+    expected = parts.get("v1")
+    if not timestamp or not expected:
+        return False
+    signed = f"{timestamp}.{raw_body.decode()}"
+    computed = hmac.new(secret.encode(), signed.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, expected)
+
+@app.post("/webhooks/southpay")
+def webhook():
+    sig = request.headers.get("Southpay-Signature", "")
+    secret = os.environ["LEDGER_WEBHOOK_SECRET"]
+    if not verify_signature(request.data, sig, secret):
+        return jsonify(error="invalid signature"), 401
+    event = request.json
+    if event["type"] == "transaction.created":
+        pass  # handle the event
+    return jsonify(received=True)
+```
+
+</CodeGroup>
+
+## Respond and retry
+
+A delivery succeeds on any `2xx` response. Any non-`2xx`, timeout, or network error counts as a failure and is retried with exponential backoff:
+
+| Attempt | Delay after previous failure |
+| --- | --- |
+| 1 | 30 seconds |
+| 2 | 5 minutes |
+| 3 | 1 hour |
+| 4 | 6 hours |
+| 5 | 24 hours |
+
+After the fifth failed attempt the delivery is marked dead and not retried. Return `2xx` quickly and do heavy work asynchronously so you do not time out. Because verification is idempotent and events carry stable ids, treat handlers as at-least-once: deduplicate on the event `id`.
+
+You can inspect deliveries for an endpoint, count failures, redeliver a specific delivery, or send a test event from the [webhook endpoints API](/ledger/api-reference/introduction).
+
+## Events tail and replay
+
+Every state-changing operation also lands in the durable events log, with the same payloads webhooks deliver. If an endpoint was down or you need to backfill, pull from the tail instead of relying on retries.
+
+```bash
+curl "https://ledger.southpay.io/api/v1/events?type=transaction.created&since=24h" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The events list is cursor-paginated, newest first, and you can filter by `type` and by time. Fetch a single event by id with `GET /v1/events/{id}`. This log is the authoritative audit trail and the safe way to rebuild state after an outage.

@@ -1,0 +1,82 @@
+---
+title: "Ledger API"
+description: "A double-entry ledger you can call over HTTP. Balanced per currency, idempotent, append-only."
+---
+
+## What the Ledger API is
+
+The Southpay Ledger API is a double-entry ledger for developers. You model accounts, post balanced transactions, and read balances over a plain HTTP API. The ledger guarantees the accounting invariants; you write the business logic.
+
+You sign up, get OAuth client credentials, and ship in minutes. There is no sales call and no setup project. You get primitives, not opinions: the platform never bakes in your domain, so a treasury startup, a marketplace, an FX desk, and a SaaS company billing its own usage all use the same four primitives.
+
+<Info>
+  Southpay's own payment gateway is one customer of this API. The Ledger API itself knows nothing about payments. It speaks accounts, postings, transactions, and balances.
+</Info>
+
+## The mental model
+
+Four primitives cover the whole API.
+
+<CardGroup cols={2}>
+  <Card title="Account" icon="wallet">
+    A named bucket of value in one currency. You choose the `id` and `currency`, and both are immutable once set.
+  </Card>
+  <Card title="Posting" icon="arrow-right-arrow-left">
+    One line of a transaction. It says: this account moved by this amount in this direction (`debit` or `credit`).
+  </Card>
+  <Card title="Transaction" icon="layer-group">
+    A set of postings that move together. The ledger enforces `sum(debits) == sum(credits)` per currency. That is the whole correctness model.
+  </Card>
+  <Card title="Balance" icon="scale-balanced">
+    The net of an account's postings, current or at a historical instant. Computed from `value_date`, never recomputed from market data.
+  </Card>
+</CardGroup>
+
+## A balanced transaction
+
+A transaction is correct when its debits equal its credits in every currency it touches. The simplest case moves value between two accounts:
+
+```json
+{
+  "postings": [
+    { "account": "cash:usd", "amount": 1000, "currency": "USD", "direction": "debit" },
+    { "account": "revenue:subscriptions", "amount": 1000, "currency": "USD", "direction": "credit" }
+  ]
+}
+```
+
+The ledger rejects anything that does not balance. Amounts are integers in the currency's minor units (cents for `USD`, satoshis for `BTC`), so there are no floating-point rounding surprises.
+
+## What makes it safe
+
+<CardGroup cols={2}>
+  <Card title="Append-only" icon="lock">
+    Postings are never edited. You correct mistakes with a reversal or a refund, which are new transactions that reference the original.
+  </Card>
+  <Card title="Idempotent" icon="rotate">
+    Every write carries an `Idempotency-Key`. A replay returns the original transaction instead of writing a duplicate.
+  </Card>
+  <Card title="Multi-currency" icon="coins">
+    Currency is first class. No code path assumes a single currency, and balances are tracked per currency.
+  </Card>
+  <Card title="Test and live modes" icon="flask">
+    Each OAuth client is bound to a mode. The mode of your token decides whether you read and write test or live data. They never mix.
+  </Card>
+</CardGroup>
+
+## Start here
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/ledger/quickstart">
+    Mint a token, create two accounts, post a transaction, and read a balance.
+  </Card>
+  <Card title="Authentication" icon="key" href="/ledger/authentication">
+    OAuth 2.0 client credentials, scopes, and the discovery document.
+  </Card>
+  <Card title="Core concepts" icon="book" href="/ledger/concepts">
+    Double-entry, append-only corrections, idempotency, multi-currency, and value dates.
+  </Card>
+  <Card title="API reference" icon="code" href="/ledger/api-reference/introduction">
+    Every endpoint, generated from the OpenAPI spec.
+  </Card>
+</CardGroup>

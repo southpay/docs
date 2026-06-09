@@ -1,0 +1,85 @@
+---
+title: "Pagination and expand"
+description: "Walk list endpoints with cursors and inline related objects with expand."
+---
+
+## List envelope
+
+Every list endpoint returns a flat envelope. The `data` array holds the page; `has_more` and `next_cursor` drive pagination.
+
+```json
+{
+  "object": "list",
+  "data": [
+    { "object": "account", "id": "cash:usd", "type": "asset", "currency": "USD" },
+    { "object": "account", "id": "revenue:subscriptions", "type": "revenue", "currency": "USD" }
+  ],
+  "has_more": false,
+  "next_cursor": null,
+  "livemode": false,
+  "request_id": "req_..."
+}
+```
+
+## Cursor pagination
+
+Lists paginate with opaque cursors. Request a page, and if `has_more` is `true`, pass the `next_cursor` value back as the `cursor` parameter to get the next page.
+
+```bash
+# First page
+curl "https://ledger.southpay.io/api/v1/transactions?limit=50" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Next page
+curl "https://ledger.southpay.io/api/v1/transactions?limit=50&cursor=<next_cursor>" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The `limit` parameter defaults to `50`, with a minimum of `1` and a maximum of `200`.
+
+<Warning>
+  Cursors are opaque. Do not decode or construct them client-side; their encoding is an implementation detail that may change between releases. Treat a cursor as a position, not a row: a cursor pointing at a since-deleted resource still paginates correctly. Pass it back verbatim until the list reports `has_more: false`.
+</Warning>
+
+A typical loop:
+
+```bash
+cursor=""
+while :; do
+  page=$(curl -s "https://ledger.southpay.io/api/v1/transactions?limit=200&cursor=$cursor" \
+    -H "Authorization: Bearer $TOKEN")
+  # process page.data
+  has_more=$(echo "$page" | jq -r '.has_more')
+  [ "$has_more" = "true" ] || break
+  cursor=$(echo "$page" | jq -r '.next_cursor')
+done
+```
+
+## Filtering lists
+
+List endpoints accept filters in the query string. The available filters depend on the resource. For example, list transactions by metadata:
+
+```bash
+curl "https://ledger.southpay.io/api/v1/transactions?metadata[invoice]=inv_8721" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Accounts can be filtered by `type`, `currency`, and other fields; events by `type` and time window. See each endpoint in the [API reference](/ledger/api-reference/introduction) for its filter set.
+
+## Expanding related objects
+
+By default, a transaction's postings reference their account by `id`. Use `?expand=` to inline related objects in a single response instead of making follow-up calls. Two expansions are available:
+
+| Value | Effect |
+| --- | --- |
+| `postings.account` | Inlines each posting's full account object |
+| `balances` | Adds the post-commit balance of every account the transaction touched |
+
+`expand` is a comma-separated list:
+
+```bash
+curl "https://ledger.southpay.io/api/v1/transactions/3061ec4e-c959-49ba-a0f6-99186a7bd5d8?expand=postings.account,balances" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Expansion works on both single-resource reads and list endpoints, and is also accepted when creating a transaction so the create response can carry the inlined accounts and resulting balances.

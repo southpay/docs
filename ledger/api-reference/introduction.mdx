@@ -1,0 +1,28 @@
+---
+title: "API reference"
+description: "Every Ledger API endpoint, generated from the OpenAPI specification."
+---
+
+This reference is generated from the Ledger API [OpenAPI specification](/ledger/api-reference/openapi.yaml). Each endpoint page shows the request, parameters, response schema, and live examples.
+
+## Base URL
+
+```
+https://ledger.southpay.io/api
+```
+
+OAuth lives at `/oauth/token`; ledger resources live under `/v1`.
+
+## Authentication
+
+Every call carries a Bearer access token from the `client_credentials` grant. Read operations need the `ledger:read` scope; writes need `ledger:write`. See [Authentication](/ledger/authentication) for the full flow.
+
+## Response envelope
+
+Single-resource responses wrap the object in `data` alongside `livemode` and `request_id`:
+
+```json
+{ "data": { "object": "account", "id": "cash:usd" }, "livemode": false, "request_id": "req_..." }
+```
+
+Lists are flat, with `data`, `has_more`, and `next_cursor`. See [Pagination](/ledger/pagination). Failures carry `error.{code,hint}`; see the [errors reference](/ledger/errors).

@@ -1,0 +1,91 @@
+---
+title: "Core concepts"
+description: "Double-entry, append-only corrections, idempotency, multi-currency, and value-date semantics."
+---
+
+The Ledger API rests on a small set of guarantees. Understand these five and you understand the platform.
+
+## Double-entry, balanced per currency
+
+Every transaction is a set of postings that move together. A posting names an account, an amount, a currency, and a direction (`debit` or `credit`). The ledger accepts a transaction only when its debits equal its credits in every currency it touches:
+
+```
+sum(debits) == sum(credits)   for each currency
+```
+
+This is the entire correctness model. There is no other validation of whether a transaction "makes sense", because the balance rule is what makes a double-entry ledger trustworthy. A transaction that does not balance is rejected with `unbalanced` (`422`).
+
+Accounts carry one of five accounting types: `asset`, `liability`, `revenue`, `expense`, or `equity`. The type is informational for reporting; the balance rule applies regardless of type.
+
+### Integer minor units
+
+Amounts are integers in the currency's smallest unit: cents for `USD`, satoshis for `BTC`, the base unit for a stablecoin. Floats are rejected at the schema. This removes rounding ambiguity from the wire format. Each response reports `currency_decimals` so you can format the value for display.
+
+## Append-only and corrections
+
+Postings are never edited. The economic columns of a posting (amount, direction, currency, account) are immutable once written. You do not "fix" a transaction in place; you post a new one that offsets it.
+
+There are two correction primitives:
+
+- **Reversal** undoes a transaction in full. `POST /v1/transactions/{id}/reverse` books an inverse transaction that references the original. The new transaction links back via `reverses`, and the original gains a `reversed_by` pointer.
+- **Refund** offsets a transaction partially or fully. `POST /v1/transactions/{id}/refund` books an inverse for the requested `amount`, proportionally scaling each leg so the result still balances per currency.
+
+Transaction `metadata` is the one mutable surface, changed with `PATCH /v1/transactions/{id}`. The postings themselves stay frozen.
+
+<Info>
+  Because history is append-only, the events tail is a complete audit log. Nothing is silently rewritten, so you can always replay what happened.
+</Info>
+
+## Idempotency
+
+Every write accepts an `Idempotency-Key` header. The key, scoped to your ledger, maps to exactly one transaction forever. Replaying a request with the same key returns the original transaction (with a `200`) instead of writing a duplicate.
+
+```bash
+curl -X POST https://ledger.southpay.io/api/v1/transactions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: invoice_001" \
+  -d '{"postings":[ ... ]}'
+```
+
+Use a key that is unique per logical operation (an invoice id, a job id), not per HTTP attempt. Retries of the same logical write should reuse the key. A write without an idempotency key is rejected with `missing_idempotency_key` (`400`).
+
+To validate a transaction without writing it, pass `?dry_run=true`. A dry run needs no idempotency key, emits no events, and changes no balances; it returns a summary telling you whether the postings balance.
+
+## Multi-currency
+
+Currency is a first-class primitive, not an afterthought. Account currency is chosen at creation and immutable. A transaction may touch several currencies at once; the balance rule applies independently per currency.
+
+When a transaction spans more than one currency (for example moving value through an FX leg), the ledger records the exchange-rate snapshot on the transaction so the rate is preserved for audit and replay. Downstream reports read that recorded rate rather than recomputing from current market data.
+
+Operations that need a per-currency contract take a `currency` argument explicitly. A refund of a multi-currency transaction **requires** `currency` to disambiguate which leg you are refunding; omitting it returns `refund_currency_required` (`422`). The platform never silently falls back to "the original's currency".
+
+## Value-date semantics
+
+Each posting has a `value_date`: the instant the movement is economically effective. Point-in-time balance and statement queries use `value_date`, not the time the row was inserted.
+
+Read a historical balance by passing `?at=<ISO 8601 timestamp>` on the balance endpoint:
+
+```bash
+curl "https://ledger.southpay.io/api/v1/accounts/cash:usd/balance?at=2026-04-15T00:00:00Z" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+This computes the balance as of that instant from each posting's `value_date`. Account statements work the same way: `GET /v1/accounts/{id}/statement?from=...&to=...` returns the opening balance, every posting in the window ordered by `value_date`, and the closing balance.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Pagination and expand" icon="list" href="/ledger/pagination">
+    Cursor pagination and inlining related objects.
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/ledger/webhooks">
+    Event delivery, signatures, and replay.
+  </Card>
+  <Card title="Errors" icon="triangle-exclamation" href="/ledger/errors">
+    Every error code, with hints.
+  </Card>
+  <Card title="API reference" icon="code" href="/ledger/api-reference/introduction">
+    Every endpoint, generated from the spec.
+  </Card>
+</CardGroup>

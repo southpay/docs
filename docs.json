@@ -9,6 +9,156 @@
   },
   "favicon": "/favicon.png",
   "navigation": {
+    "dropdowns": [
+      {
+        "dropdown": "Payments",
+        "description": "Crypto payment gateway for merchants",
+        "icon": "credit-card",
+        "tabs": [
+          {
+            "tab": "Guides",
+            "pages": [
+              {
+                "group": "Getting Started",
+                "pages": [
+                  "index",
+                  "quickstart",
+                  "environments",
+                  "currencies"
+                ]
+              },
+              {
+                "group": "Authentication",
+                "pages": [
+                  "authentication"
+                ]
+              },
+              {
+                "group": "Core Resources",
+                "pages": [
+                  "payment-intents",
+                  "webhooks"
+                ]
+              },
+              {
+                "group": "Checkout widget",
+                "pages": [
+                  "checkout-widget"
+                ]
+              },
+              {
+                "group": "OAuth Integrations",
+                "pages": [
+                  "oauth-apps"
+                ]
+              },
+              {
+                "group": "Integration",
+                "pages": [
+                  "idempotency",
+                  "errors",
+                  "best-practices"
+                ]
+              },
+              {
+                "group": "Changelog",
+                "pages": [
+                  "changelog"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "API Reference",
+            "pages": [
+              {
+                "group": "Payments",
+                "pages": [
+                  "api-reference/payments",
+                  "api-reference/refunds",
+                  "api-reference/reconciliation"
+                ]
+              },
+              {
+                "group": "Webhooks",
+                "pages": [
+                  "api-reference/webhook-endpoints"
+                ]
+              },
+              {
+                "group": "Balances",
+                "pages": [
+                  "api-reference/balances"
+                ]
+              },
+              {
+                "group": "Payouts",
+                "pages": [
+                  "api-reference/payouts",
+                  "api-reference/payout-schedules"
+                ]
+              },
+              {
+                "group": "Billing",
+                "pages": [
+                  "api-reference/billing"
+                ]
+              },
+              {
+                "group": "Reports",
+                "pages": [
+                  "api-reference/reports"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "dropdown": "Ledger",
+        "description": "Double-entry ledger API for developers",
+        "icon": "book",
+        "tabs": [
+          {
+            "tab": "Guides",
+            "pages": [
+              {
+                "group": "Getting Started",
+                "pages": [
+                  "ledger/index",
+                  "ledger/quickstart",
+                  "ledger/authentication"
+                ]
+              },
+              {
+                "group": "Core Concepts",
+                "pages": [
+                  "ledger/concepts",
+                  "ledger/pagination",
+                  "ledger/webhooks"
+                ]
+              },
+              {
+                "group": "Reference",
+                "pages": [
+                  "ledger/errors"
+                ]
+              }
+            ]
+          },
+          {
+            "tab": "API Reference",
+            "pages": [
+              "ledger/api-reference/introduction",
+              {
+                "group": "Endpoints",
+                "openapi": "ledger/api-reference/openapi.yaml"
+              }
+            ]
+          }
+        ]
+      }
+    ],
     "global": {
       "anchors": [
         {
@@ -17,106 +167,7 @@
           "href": "https://docs.southpay.io"
         }
       ]
-    },
-    "tabs": [
-      {
-        "tab": "Guides",
-        "pages": [
-          {
-            "group": "Getting Started",
-            "pages": [
-              "index",
-              "quickstart",
-              "environments",
-              "currencies"
-            ]
-          },
-          {
-            "group": "Authentication",
-            "pages": [
-              "authentication"
-            ]
-          },
-          {
-            "group": "Core Resources",
-            "pages": [
-              "payment-intents",
-              "webhooks"
-            ]
-          },
-          {
-            "group": "Checkout widget",
-            "pages": [
-              "checkout-widget"
-            ]
-          },
-          {
-            "group": "OAuth Integrations",
-            "pages": [
-              "oauth-apps"
-            ]
-          },
-          {
-            "group": "Integration",
-            "pages": [
-              "idempotency",
-              "errors",
-              "best-practices"
-            ]
-          },
-          {
-            "group": "Changelog",
-            "pages": [
-              "changelog"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "API Reference",
-        "pages": [
-          {
-            "group": "Payments",
-            "pages": [
-              "api-reference/payments",
-              "api-reference/refunds",
-              "api-reference/reconciliation"
-            ]
-          },
-          {
-            "group": "Webhooks",
-            "pages": [
-              "api-reference/webhook-endpoints"
-            ]
-          },
-          {
-            "group": "Balances",
-            "pages": [
-              "api-reference/balances"
-            ]
-          },
-          {
-            "group": "Payouts",
-            "pages": [
-              "api-reference/payouts",
-              "api-reference/payout-schedules"
-            ]
-          },
-          {
-            "group": "Billing",
-            "pages": [
-              "api-reference/billing"
-            ]
-          },
-          {
-            "group": "Reports",
-            "pages": [
-              "api-reference/reports"
-            ]
-          }
-        ]
-      }
-    ]
+    }
   },
   "logo": {
     "light": "/logo/light.png",

@@ -1,0 +1,109 @@
+---
+title: "Authentication"
+description: "OAuth 2.0 client credentials, scopes, and test versus live mode."
+---
+
+Every machine call to the Ledger API carries a Bearer access token. You obtain one with the OAuth 2.0 `client_credentials` grant, then send it on each request.
+
+## Get an access token
+
+Authenticate to the token endpoint with your `client_id` and `client_secret`. You can send them as HTTP Basic auth (recommended) or as form fields in the body.
+
+<CodeGroup>
+
+```bash HTTP Basic
+curl -X POST https://ledger.southpay.io/oauth/token \
+  -u "$CLIENT_ID:$CLIENT_SECRET" \
+  -d 'grant_type=client_credentials&scope=ledger:read ledger:write'
+```
+
+```bash Form body
+curl -X POST https://ledger.southpay.io/oauth/token \
+  -d 'grant_type=client_credentials' \
+  -d "client_id=$CLIENT_ID" \
+  -d "client_secret=$CLIENT_SECRET" \
+  -d 'scope=ledger:read ledger:write'
+```
+
+</CodeGroup>
+
+The response is an HS256 JWT valid for one hour:
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scope": "ledger:read ledger:write"
+}
+```
+
+Send it as a Bearer token on every request:
+
+```bash
+curl https://ledger.southpay.io/api/v1/accounts \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The token carries your `tenant_id`, your `mode`, and the granted `scope`. You can decode it at `jwt.io` to inspect the claims. The `scope` parameter is optional and defaults to all scopes granted to the client; pass a space-separated subset to narrow it.
+
+## Scopes
+
+Operations are split into read and write scopes. Mutations also require the matching write scope.
+
+| Scope | Grants |
+| --- | --- |
+| `ledger:read` | Read accounts, balances, transactions, postings, and events |
+| `ledger:write` | Create, patch, reverse, commit, and refund transactions and accounts; manage webhook endpoints |
+| `ledger:clients:read` | List and inspect OAuth clients (never returns secrets) |
+| `ledger:clients:write` | Create, rotate, and delete OAuth clients |
+
+A token missing the scope an endpoint requires returns `403` with code `insufficient_scope`. See the [errors reference](/ledger/errors#insufficient_scope).
+
+## Test and live mode
+
+Each OAuth client is bound to a single mode at registration, either `test` or `live`. The mode of the token you present decides which dataset you read and write. Test and live data are physically separate and never interleave.
+
+There is no `?test=` query flag. To work in test mode, use a token minted from a test-mode client; to work in live mode, use a live-mode client. Every response echoes `livemode` so you can confirm which dataset you are touching:
+
+```json
+{ "data": { "object": "account", "id": "cash:usd" }, "livemode": false, "request_id": "req_..." }
+```
+
+## Discovery document (RFC 8414)
+
+The authorization server publishes its metadata at a well-known path so tooling can discover the token endpoint, grant types, scopes, and signing algorithms automatically.
+
+```bash
+curl https://ledger.southpay.io/.well-known/oauth-authorization-server
+```
+
+```json
+{
+  "issuer": "https://ledger.southpay.io",
+  "token_endpoint": "https://ledger.southpay.io/oauth/token",
+  "grant_types_supported": ["client_credentials"],
+  "response_types_supported": ["token"],
+  "scopes_supported": ["ledger:read", "ledger:write"],
+  "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+  "token_endpoint_auth_signing_alg_values_supported": ["HS256"],
+  "service_documentation": "https://docs.southpay.io/ledger/auth"
+}
+```
+
+## Client secrets
+
+A client secret is shown in plaintext exactly once, when you create or rotate the client. Only its SHA-256 hash is stored, so the secret cannot be retrieved later. Store it securely as soon as you receive it. If you lose it, rotate the client to mint a new secret.
+
+## Errors at the token endpoint
+
+The token endpoint follows RFC 6749. Common failures:
+
+| Error | Meaning |
+| --- | --- |
+| `invalid_client` | The `client_id` or `client_secret` is wrong, or the client is disabled |
+| `invalid_grant` | The grant parameters are invalid |
+| `invalid_scope` | You requested a scope the client was not granted |
+| `unsupported_grant_type` | Only `client_credentials` is supported |
+
+See the full [errors reference](/ledger/errors) for every code the API returns.
