@@ -1,6 +1,6 @@
 ---
 title: "Invariants"
-description: "A ledger is not a set of rules we promise to follow. It is a system built so that certain financial states cannot exist. Each invariant makes a class of corruption impossible."
+description: "The double-entry ledger invariants Southpay enforces in application code and in Postgres, and the class of money corruption each one makes impossible."
 ---
 
 Most systems store state and hope it stays correct. A ledger inverts that. It is built so that incorrect states cannot be represented in the first place. Each invariant on this page is not a guideline we try to honor. It is a constraint that makes a specific kind of money corruption impossible, so that when the invariant holds, the meaning of every balance stays unambiguous.

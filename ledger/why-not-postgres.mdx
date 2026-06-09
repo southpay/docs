@@ -1,6 +1,6 @@
 ---
 title: "Why not just use Postgres?"
-description: "Postgres is the right tool. The trap is assuming a ledger is a schema problem. It is a distributed correctness problem, and getting it wrong corrupts money silently."
+description: "Why a correct ledger is a distributed correctness problem, not a schema problem, and where rolling your own on Postgres silently corrupts money."
 ---
 
 This is a fair question, and the honest answer starts by agreeing. Postgres is an excellent foundation for a ledger. Southpay Ledger runs on Postgres. So this page is not "avoid Postgres". It is about what you are actually signing up to build when you decide to roll your own ledger on top of it, and why that is more than it looks.

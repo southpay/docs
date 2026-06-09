@@ -8,6 +8,15 @@
     "dark": "#4253FE"
   },
   "favicon": "/favicon.png",
+  "seo": {
+    "metatags": {
+      "og:type": "website",
+      "og:site_name": "Southpay Documentation",
+      "og:image": "https://docs.southpay.io/images/hero-light.png",
+      "twitter:card": "summary_large_image",
+      "twitter:image": "https://docs.southpay.io/images/hero-light.png"
+    }
+  },
   "navigation": {
     "dropdowns": [
       {
