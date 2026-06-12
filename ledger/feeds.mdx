@@ -105,6 +105,25 @@ curl -X POST "$INBOUND_URL" \
 
 Timestamps more than 5 minutes off are rejected. Unknown or disabled URLs 404. The endpoint ingests with the same idempotency as the batch API and never runs matching; runs stay explicit. A source's `kind` selects the payload adapter; `custom` is this generic scheme, and provider-specific adapters slot in per source without an API change.
 
+Re-posting to the enable endpoint is idempotent and keeps the existing URL. Pass `{"rotate": true}` to mint a new token and secret, or `{"provider_secret": "..."}` to store a secret issued by the provider instead of a minted one; the response then carries no plaintext secret.
+
+### Cobo
+
+Create the source with `kind: "cobo"` and Cobo's webhook public key, then paste the `inbound_url` into the Cobo console as a webhook endpoint. No signing secret is involved; the endpoint verifies Cobo's Ed25519 signature (`BIZ-TIMESTAMP` and `BIZ-RESP-SIGNATURE` headers) against the key.
+
+```bash
+curl -X POST "https://ledger.southpay.io/api/v1/sources" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "name": "cobo",
+        "kind": "cobo",
+        "metadata": { "cobo": { "public_key": "<hex Ed25519 key from the Cobo console>" } }
+      }'
+```
+
+Only terminal success transaction callbacks ingest (status `Success`, `Succeeded`, or `Completed`); pending, confirming, and failed callbacks are acknowledged and skipped, as are non-transaction events. Deposits are positive, withdrawals negative. Amounts convert from Cobo's decimal asset units to integer minor units, and each row carries a reference triple (`reference_rail` is the chain, for example `eth`, with `reference_kind: "tx_hash"`), so external-ref matching works out of the box. Redeliveries of the same `transaction_id` report `replayed`.
+
 ## Recipe: reconcile Stripe payouts
 
 1. Book your internal transaction with an external ref when the charge settles: `{ "rail": "stripe", "kind": "charge", "value": "ch_3NqXcd" }`.
