@@ -85,12 +85,39 @@ curl -X POST "https://ledger.southpay.io/api/v1/reconciliation_runs" \
 
 Matching is per currency and per amount within a time window. The response surfaces three sets: `matched`, `unmatched_external` (items with no posting to pair), and `unmatched_internal` (postings in the window that no external item claimed). The unmatched sets are your break list.
 
-Runs are replayable. Matched postings are marked once with the external reference, and a re-run of the same snapshot excludes already-reconciled postings, so repeats are safe. Fetch a past run with its full snapshot:
+Runs are replayable. Items are stored as external transactions keyed by `(source, external_id)`, so matched postings are marked once. A re-run of the same snapshot reports already-matched items in `matched` with their original attribution; nothing is double-marked. Fetch a past run with its full snapshot:
 
 ```bash
 curl "https://ledger.southpay.io/api/v1/reconciliation_runs/{id}" \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+## Durable feeds and breaks
+
+Inline snapshots work for one-off checks. For a recurring feed, create a source and ingest rows once; they persist with a status (`open`, `matched`, `ignored`) and `GET /v1/external_transactions?status=open` is your break list across runs.
+
+```bash
+curl -X POST "https://ledger.southpay.io/api/v1/sources" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "stripe", "default_window_seconds": 86400 }'
+
+curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/external_transactions" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "items": [ { "external_id": "txn_1OqIJq", "amount": 1000000, "currency": "USD", "occurred_at": "2026-05-14T09:00:00Z" } ] }'
+
+curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/reconciliation_runs" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "from": "2026-05-14T00:00:00Z", "to": "2026-05-15T00:00:00Z" }'
+```
+
+Ingestion is idempotent on `(source, external_id)`; re-pushed rows report `replayed`. Rows carrying a `reference_rail`/`reference_kind`/`reference_value` triple match their transaction's posting first (strategy `external_ref`), before amount heuristics run.
+
+Work the break list with `POST /v1/external_transactions/:id/ignore` (a row that should never match, with a reason), `/match` (manual attribution to postings that sum exactly to the row's amount), and `/unmatch` (undo; the match row is kept as audit). Each emits an event, so webhooks can drive a breaks workflow.
+
+See [Feeds](/ledger/feeds) for the full workflow, the hosted inbound push endpoint, and a Stripe recipe.
 
 For the comparison basis itself, the reports endpoints give you ledger-side totals to check against the external figures. Use the trial balance for per-currency debit and credit totals across every account:
 
@@ -108,6 +135,9 @@ The trial balance is computed from `value_date`, so an "as of" figure is reprodu
 ## Where to go next
 
 <CardGroup cols={2}>
+  <Card title="Feeds" icon="plug" href="/ledger/feeds">
+    Durable external feeds, the break queue, and the inbound push endpoint.
+  </Card>
   <Card title="Invariants" icon="shield-check" href="/ledger/invariants">
     Why balances are always derivable from postings.
   </Card>

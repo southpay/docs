@@ -52,8 +52,13 @@ Each delivery carries an event whose `type` names what happened. The available t
 | `transaction.reversed` | The original is linked to its reversal |
 | `transaction.refund_created` | A refund transaction is created; payload carries `refunds` (original id) and `refund_amount` |
 | `webhook_endpoint.secret_rotated` | An endpoint's signing secret is rotated |
+| `reconciliation.run_completed` | A reconciliation run finishes; payload carries `matched_count`, `unmatched_count`, `pass_counts`, and `status` (`completed` or `failed`) |
+| `reconciliation.match_created` | A manual match is recorded; payload carries `match_id`, `external_transaction_id`, and `posting_ids` |
+| `reconciliation.match_reversed` | A match is undone; the postings reopen |
+| `reconciliation.break_auto_resolved` | A match absorbed a residual within the run's tolerance |
+| `external_transaction.ignored` | An ingested external row is excluded from matching; payload carries the `reason` |
 
-Additional `oauth_client.*`, `member.*`, `tenant.*`, and `reconciliation.*` events exist for account-management surfaces. Subscribe only to the types you handle by listing them in `enabled_events`.
+Ingestion itself emits no per-row events; a 10k-row batch would flood the stream. Use `reconciliation.run_completed` plus `GET /v1/external_transactions?status=open` for the break workflow. Additional `oauth_client.*`, `member.*`, and `tenant.*` events exist for account-management surfaces. Subscribe only to the types you handle by listing them in `enabled_events`.
 
 <Info>
   `transaction.reversal_created` is emitted before `transaction.reversed` on purpose. A subscriber rebuilding state from the tail can apply the new transaction before applying the link from the original to its reversal.

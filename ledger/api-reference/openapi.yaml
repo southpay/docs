@@ -160,7 +160,7 @@ tags:
   - name: Reserves
     description: |
       Sweep / release / claw funds held against a counterparty.
-      Reserves are accounts with `account_kind = "restricted"` and a
+      Reserves are accounts with `account_kind = "reserve"` and a
       `counterparty_ref`; listing and balance reads use the standard
       `/v1/accounts` surface. New event types `reserve.swept`,
       `reserve.released`, `reserve.clawed`.
@@ -170,6 +170,12 @@ tags:
       confirmations, blockchain receipts) against unreconciled
       postings. Mark matched postings as reconciled with an external
       reference.
+  - name: Sources
+    description: |
+      Named external systems and their ingested external transactions.
+      Push statement rows once, idempotently, then run reconciliation
+      per source. `GET /v1/external_transactions?status=open` is the
+      break list.
   - name: Periods
     description: |
       Close and reopen accounting periods. A closed period rejects new
@@ -506,13 +512,12 @@ components:
               example: "0"
             account_kind:
               type: string
-              enum: [standard, restricted]
+              enum: [standard, reserve]
               default: standard
               description: |
-                `restricted` marks an account whose balance is held back
-                from general use. The platform sets it on accounts created
-                via `POST /v1/reserves`; customers can also pass it
-                explicitly to model restricted balances they build by hand.
+                `reserve` is set by the platform on accounts created via
+                `POST /v1/reserves`. Customers can also pass it explicitly
+                to model reserves they build by hand.
             counterparty_ref:
               type: string
               nullable: true
@@ -1219,6 +1224,9 @@ components:
                 - refund_currency_required
                 - rotation_in_progress
                 - webhook_endpoint_disabled
+                - reserve_insufficient_funds
+                - reserve_currency_mismatch
+                - reserve_release_exceeds_balance
                 - account_template_unknown
                 - invalid_state
                 - unsupported_grant_type
@@ -1411,15 +1419,15 @@ paths:
         - name: kind
           in: query
           required: false
-          schema: { type: string, enum: [standard, restricted] }
+          schema: { type: string, enum: [standard, reserve] }
           description: |
-            Filter by `account_kind`. Use `kind=restricted` to list reserve
+            Filter by `account_kind`. Use `kind=reserve` to list reserve
             accounts, optionally narrowed by `counterparty_ref`.
         - name: counterparty_ref
           in: query
           required: false
           schema: { type: string }
-          description: Filter by `counterparty_ref` (typically combined with `kind=restricted`).
+          description: Filter by `counterparty_ref` (typically combined with `kind=reserve`).
         - name: fund_classification
           in: query
           required: false
@@ -2122,7 +2130,7 @@ paths:
         named counterparty.
 
         Listing and balance reads use the standard `/v1/accounts`
-        surface (`?kind=restricted&counterparty_ref=<x>`). The platform
+        surface (`?kind=reserve&counterparty_ref=<x>`). The platform
         does NOT auto-release on `expires_at`; that's customer policy.
       security:
         - oauth2_write: [ledger:write]
@@ -2150,8 +2158,8 @@ paths:
               schema: { $ref: "#/components/schemas/ReserveOpResult" }
         "422":
           description: |
-            `insufficient_funds` (source would go negative),
-            `currency_mismatch` (source currency != reserve
+            `reserve_insufficient_funds` (source would go negative),
+            `reserve_currency_mismatch` (source currency != reserve
             currency), or `account_template_unknown`.
           content:
             application/json:
@@ -2160,15 +2168,15 @@ paths:
                 insufficient_funds:
                   value:
                     error:
-                      code: insufficient_funds
+                      code: reserve_insufficient_funds
                       message: the source account would exceed its overdraft policy
-                      docs_url: https://docs.southpay.io/ledger/errors#insufficient_funds
+                      docs_url: https://docs.southpay.io/ledger/errors#reserve_insufficient_funds
                 currency_mismatch:
                   value:
                     error:
-                      code: currency_mismatch
+                      code: reserve_currency_mismatch
                       message: currency does not match
-                      docs_url: https://docs.southpay.io/ledger/errors#currency_mismatch
+                      docs_url: https://docs.southpay.io/ledger/errors#reserve_currency_mismatch
                 template_unknown:
                   value:
                     error:
@@ -2203,8 +2211,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
           description: |
-            `insufficient_funds` when amount exceeds the
-            reserve's posted balance, or `currency_mismatch`.
+            `reserve_release_exceeds_balance` when amount exceeds the
+            reserve's posted balance, or `reserve_currency_mismatch`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -2212,9 +2220,9 @@ paths:
                 exceeds:
                   value:
                     error:
-                      code: insufficient_funds
+                      code: reserve_release_exceeds_balance
                       message: amount exceeds the reserve's posted balance
-                      docs_url: https://docs.southpay.io/ledger/errors#insufficient_funds
+                      docs_url: https://docs.southpay.io/ledger/errors#reserve_release_exceeds_balance
 
   /v1/reserves/{id}/claw:
     post:
@@ -2245,7 +2253,7 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "422":
           description: |
-            `insufficient_funds` when amount exceeds the
+            `reserve_release_exceeds_balance` when amount exceeds the
             reserve's posted balance.
           content:
             application/json:
@@ -2425,7 +2433,7 @@ paths:
       tags: [Reports, Reserves]
       summary: Total reserved per currency per counterparty
       description: |
-        Sums the posted balance of every `account_kind = "restricted"`
+        Sums the posted balance of every `account_kind = "reserve"`
         account in the ledger, grouped by `(counterparty_ref, currency)`.
         Empty when no reserves exist.
       responses:
@@ -2502,10 +2510,16 @@ paths:
         the time window that no external item claimed; only populated
         when `from`/`to` bound the query).
 
-        Idempotent: matched postings get marked once. Re-running the
-        same snapshot returns the matches that still apply, but already-
-        reconciled postings are excluded from the candidate set so
-        you'll see `matched_count: 0` on repeats.
+        Idempotent: matched postings get marked once. Items are stored
+        as external transactions keyed by `(source, external_id)`.
+        Re-running the same snapshot reports already-matched items in
+        `matched` with their original attribution; nothing is
+        double-marked.
+
+        Items may carry `reference_rail`, `reference_kind`, and
+        `reference_value` (all three or none). When the triple resolves
+        to a transaction external ref, that posting is matched first
+        with strategy `external_ref` (exact amount required).
       security:
         - oauth2_write: [ledger:write]
       requestBody:
@@ -2564,6 +2578,9 @@ paths:
                         type: string
                         description: Optional hint to narrow the candidate set.
                         example: "cash:usd"
+                      reference_rail: { type: string, example: stripe }
+                      reference_kind: { type: string, example: charge }
+                      reference_value: { type: string, example: "ch_3Nq" }
             examples:
               cobo-daily:
                 summary: Daily Cobo deposit reconciliation
@@ -2586,6 +2603,8 @@ paths:
                     object: reconciliation_run
                     id: "cf930621-69b3-4a77-960a-3b64bb8793e5"
                     source: cobo
+                    source_id: "2e0ce42a-46cf-4c61-bf63-0e1a72f5d8a1"
+                    status: completed
                     external_reference: "cobo:2026-05-14:eth"
                     matched_count: 2
                     unmatched_count: 0
@@ -2605,6 +2624,364 @@ paths:
         "200":
           description: Full run
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sources:
+    get:
+      tags: [Sources]
+      summary: List reconciliation sources
+      responses:
+        "200":
+          description: List of sources
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/List" }
+    post:
+      tags: [Sources]
+      summary: Create a source
+      description: |
+        A source names an external system you reconcile against
+        (a PSP, bank, exchange). Per-source defaults (`default_strategy`,
+        `default_window_seconds`, `default_tolerance_minor_units`,
+        `default_account_id`) apply to source-scoped runs.
+
+        Names are unique per ledger, lowercased. Creating a name that an
+        inline `POST /v1/reconciliation_runs` already used implicitly
+        promotes that source and applies the provided defaults.
+      security:
+        - oauth2_write: [ledger:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, example: stripe }
+                kind:
+                  type: string
+                  default: custom
+                  description: Connector kind. Selects the inbound payload adapter.
+                default_strategy:
+                  type: string
+                  enum: [exact, sum_in_window]
+                  default: exact
+                default_window_seconds: { type: integer, default: 86400 }
+                default_tolerance_minor_units: { type: integer, default: 0 }
+                default_account_id: { type: string }
+                description: { type: string }
+                metadata: { type: object }
+      responses:
+        "201":
+          description: Source created
+        "409":
+          description: A source with this name already exists
+
+  /v1/sources/{id}:
+    get:
+      tags: [Sources]
+      summary: Fetch a source
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Source }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Sources]
+      summary: Update a source's defaults
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Updated source }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/sources/{source_id}/external_transactions:
+    post:
+      tags: [Sources]
+      summary: Ingest external transactions (idempotent batch)
+      description: |
+        Stores up to 1000 external money-movement rows. Idempotent on
+        `(source, external_id)`: re-submitting a row never mutates the
+        stored copy and reports `replayed`. Invalid rows report `error`
+        per item without blocking the rest.
+
+        Amounts are integer minor units. `occurred_at` (alias `at`) is
+        ISO 8601. `reference_rail`/`reference_kind`/`reference_value`
+        must be provided together; they join against transaction
+        external refs during matching. `raw` retains the provider
+        payload.
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: source_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 1000
+                  items:
+                    type: object
+                    required: [external_id, amount, currency, occurred_at]
+                    properties:
+                      external_id: { type: string, example: "txn_1OqIJq" }
+                      amount: { type: integer, example: 10000000 }
+                      currency: { type: string, example: USDC }
+                      occurred_at: { type: string, format: date-time }
+                      account_id: { type: string }
+                      reference_rail: { type: string, example: stripe }
+                      reference_kind: { type: string, example: charge }
+                      reference_value: { type: string, example: "ch_3Nq" }
+                      raw: { type: object }
+      responses:
+        "201":
+          description: Per-item ingest result
+          content:
+            application/json:
+              examples:
+                example:
+                  value:
+                    object: ingest_result
+                    source_id: "2e0ce42a-46cf-4c61-bf63-0e1a72f5d8a1"
+                    created_count: 1
+                    replayed_count: 1
+                    error_count: 0
+                    results:
+                      - { external_id: "txn_1", status: created }
+                      - { external_id: "txn_0", status: replayed }
+
+  /v1/sources/{source_id}/reconciliation_runs:
+    post:
+      tags: [Sources, Reconciliation]
+      summary: Run reconciliation for a source
+      description: |
+        Draws open external transactions for the source (optionally
+        bounded by `from`/`to` on `occurred_at`) and matches them.
+        Strategy, window, and tolerance default from the source.
+
+        Runs with at most 500 open items execute synchronously and
+        return the full result. Larger runs return `status: queued`
+        with empty arrays; poll `GET /v1/reconciliation_runs/{id}` and
+        subscribe to `reconciliation.run_completed`.
+
+        One queued or running run per source; a second request returns
+        `run_in_progress` (409). Inline `items` are rejected here.
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: source_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from: { type: string, format: date-time }
+                to: { type: string, format: date-time }
+                strategy: { type: string, enum: [exact, sum_in_window] }
+                window_seconds: { type: integer }
+                auto_resolve_below_minor_units: { type: integer }
+                external_reference: { type: string }
+                note: { type: string }
+      responses:
+        "201":
+          description: Run executed (completed) or queued
+        "409":
+          description: A run is already active for this source (`run_in_progress`)
+
+  /v1/sources/{id}/inbound:
+    post:
+      tags: [Sources]
+      summary: Enable or rotate the source's hosted inbound endpoint
+      description: |
+        Mints an inbound URL and signing secret. The plaintext secret is
+        returned once in this response and never again; calling again
+        rotates both token and secret, invalidating the old pair
+        immediately.
+
+        Push payloads to the returned `inbound_url` signed with
+
+            Southpay-Inbound-Signature: t=<unix_seconds>,v1=<hex>
+
+        where `v1 = HMAC-SHA256(secret, "<t>.<raw_body>")`. Timestamps
+        more than 5 minutes off are rejected. The payload is
+        `{"items": [...]}` (or one item object) with the same fields as
+        the batch ingest endpoint; ingestion is idempotent the same way.
+        The source's `kind` selects the payload adapter; `custom` uses
+        this generic scheme.
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "201":
+          description: Source with `inbound_url` and one-time `inbound_secret`
+    delete:
+      tags: [Sources]
+      summary: Disable the source's inbound endpoint
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Source with inbound disabled }
+
+  /v1/inbound/sources/{token}:
+    post:
+      tags: [Sources]
+      summary: Hosted inbound push endpoint
+      description: |
+        Unauthenticated except for the per-source HMAC signature (see
+        the enable endpoint). Unknown or disabled tokens 404. Never
+        runs matching; queue a run or rely on your scheduled runs.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Per-batch counts
+          content:
+            application/json:
+              examples:
+                example:
+                  value: { object: inbound_result, received: 2, created: 2, replayed: 0, errors: 0 }
+        "401": { description: Missing or invalid signature }
+        "404": { description: Unknown or disabled inbound endpoint }
+
+  /v1/external_transactions:
+    get:
+      tags: [Sources]
+      summary: List external transactions
+      description: |
+        `status=open` is the break list. Filter by `source_id`,
+        `currency`, and `from`/`to` on `occurred_at`. Newest first.
+      parameters:
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, matched, ignored] }
+        - name: source_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: currency
+          in: query
+          schema: { type: string }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200":
+          description: A page of external transactions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/List" }
+
+  /v1/external_transactions/{id}:
+    get:
+      tags: [Sources]
+      summary: Fetch an external transaction
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: External transaction }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /v1/external_transactions/{id}/matches:
+    get:
+      tags: [Sources, Reconciliation]
+      summary: Match audit trail for an external transaction
+      description: Includes reversed matches (`reversed_at` set).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: List of reconciliation matches, newest first
+
+  /v1/external_transactions/{id}/ignore:
+    post:
+      tags: [Sources]
+      summary: Exclude an external transaction from matching
+      description: |
+        Marks an open row `ignored` (provider fees booked elsewhere,
+        test rows). Idempotent on already-ignored rows. Matched rows
+        are rejected with `invalid_state`; unmatch first. Emits
+        `external_transaction.ignored`.
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: Ignored external transaction }
+        "409": { description: Row is matched (`invalid_state`) }
+
+  /v1/external_transactions/{id}/match:
+    post:
+      tags: [Sources, Reconciliation]
+      summary: Manually match an external transaction to postings
+      description: |
+        The postings must be unreconciled, share the row's currency,
+        and sum exactly to its amount; otherwise 422 with the residual
+        in the hint. Records a match with strategy `manual` and emits
+        `reconciliation.match_created`.
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [posting_ids]
+              properties:
+                posting_ids:
+                  type: array
+                  items: { type: integer }
+                note: { type: string }
+      responses:
+        "201": { description: External transaction with the new match embedded }
+        "409": { description: Row is not open (`invalid_state`) }
+        "422": { description: Postings do not sum to the external amount }
+
+  /v1/external_transactions/{id}/unmatch:
+    post:
+      tags: [Sources, Reconciliation]
+      summary: Undo a match
+      description: |
+        Reopens the matched postings, stamps the match row `reversed_at`
+        (kept for audit), returns the row to `open`, and emits
+        `reconciliation.match_reversed`.
+      security:
+        - oauth2_write: [ledger:write]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        "200": { description: Reopened external transaction }
+        "409": { description: Row is not matched (`invalid_state`) }
 
   /v1/postings:
     get:

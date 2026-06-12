@@ -153,6 +153,7 @@
                   "ledger/concepts",
                   "ledger/money-flows",
                   "ledger/reconciliation",
+                  "ledger/feeds",
                   "ledger/pagination",
                   "ledger/webhooks"
                 ]
