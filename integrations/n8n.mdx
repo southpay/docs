@@ -1,0 +1,84 @@
+---
+title: "SouthPay for n8n"
+description: "Automate payments, invoices, and payouts in n8n. Connect with OAuth in one click and react to payment events without setting up webhooks by hand."
+sidebarTitle: "n8n"
+---
+
+The SouthPay node for [n8n](https://n8n.io) lets you create and read payments, manage billing,
+trigger payouts, and start workflows from payment events. You connect once with OAuth (no API
+keys to paste), and the trigger registers its own webhook automatically.
+
+The package is published on npm as [`n8n-nodes-southpay`](https://www.npmjs.com/package/n8n-nodes-southpay).
+
+## Install the node
+
+<Steps>
+  <Step title="Open community nodes">
+    In n8n, go to **Settings → Community Nodes → Install**.
+  </Step>
+  <Step title="Install the package">
+    Enter `n8n-nodes-southpay` and confirm. On n8n Cloud, once the node is verified it appears in
+    the nodes panel with no install step.
+  </Step>
+</Steps>
+
+## Connect your account
+
+The node authenticates with OAuth 2.0 (Authorization Code + PKCE). SouthPay's first-party app is
+pre-filled, so there is nothing to paste.
+
+<Steps>
+  <Step title="Add a SouthPay node">
+    Add a **SouthPay** node to a workflow and create a new **SouthPay OAuth2 API** credential.
+  </Step>
+  <Step title="Click Connect">
+    Click **Connect my account** and approve the consent screen. The token is bound to your store,
+    so you do not pass a store id.
+  </Step>
+</Steps>
+
+<Note>
+  You can also connect from the dashboard: **Integrations → n8n** shows your connection status and
+  lets you disconnect.
+</Note>
+
+## React to payment events
+
+Add a **SouthPay Trigger** node and pick the events you care about. When you activate the
+workflow, the trigger **registers its own webhook endpoint** with SouthPay, stores the signing
+secret, and verifies the `Southpay-Signature` on every delivery. Deactivating the workflow removes
+the endpoint. There is no webhook URL or secret to copy.
+
+Available events include `payment_intent.created`, `payment_intent.processing`,
+`payment_intent.completed`, `payment_intent.failed`, `payment_intent.expired`, and
+`payment_intent.refunded`.
+
+### Wait for a payment
+
+The **Wait for a Payment** operation polls until a payment reaches a terminal status
+(`completed`, `overpaid`, `failed`, `expired`, `refunded`) or a timeout, so a single node can block
+a workflow until the customer pays. For production, prefer the trigger over polling.
+
+## Operations
+
+| Resource | Operations |
+| --- | --- |
+| Payment | Create, Get, Wait for a Payment, List, Refund, List Refunds |
+| Customer | Create, Get, List, Update, Delete |
+| Invoice | Create, Get, List, Finalize, Send, Void |
+| Product | Create, Get, List, Update |
+| Price | Create, Get, List |
+| Subscription | Create, Get, List, Cancel, Pause, Resume |
+| Payout | Create, Get, List, Quote |
+| Balance | Get balances |
+
+<Note>
+  Money movement (payouts, refunds) stays gated server-side and can return `mfa_required` or
+  `authorization_denied` depending on your store's controls, regardless of OAuth scope.
+</Note>
+
+## Self-hosting n8n
+
+The connection works out of the box on a public domain. If you prefer your own OAuth client,
+[register an OAuth app](/oauth-apps), then set its client id in the n8n credential's **Client ID**
+field.

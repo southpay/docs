@@ -56,9 +56,10 @@
                 ]
               },
               {
-                "group": "OAuth Integrations",
+                "group": "Integrations",
                 "pages": [
-                  "oauth-apps"
+                  "oauth-apps",
+                  "integrations/n8n"
                 ]
               },
               {
