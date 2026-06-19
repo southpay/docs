@@ -77,13 +77,17 @@ curl -X POST "https://ledger.southpay.io/api/v1/reconciliation_runs" \
         "from": "2026-05-14T00:00:00Z",
         "to": "2026-05-15T00:00:00Z",
         "items": [
-          { "external_id": "ext_abc", "amount": 1000000, "currency": "USD", "at": "2026-05-14T09:00:00Z" },
-          { "external_id": "ext_def", "amount": 500000, "currency": "USD", "at": "2026-05-14T14:00:00Z" }
+          { "external_id": "ext_abc", "amount": "1000000", "currency": "USD", "at": "2026-05-14T09:00:00Z" },
+          { "external_id": "ext_def", "amount": "500000", "currency": "USD", "at": "2026-05-14T14:00:00Z" }
         ]
       }'
 ```
 
 Matching is per currency and per amount within a time window. The response surfaces three sets: `matched`, `unmatched_external` (items with no posting to pair), and `unmatched_internal` (postings in the window that no external item claimed). The unmatched sets are your break list.
+
+<Warning>
+  Every monetary value (item `amount`, matched amounts, report totals) is a JSON **string** of integer minor units, for example `"1000000"`. On write, `amount` also accepts an integer. Parse money with a big-integer or decimal type, never a JS `number`. See [Core concepts](/ledger/concepts#integer-minor-units).
+</Warning>
 
 Runs are replayable. Items are stored as external transactions keyed by `(source, external_id)`, so matched postings are marked once. A re-run of the same snapshot reports already-matched items in `matched` with their original attribution; nothing is double-marked. Fetch a past run with its full snapshot:
 
@@ -105,7 +109,7 @@ curl -X POST "https://ledger.southpay.io/api/v1/sources" \
 curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/external_transactions" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{ "items": [ { "external_id": "txn_1OqIJq", "amount": 1000000, "currency": "USD", "occurred_at": "2026-05-14T09:00:00Z" } ] }'
+  -d '{ "items": [ { "external_id": "txn_1OqIJq", "amount": "1000000", "currency": "USD", "occurred_at": "2026-05-14T09:00:00Z" } ] }'
 
 curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/reconciliation_runs" \
   -H "Authorization: Bearer $TOKEN" \

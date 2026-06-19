@@ -93,10 +93,14 @@ curl -X POST https://ledger.southpay.io/api/v1/transactions \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: invoice_001" \
   -d '{"postings":[
-        {"account":"cash:usd","amount":1000,"currency":"USD","direction":"debit"},
-        {"account":"revenue:subscriptions","amount":1000,"currency":"USD","direction":"credit"}
+        {"account":"cash:usd","amount":"1000","currency":"USD","direction":"debit"},
+        {"account":"revenue:subscriptions","amount":"1000","currency":"USD","direction":"credit"}
       ]}'
 ```
+
+<Warning>
+  Amounts are JSON **strings** of integer minor units (`"1000"`). On write you may send an integer or a string; reads always return a string. Parse money with a big-integer or decimal type, never a JS `number`, since 18-decimal token amounts can exceed `2^53`. See [Core concepts](/ledger/concepts#integer-minor-units).
+</Warning>
 
 The response includes the transaction and its postings:
 
@@ -109,8 +113,8 @@ The response includes the transaction and its postings:
   "reversed_by": null,
   "metadata": {},
   "postings": [
-    { "object": "posting", "account": "cash:usd", "amount": 1000, "currency": "USD", "direction": "debit", "pending": false },
-    { "object": "posting", "account": "revenue:subscriptions", "amount": 1000, "currency": "USD", "direction": "credit", "pending": false }
+    { "object": "posting", "account": "cash:usd", "amount": "1000", "currency": "USD", "direction": "debit", "pending": false },
+    { "object": "posting", "account": "revenue:subscriptions", "amount": "1000", "currency": "USD", "direction": "credit", "pending": false }
   ],
   "created_at": "2026-05-14T15:53:31.291591Z"
 }

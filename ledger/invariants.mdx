@@ -33,9 +33,13 @@ Each OAuth client is bound to one mode, and live and test data are segregated at
 
 ### Amounts are integer minor units, and currency is immutable
 
-Every amount is a `BIGINT` in the currency's smallest unit (cents, satoshis); floats are rejected at the schema. An account's `currency` is set at creation and can never change.
+Every amount is stored as an exact integer in the currency's smallest unit (cents, satoshis, or the base unit of an 18-decimal token); floats are rejected at the schema. An account's `currency` is set at creation and can never change.
 
 **What breaks if it fails:** floating point reintroduces sub-cent drift that accumulates and never reconciles, and a mutable currency would silently reinterpret every historical posting on the account, changing what past entries mean after the fact.
+
+<Warning>
+  The same exactness applies on the wire. Every monetary field (amounts, balances, report totals) is serialized as a JSON **string** of integer minor units (`"9700000"`, matching `^-?\d+$`), because an 18-decimal token amount can exceed `2^53` where a JSON `number` would lose precision. Parse money with a big-integer or decimal type, never a JS `number`. See [Core concepts](/ledger/concepts#integer-minor-units).
+</Warning>
 
 ## Financial invariants: conservation of value
 

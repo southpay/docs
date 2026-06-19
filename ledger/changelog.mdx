@@ -1,0 +1,35 @@
+---
+title: "Changelog"
+description: "Latest updates and breaking changes to the Southpay Ledger API"
+---
+
+<Update label="June 19, 2026" description="All monetary fields are now JSON strings of integer minor units" tags={["Breaking"]}>
+## Money is now a JSON string everywhere
+
+Every monetary field in the Ledger API (amounts, balances, and report totals) is now serialized as a **decimal string of integer minor units** matching `^-?\d+$`, for example `"100"`, `"25500000"`, or `"1000000000000000001"`.
+
+This is a breaking correctness fix. The wire format was previously inconsistent: posting `amount` was a string, but balances and report totals (`posted`, `pending`, `available`, trial-balance and statement totals, and so on) were JSON numbers. A JSON `number` silently loses precision above `2^53`, which is only about `0.009` ETH at 18 decimals, so high-value or 18-decimal token balances could come back wrong. Making every money field a string removes that whole class of corruption. There is no live customer, so this lands directly in v1 with no deprecation window.
+
+### Before
+
+```json
+{ "object": "balance", "posted": 9700000, "pending": 0, "available": 9700000 }
+```
+
+### After
+
+```json
+{ "object": "balance", "posted": "9700000", "pending": "0", "available": "9700000" }
+```
+
+### What you need to do
+
+Parse every money field with a big-integer or arbitrary-precision decimal type, not `Number`:
+
+```diff
+- const posted = balance.posted;            // JS number, lossy above 2^53
++ const posted = BigInt(balance.posted);    // exact
+```
+
+Writes are unaffected for senders: `amount` still accepts an integer **or** a decimal string on the way in. Reads always return a string. The per-currency `currency_decimals` field (an integer count, not money) is unchanged, so you keep formatting display values the same way.
+</Update>

@@ -39,13 +39,17 @@ A transaction is correct when its debits equal its credits in every currency it 
 ```json
 {
   "postings": [
-    { "account": "cash:usd", "amount": 1000, "currency": "USD", "direction": "debit" },
-    { "account": "revenue:subscriptions", "amount": 1000, "currency": "USD", "direction": "credit" }
+    { "account": "cash:usd", "amount": "1000", "currency": "USD", "direction": "debit" },
+    { "account": "revenue:subscriptions", "amount": "1000", "currency": "USD", "direction": "credit" }
   ]
 }
 ```
 
 The ledger rejects anything that does not balance. Amounts are integers in the currency's minor units (cents for `USD`, satoshis for `BTC`), so there are no floating-point rounding surprises.
+
+<Warning>
+  Monetary values cross the wire as JSON **strings** of integer minor units (`"1000"`, not `1000`). This keeps 18-decimal token amounts that exceed `2^53` exact. Parse money with a big-integer or decimal type, never a JS `number`. On write, `amount` accepts an integer or a string; reads always return a string. See [Core concepts](/ledger/concepts#integer-minor-units).
+</Warning>
 
 ## What makes it safe
 

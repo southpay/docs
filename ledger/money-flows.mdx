@@ -7,6 +7,10 @@ Every movement of value in the ledger is a transaction made of balanced postings
 
 The diagrams below trace common shapes. The account ids (`cash`, `revenue`, `assets:bank`, `fees`) are illustrative names you choose; the platform attaches no meaning to them.
 
+<Warning>
+  The minor-unit amounts in the diagrams and tables below (`1000`, `2500`, ...) are written as bare numbers for readability, but on the wire every monetary value is a JSON **string** of integer minor units, for example `"1000"`. Parse money with a big-integer or decimal type, never a JS `number`. See [Core concepts](/ledger/concepts#integer-minor-units).
+</Warning>
+
 ## A simple credit into one account
 
 The smallest transaction moves value between exactly two accounts. To record 10.00 USD of revenue, you debit `cash` and credit `revenue`. The amounts are equal, so the transaction balances.

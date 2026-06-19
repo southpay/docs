@@ -162,7 +162,8 @@
               {
                 "group": "Reference",
                 "pages": [
-                  "ledger/errors"
+                  "ledger/errors",
+                  "ledger/changelog"
                 ]
               }
             ]

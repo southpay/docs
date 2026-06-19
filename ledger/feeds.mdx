@@ -37,7 +37,7 @@ curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/external_transactio
         "items": [
           {
             "external_id": "txn_1OqIJq",
-            "amount": 1000000,
+            "amount": "1000000",
             "currency": "USD",
             "occurred_at": "2026-05-14T09:00:00Z",
             "reference_rail": "stripe",
@@ -49,7 +49,7 @@ curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/external_transactio
       }'
 ```
 
-Up to 1000 items per request. Ingestion is idempotent on `(source, external_id)`: a re-pushed row never mutates the stored copy and reports `replayed`. Invalid rows report `error` per item without blocking the rest. Amounts are integer minor units. `raw` retains the provider payload for audit.
+Up to 1000 items per request. Ingestion is idempotent on `(source, external_id)`: a re-pushed row never mutates the stored copy and reports `replayed`. Invalid rows report `error` per item without blocking the rest. Amounts are integer minor units, sent as a JSON string (an integer is also accepted on write) and always returned as a string. Parse money with a big-integer or decimal type, never a JS `number`. `raw` retains the provider payload for audit.
 
 `reference_rail`, `reference_kind`, and `reference_value` must be provided together. When the triple resolves to a [transaction external ref](/ledger/api-reference/introduction), matching pairs that transaction's posting first, exactly, with strategy `external_ref`. Write the same triple on both sides when you book the internal transaction and reconciliation stops depending on amount heuristics.
 
@@ -93,7 +93,7 @@ curl -X POST "https://ledger.southpay.io/api/v1/sources/{id}/inbound" \
 The response contains `inbound_url` and a one-time `inbound_secret`. Calling again rotates both; `DELETE` disables. Sign every push over the exact raw body:
 
 ```bash
-BODY='{"items":[{"external_id":"txn_1","amount":1000000,"currency":"USD","occurred_at":"2026-05-14T09:00:00Z"}]}'
+BODY='{"items":[{"external_id":"txn_1","amount":"1000000","currency":"USD","occurred_at":"2026-05-14T09:00:00Z"}]}'
 T=$(date +%s)
 SIG=$(printf '%s.%s' "$T" "$BODY" | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/^.* //')
 

@@ -21,6 +21,10 @@ Accounts carry one of five accounting types: `asset`, `liability`, `revenue`, `e
 
 Amounts are integers in the currency's smallest unit: cents for `USD`, satoshis for `BTC`, the base unit for a stablecoin. Floats are rejected at the schema. This removes rounding ambiguity from the wire format. Each response reports `currency_decimals` so you can format the value for display.
 
+<Warning>
+  **Money is a JSON string, not a number.** Every monetary field (amounts, balances, and report totals) is serialized as a decimal string of integer minor units, for example `"9700000"` or `"1000000000000000001"`, matching `^-?\d+$`. This is deliberate: an 18-decimal token can exceed `2^53`, where a JSON `number` silently loses precision. Parse every money field with a big-integer or arbitrary-precision decimal type, never with a JS `number` or `parseInt`. On write, `amount` still accepts an integer or a decimal string; reads always return a string.
+</Warning>
+
 ## Append-only and corrections
 
 Postings are never edited. The economic columns of a posting (amount, direction, currency, account) are immutable once written. You do not "fix" a transaction in place; you post a new one that offsets it.
