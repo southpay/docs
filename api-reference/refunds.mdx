@@ -81,9 +81,15 @@ An intent is refundable through this endpoint while its status is `completed`, `
 
 Omit `amount` to refund the full remaining amount. Provide `amount` (decimal) to refund a partial amount. Provide `asset_id` when the intent received more than one asset and you want to refund a specific one.
 
+By default the refund is sent to the address the customer paid from. Provide `destination_address` to send it somewhere else, typically when the customer paid from an exchange or custodial wallet and has supplied a wallet address they control. The override must be a valid address for the asset's chain and must not be a Southpay deposit address. If an automatic refund has already `failed`, requesting a refund with a `destination_address` creates a fresh attempt to the new address; while a refund is `pending` or `submitted`, requests return the existing refund instead of creating a second one.
+
 <Note>
   Partial refunds (`amount`) and `asset_id` selection apply only to `completed` intents. For `failed` or `expired` intents the endpoint always refunds the full confirmed balance across every asset; sending `amount` on those returns `422`.
 </Note>
+
+<Warning>
+  On-chain transfers are irreversible. Double-check a `destination_address` before sending: funds sent to a wrong address cannot be recovered.
+</Warning>
 
 <CodeGroup>
 ```bash Request
@@ -127,6 +133,7 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | `refund[amount]` | string | No | Decimal amount to refund. Defaults to the full received amount. |
 | `refund[asset_id]` | string | No | Restrict the refund to one asset when the intent received several. |
+| `refund[destination_address]` | string | No | Send the refund to this address instead of the address the customer paid from. Must be valid for the asset's chain. |
 | `Idempotency-Key` | header | Yes | Missing key returns `422`. |
 
 **Common errors**
@@ -142,7 +149,9 @@ All error responses use status `422` with an `{ "error": "..." }` body.
 | `amount` is not a valid number, or is not positive and within the refundable balance | `InvalidAmountError`. |
 | `asset_id` does not match any confirmed payment on the intent | `AssetNotFoundError`. |
 | Partial refund requested without `asset_id` when the intent has confirmed funds in multiple assets | `AmbiguousAssetError`. |
+| `destination_address` sent without `asset_id` when the intent has confirmed funds in multiple assets | `AmbiguousAssetError`. |
 | The source address on the confirmed transaction is missing or fails format validation | `InvalidDestinationError`. |
+| `destination_address` fails format validation for the asset's chain, or is a Southpay deposit address | `InvalidDestinationError`. |
 | Refund exceeds the merchant's available ledger balance for the asset | `InsufficientBalanceError`. |
 
 <Tip>
