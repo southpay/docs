@@ -19,7 +19,7 @@ The design assumption is that agents make mistakes. Every capability an agent ha
 | Enable or disable accepted tokens | Scope + mandate required |
 | Create payouts | Scope + spend limits or mandate, fail-closed |
 | Issue x402 session mandates and settle per-call charges | Scope + mandate, capped envelope |
-| Research token prices (CoinGecko) | None - public data, no credential needed |
+| Research token prices (public market data) | None - public data, no credential needed |
 
 ## How it fits together
 
@@ -34,7 +34,7 @@ flowchart LR
 
 - **[Agent credentials](/agentic/agent-credentials)** - bearer tokens with the prefix `spa_live_` or `spa_test_`, created by the merchant in the dashboard. Each carries a set of scopes and an optional expiry.
 - **[MCP server](/agentic/mcp-server)** - a hosted Model Context Protocol server at `https://mcp.southpay.io/mcp` exposing 19 tools. Works with Claude, Claude Code, and any MCP-capable client.
-- **[Authorization](/agentic/authorization)** - three independent safety layers: credential scopes, per-asset spend limits with daily counters, and cryptographic mandates verified through an authorization provider (HumanOS).
+- **[Authorization](/agentic/authorization)** - three independent safety layers: credential scopes, per-asset spend limits with daily counters, and cryptographic mandates verified through an authorization provider.
 - **[x402 and session mandates](/agentic/x402)** - capped spending envelopes for machine-to-machine, pay-per-call commerce.
 
 ## Test mode first

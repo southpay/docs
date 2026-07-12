@@ -55,7 +55,7 @@ Authorization: Bearer spa_test_...
     "expires_at": null
   },
   "authorization": {
-    "provider": "HumanosAuthorizationProvider",
+    "provider": "<provider>",
     "mandates": true
   },
   "accepted_assets_count": 3
@@ -281,7 +281,7 @@ Content-Type: application/json
 ```
 
 ```json Response 200
-{ "asset_id": "BTC", "active": true, "provider": "humanos" }
+{ "asset_id": "BTC", "active": true, "provider": "<provider>" }
 ```
 </CodeGroup>
 
@@ -429,7 +429,7 @@ Authorization: Bearer spa_test_...
       "chain_symbol": "ETH",
       "currency": "EUR",
       "rate": "0.9229",
-      "source": "coingecko"
+      "source": "<rate source>"
     }
   ]
 }

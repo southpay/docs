@@ -17,9 +17,9 @@ Per-credential, per-asset payout caps with a daily counter, configured by the me
 
 ### 3. Mandates (authorization provider)
 
-The finest control: per-action cryptographic authorization. When a store enables an authorization provider - currently **HumanOS** - gated actions require the agent to present a verifiable mandate: a credential issued to the agent by its principal that encodes what the agent is allowed to do. Southpay forwards the presentation and the action's parameters (action type, amount, currency, asset) to the provider, which returns an allow or deny decision. The decision and receipt are stored in the audit trail alongside the resulting payment, payout, or mandate.
+The finest control: per-action cryptographic authorization. When a store enables an authorization provider, gated actions require the agent to present a verifiable mandate: a credential issued to the agent by its principal that encodes what the agent is allowed to do. Southpay forwards the presentation and the action's parameters (action type, amount, currency, asset) to the provider, which returns an allow or deny decision. The decision and receipt are stored in the audit trail alongside the resulting payment, payout, or mandate.
 
-Authorization providers are enabled per store. Contact support to enable HumanOS for your store.
+Authorization providers are enabled per store. Contact support to enable one for your store.
 
 <Note>
   Verification is fail-closed: if the provider cannot be reached or is misconfigured, gated actions are denied (`authorization_denied` with reason `verification_unavailable`), never silently allowed.
@@ -56,7 +56,7 @@ The `X-Mandate` value must decode to valid JSON and is limited to 32 KB; anythin
 Two things to note:
 
 - **Payment creation is the deliberate exception.** Charging a customer creates a receivable, not an outflow, so it works without a provider. With a provider enabled, even payment creation is verified.
-- **Spend limits and mandates compose.** With HumanOS enabled, a payout must pass mandate verification *and* stay inside any configured spend caps.
+- **Spend limits and mandates compose.** With an authorization provider enabled, a payout must pass mandate verification *and* stay inside any configured spend caps.
 
 ## Error codes
 

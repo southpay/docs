@@ -71,7 +71,7 @@ Every tool returns plain JSON as structured content, plus a short human-readable
 | --- | --- | --- |
 | `get_account` | - | Store id, name, KYC status, `mode`, `livemode`, the credential's `scopes` and expiry, whether mandate authorization is active, and the accepted-asset count |
 | `get_exchange_rate` | `asset_id?`, `currency?` | Southpay's own rate per accepted asset: `{currency, rates: [{asset_id, coin_symbol, chain_symbol, currency, rate, source}]}`. This is the rate applied when pricing a payment |
-| `research_token` | `symbol_or_id`, `vs_currency` (default `usd`) | Public CoinGecko market data. Touches no Southpay funds and needs no credential |
+| `research_token` | `symbol_or_id`, `vs_currency` (default `usd`) | Public market data for a token. Touches no Southpay funds and needs no credential |
 
 ### Payments
 
