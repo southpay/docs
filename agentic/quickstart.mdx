@@ -1,0 +1,128 @@
+---
+title: "Agentic quickstart"
+description: "Create an agent credential, connect an MCP client, and take your first agent-driven payment."
+sidebarTitle: "Quickstart"
+---
+
+This guide takes you from zero to an AI agent charging a customer on your store. You need a Southpay account with at least one accepted crypto asset (see the [payments quickstart](/quickstart) if you are starting fresh).
+
+<Steps>
+  <Step title="Create an agent credential">
+    In the dashboard, open **Agents** and click **Create credential**. Choose:
+
+    - **Mode**: `test` to start. Test credentials only see testnet assets and test data.
+    - **Name** and **principal**: who the agent is, for your audit trail (for example `Support bot` / `claude@yourcompany.com`).
+    - **Scopes**: which capabilities the token carries. For a first run, `payments:read` and `payments:write` are enough.
+    - **Expiry**: optional, recommended.
+
+    The full token is shown once:
+
+    ```
+    spa_test_4f6a...48 hex characters
+    ```
+
+    Store it in a secrets manager. Only a SHA-256 digest is kept server-side; if you lose the token, revoke it and create a new one.
+
+    You can also create credentials [via the API](/agentic/agent-credentials#create-a-credential).
+  </Step>
+
+  <Step title="Connect an MCP client">
+    Point any MCP-capable client at the hosted server and pass the credential as a bearer token.
+
+    <CodeGroup>
+    ```bash Claude Code
+    claude mcp add --transport http southpay https://mcp.southpay.io/mcp \
+      --header "Authorization: Bearer spa_test_..."
+    ```
+
+    ```json Claude Desktop / generic MCP config
+    {
+      "mcpServers": {
+        "southpay": {
+          "url": "https://mcp.southpay.io/mcp",
+          "headers": {
+            "Authorization": "Bearer spa_test_..."
+          }
+        }
+      }
+    }
+    ```
+    </CodeGroup>
+
+    If your client cannot send headers, the agent can call the `login` tool with the credential instead; the session then holds the key until `logout`.
+
+    Verify the connection by asking the agent to call `get_account`. It returns the store, mode, the credential's scopes, and whether an authorization provider is active.
+
+    Prefer plain HTTP? Skip the MCP server and call the [REST API](/api-reference/agentic) directly with the same `Authorization: Bearer spa_test_...` header.
+  </Step>
+
+  <Step title="Create a payment">
+    Ask the agent to charge a customer, or call the API yourself:
+
+    <CodeGroup>
+    ```bash Request
+    curl -X POST https://api.southpay.io/api/v2/agentic/payments \
+      -H "Authorization: Bearer spa_test_..." \
+      -H "Content-Type: application/json" \
+      -d '{
+        "payment_intent": {
+          "amount": "49.99",
+          "currency": "USD",
+          "order_id": "ORDER-1042"
+        }
+      }'
+    ```
+
+    ```json Response 201
+    {
+      "id": "01HZ...",
+      "reference": "SPX7K2M9",
+      "status": "pending",
+      "settlement_amount": "49.99",
+      "settlement_currency": "USD",
+      "order_id": "ORDER-1042",
+      "hosted_url": "https://pay.southpay.io/SPX7K2M9",
+      "expires_at": "2026-07-12T13:00:00.000Z",
+      "payment_addresses": [
+        {
+          "address": "0x8f3C...",
+          "crypto_amount_atomic": "49990000",
+          "supported_asset": {
+            "asset_id": "ETH_USDC",
+            "coin_symbol": "USDC",
+            "chain_symbol": "ETH",
+            "atomic_decimals": 6
+          }
+        }
+      ]
+    }
+    ```
+    </CodeGroup>
+
+    Give the customer the `hosted_url`, or the deposit address and exact crypto amount directly.
+  </Step>
+
+  <Step title="Wait for it to complete">
+    Over MCP, the agent calls `wait_for_payment` with the payment id or reference; it polls server-side and returns when the payment reaches a terminal state (`completed`, `expired`, `failed`, or `refunded`) or the timeout passes. Over REST, poll `GET /agentic/payments/:id`, or configure a [webhook](/webhooks) for push delivery.
+  </Step>
+
+  <Step title="Add money-movement controls (when you are ready)">
+    Reads and payment creation work out of the box. Refunds, token changes, and payouts are **fail-closed**: they return `403` with `mandate_required` or `payout_controls_required` until you configure controls.
+
+    - Set per-asset [spend limits](/agentic/agent-credentials#spend-limits) on the credential to allow capped payouts.
+    - Enable an [authorization provider](/agentic/authorization) to approve refunds, token changes, and mandate issuance.
+
+    These denials are expected behavior, not errors in your integration.
+  </Step>
+</Steps>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP tool reference" icon="plug" href="/agentic/mcp-server">
+    All 19 tools with parameters and return shapes.
+  </Card>
+  <Card title="Authorization model" icon="shield" href="/agentic/authorization">
+    Scopes, spend limits, mandates, and every error code.
+  </Card>
+</CardGroup>

@@ -5,13 +5,14 @@ description: "API keys for server-side integrations. OAuth 2.0 with PKCE for thi
 
 ## Overview
 
-Southpay supports three authentication methods:
+Southpay supports four authentication methods:
 
 | Method | Format | Use case |
 | --- | --- | --- |
 | **Secret API key** | `sp_sk_live_...` / `sp_sk_test_...` | Server-side integrations you control |
 | **Publishable API key** | `sp_pk_live_...` / `sp_pk_test_...` | Browser and client-side code (checkout creation only) |
 | **OAuth 2.0** | `spo_...` | Third-party applications acting on behalf of a merchant |
+| **Agent credential** | `spa_live_...` / `spa_test_...` | AI agents operating your store via MCP or the agentic API - see [Agent credentials](/agentic/agent-credentials) |
 
 All requests must include an `Authorization: Bearer <token>` header. HTTPS is required on all endpoints.
 

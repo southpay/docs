@@ -1,0 +1,94 @@
+---
+title: "Agent authorization"
+description: "The fail-closed safety model for agent-driven money movement: scopes, spend limits, and mandates."
+---
+
+Agents are useful precisely because they act without a human in the loop, so every Southpay action that moves money or changes store configuration passes through controls a human set up in advance. The model has three independent layers; an action must clear all the layers that apply to it.
+
+## The three layers
+
+### 1. Credential scopes
+
+The coarsest control. A credential without `payouts:write` can never create a payout, regardless of any other configuration. See [agent credentials](/agentic/agent-credentials#scopes).
+
+### 2. Spend limits
+
+Per-credential, per-asset payout caps with a daily counter, configured by the merchant. They both **unlock** payouts (no limit configured means payouts are denied) and **cap** them (per-transaction and per-UTC-day). See [spend limits](/agentic/agent-credentials#spend-limits).
+
+### 3. Mandates (authorization provider)
+
+The finest control: per-action cryptographic authorization. When a store enables an authorization provider - currently **HumanOS** - gated actions require the agent to present a verifiable mandate: a credential issued to the agent by its principal that encodes what the agent is allowed to do. Southpay forwards the presentation and the action's parameters (action type, amount, currency, asset) to the provider, which returns an allow or deny decision. The decision and receipt are stored in the audit trail alongside the resulting payment, payout, or mandate.
+
+Authorization providers are enabled per store. Contact support to enable HumanOS for your store.
+
+<Note>
+  Verification is fail-closed: if the provider cannot be reached or is misconfigured, gated actions are denied (`authorization_denied` with reason `verification_unavailable`), never silently allowed.
+</Note>
+
+## Presenting a mandate
+
+Over REST, the agent sends the mandate presentation on gated requests as a base64-encoded JSON header:
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/agentic/payments/{id}/refunds \
+  -H "Authorization: Bearer spa_live_..." \
+  -H "Idempotency-Key: refund-order-1042" \
+  -H "X-Mandate: eyJwcmVzZW50YXRpb24iOiAi..." \
+  -H "Content-Type: application/json" \
+  -d '{"refund": {}}'
+```
+
+The `X-Mandate` value must decode to valid JSON and is limited to 32 KB; anything malformed or oversized is treated as no mandate, which on a gated action results in a denial.
+
+## What is gated, and how
+
+| Action | No provider enabled | Provider enabled |
+| --- | --- | --- |
+| Reads (account, balances, payments, rates, limits) | Allowed | Allowed |
+| Create / cancel payment | Allowed | Verified per action |
+| Wait for payment | Allowed | Allowed |
+| Refund payment | Denied: `mandate_required` | Verified: allow or `authorization_denied` |
+| Enable / disable token | Denied: `mandate_required` | Verified: allow or `authorization_denied` |
+| Create payout | Denied unless a [spend limit](/agentic/agent-credentials#spend-limits) exists for the asset: `payout_controls_required` | Verified per payout; spend limit caps still apply |
+| Issue x402 session mandate | Denied: `mandate_required` | Verified once at issuance |
+| x402 settlement | Requires a usable session mandate: `mandate_required` | Same; caps enforced locally per call |
+
+Two things to note:
+
+- **Payment creation is the deliberate exception.** Charging a customer creates a receivable, not an outflow, so it works without a provider. With a provider enabled, even payment creation is verified.
+- **Spend limits and mandates compose.** With HumanOS enabled, a payout must pass mandate verification *and* stay inside any configured spend caps.
+
+## Error codes
+
+All agentic errors use the standard envelope:
+
+```json
+{
+  "error": {
+    "message": "Refunding a payment requires a configured authorization provider (mandate)",
+    "code": "mandate_required"
+  }
+}
+```
+
+| Code | Status | Meaning | What to do |
+| --- | --- | --- | --- |
+| `agent_credential_required` | 401 | Missing or malformed bearer token | Send `Authorization: Bearer spa_...` |
+| `invalid_agent_credential` | 401 | Token does not match an active credential | Check for revocation or expiry |
+| `insufficient_scope` | 403 | Credential lacks the required scope | Merchant creates a credential with the scope |
+| `mandate_required` | 403 | Action needs an authorization provider or a usable session mandate | Merchant enables a provider; agent presents `X-Mandate` |
+| `authorization_denied` | 403 | Provider evaluated the action and denied it (message carries the reason) | Surface the reason to the principal; do not retry blindly |
+| `payout_controls_required` | 403 | Payout attempted with no provider and no spend limit for the asset | Merchant sets a spend limit or enables a provider |
+| `per_tx_cap_exceeded` | 403 | Payout exceeds the per-transaction cap | Reduce the amount or raise the cap |
+| `daily_cap_exceeded` | 403 | Payout would exceed the daily cap for the current UTC day | Wait for the UTC day to roll over or raise the cap |
+| `spend_cap_exceeded` | 403 | x402 settlement exceeds the mandate's per-call cap or remaining envelope | Issue a new mandate or reduce the charge |
+| `idempotency_key_required` | 422 | Payout, refund, or settlement sent without `Idempotency-Key` | Send a unique key per logical operation |
+| `rate_limited` | 429 | Over 120 requests per minute on this credential | Back off and retry |
+
+<Warning>
+  If you are building an agent: these denials are the system working as designed. Read the `error.code`, explain it to the user or principal, and stop. Retrying the identical request will produce the identical denial.
+</Warning>
+
+## Audit trail
+
+Every gated decision is recorded. Payments, payouts, and mandates store the provider's decision and receipt with the record; every agent action (created, denied, cap exceeded) is emitted as telemetry with the credential id; and the per-credential [activity feed](/agentic/agent-credentials#activity) shows the merchant exactly what each agent did.

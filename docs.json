@@ -56,6 +56,17 @@
                 ]
               },
               {
+                "group": "Agentic commerce",
+                "pages": [
+                  "agentic/index",
+                  "agentic/quickstart",
+                  "agentic/agent-credentials",
+                  "agentic/authorization",
+                  "agentic/mcp-server",
+                  "agentic/x402"
+                ]
+              },
+              {
                 "group": "Integrations",
                 "pages": [
                   "oauth-apps",
@@ -106,6 +117,12 @@
                 "pages": [
                   "api-reference/payouts",
                   "api-reference/payout-schedules"
+                ]
+              },
+              {
+                "group": "Agentic",
+                "pages": [
+                  "api-reference/agentic"
                 ]
               },
               {
