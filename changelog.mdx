@@ -12,7 +12,7 @@ Subscriptions are now a full recurring-billing system: bundle multiple prices, o
 
 - **Subscription items**: A subscription can bill several prices at once (a base plan plus add-ons), each with its own quantity, on a single cycle invoice. Pass `items: [{ price_id, quantity }, ...]` when you create or update a subscription. [Read the guide](/subscriptions)
 
-- **Annual and multi-interval prices**: Prices support a `yearly` interval and an `interval_count`, so you can bill every N days, weeks, months, or years (for example quarterly). [See billing](/api-reference/billing)
+- **Annual and multi-interval prices**: Prices support a `yearly` interval and an `interval_count`, so you can bill every N days, weeks, months, or years (for example quarterly). [See recurring](/api-reference/recurring)
 
 - **Free trials**: Set `trial_period_days` to start a subscription in a `trialing` status; the first invoice is issued when the trial ends.
 

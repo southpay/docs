@@ -1,79 +1,24 @@
 ---
-title: "Billing"
-description: "Customers, invoices, products, prices, and subscriptions for recurring and one-off billing."
-sidebarTitle: "Billing"
+title: "Recurring"
+description: "Products, prices, and subscriptions for recurring billing."
+sidebarTitle: "Recurring"
 ---
 
 <Warning>
-  Billing is a gated feature. Customers and invoices require billing to be enabled on your store; products, prices, and subscriptions additionally return `403` (`"Billing is not enabled for this store"`) when the flag is off. Contact support to enable it. All endpoints require authentication; see [Authentication](/authentication).
+  Recurring billing is a gated feature. Products, prices, and subscriptions return `403` (`"Billing is not enabled for this store"`) when the flag is off. Contact support to enable it. All endpoints require authentication; see [Authentication](/authentication).
 </Warning>
 
 Base URL: `https://api.southpay.io/api/v2/billing`
 
-Billing builds on the same crypto checkout used for one-off [payment intents](/api-reference/payments). An invoice generates a hosted payment page; a subscription issues invoices automatically each cycle. Money amounts are in **cents** of the stated `currency`.
+A subscription bills a customer on a price's interval, generating an [invoice](/api-reference/invoicing) each cycle that settles through the same crypto checkout as a one-off [payment intent](/api-reference/payments). Money amounts are in **cents** of the stated `currency`.
 
-This page documents the resource shapes and the available operations. Subscribe to the [billing webhook events](/webhooks#billing-events) (`subscription.created`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, `invoice.finalized`, `invoice.paid`, `invoice.voided`) rather than polling. Each subscription renewal generates an invoice, so `invoice.finalized` and `invoice.paid` are your renewal and payment signals.
-
----
-
-## Customers
-
-A customer is the billed party. Email is unique per store.
-
-```bash
-GET    /billing/customers        # list (q, page, per_page)
-POST   /billing/customers        # create
-GET    /billing/customers/:id    # read
-PATCH  /billing/customers/:id    # update
-DELETE /billing/customers/:id    # soft-delete
-```
-
-<CodeGroup>
-```bash Create
-POST /billing/customers
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "customer": {
-    "email": "ada@example.com",
-    "name": "Ada Lovelace",
-    "phone": "+15551234567",
-    "billing_address": { "line1": "1 Analytical Way", "city": "London", "country": "GB" },
-    "metadata": { "crm_id": "c_123" }
-  }
-}
-```
-
-```json Response 201
-{
-  "id": "01J0...",
-  "email": "ada@example.com",
-  "name": "Ada Lovelace",
-  "phone": "+15551234567",
-  "billing_address": { "line1": "1 Analytical Way", "city": "London", "country": "GB" },
-  "metadata": { "crm_id": "c_123" },
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
-}
-```
-</CodeGroup>
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `customer[email]` | Yes | Unique per store. A duplicate returns `409`. |
-| `customer[name]` | No | Display name. |
-| `customer[phone]` | No | Contact phone. |
-| `customer[billing_address]` | No | Free-form address object. |
-| `customer[metadata]` | No | Arbitrary key-value pairs. |
-
-The list endpoint accepts `q` (matches email or name), `page`, and `per_page` (default 25, max 100).
+Subscribe to the [subscription webhook events](/webhooks#billing-events) (`subscription.created`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`) plus the `invoice.finalized` / `invoice.paid` events that carry each renewal and payment, rather than polling.
 
 ---
 
 ## Products and prices
 
-A product is a sellable thing; a price attaches an amount, currency, and billing interval to it. Prices are immutable once created (you archive and replace rather than edit). Products and prices are gated behind the billing feature flag.
+A product is a sellable thing; a price attaches an amount, currency, and billing interval to it. Prices are immutable once created (you archive and replace rather than edit).
 
 ```bash
 GET   /billing/products                       # list
@@ -107,66 +52,9 @@ A price has `unit_amount_cents`, `currency`, `interval` (one of `daily`, `weekly
 
 ---
 
-## Invoices
-
-An invoice is a set of line items billed to a customer. Create it as a draft, add line items, then `finalize` to lock it and generate the hosted payment page (`public_token`). `void` cancels an unpaid invoice.
-
-```bash
-GET   /billing/invoices             # list (status, customer_id, subscription_id, page, per_page)
-POST  /billing/invoices             # create draft
-GET   /billing/invoices/:id         # read (includes line_items, customer)
-PATCH /billing/invoices/:id         # update draft (incl. line_items)
-POST  /billing/invoices/:id/finalize
-POST  /billing/invoices/:id/void
-```
-
-<CodeGroup>
-```bash Create draft
-POST /billing/invoices
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "invoice": {
-    "customer_id": "01J0...",
-    "currency": "USD",
-    "due_at": "2026-06-01T00:00:00Z",
-    "description": "May usage",
-    "metadata": {}
-  }
-}
-```
-
-```json Response 201
-{
-  "id": "01J1...",
-  "customer_id": "01J0...",
-  "subscription_id": null,
-  "number": null,
-  "status": "draft",
-  "currency": "USD",
-  "public_token": null,
-  "subtotal_cents": 0,
-  "total_cents": 0,
-  "due_at": "2026-06-01T00:00:00.000Z",
-  "description": "May usage",
-  "metadata": {},
-  "finalized_at": null,
-  "voided_at": null,
-  "paid_at": null,
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
-}
-```
-</CodeGroup>
-
-Line items are set on `PATCH` via `invoice[line_items][]` with `description`, `quantity`, and `unit_amount_cents`. After `finalize`, the response includes a `public_token`; the hosted payment page lives at `/api/v2/billing/invoice/:token`.
-
----
-
 ## Subscriptions
 
-A subscription bills a customer on a recurring schedule, issuing an invoice each cycle. Subscriptions are gated behind the billing feature flag.
+A subscription bills a customer on a recurring schedule, issuing an invoice each cycle.
 
 ```bash
 GET   /billing/subscriptions             # list (status, customer_id, page, per_page)
