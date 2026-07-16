@@ -50,6 +50,12 @@
                 ]
               },
               {
+                "group": "Billing",
+                "pages": [
+                  "subscriptions"
+                ]
+              },
+              {
                 "group": "Checkout widget",
                 "pages": [
                   "checkout-widget"

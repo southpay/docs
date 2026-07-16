@@ -12,7 +12,7 @@ Base URL: `https://api.southpay.io/api/v2/billing`
 
 Billing builds on the same crypto checkout used for one-off [payment intents](/api-reference/payments). An invoice generates a hosted payment page; a subscription issues invoices automatically each cycle. Money amounts are in **cents** of the stated `currency`.
 
-This page documents the resource shapes and the available operations. Subscribe to the [billing webhook events](/webhooks#billing-events) (`invoice.finalized`, `invoice.paid`, `invoice.voided`, `subscription.past_due`, `subscription.canceled`) rather than polling.
+This page documents the resource shapes and the available operations. Subscribe to the [billing webhook events](/webhooks#billing-events) (`subscription.created`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, `invoice.finalized`, `invoice.paid`, `invoice.voided`) rather than polling. Each subscription renewal generates an invoice, so `invoice.finalized` and `invoice.paid` are your renewal and payment signals.
 
 ---
 
@@ -88,7 +88,22 @@ POST  /billing/products/:product_id/prices/:id/archive
 POST  /billing/products/:product_id/prices/:id/activate
 ```
 
-A price has `unit_amount_cents`, `currency`, `interval` (e.g. `month`, `year`, or one-time), and `active`.
+A price has `unit_amount_cents`, `currency`, `interval` (one of `daily`, `weekly`, `monthly`, `yearly`), `interval_count`, and `active`. Set `interval_count` to bill every N intervals — for example `interval: "monthly"` with `interval_count: 3` is quarterly. Money fields (`unit_amount_cents`, `currency`, `interval`, `interval_count`) are immutable once the price exists; archive and create a new price to change them.
+
+```json Price
+{
+  "id": "01J2...",
+  "product_id": "01JP...",
+  "unit_amount_cents": 2900,
+  "currency": "USD",
+  "interval": "monthly",
+  "interval_count": 1,
+  "active": true,
+  "metadata": {},
+  "created_at": "2026-05-12T12:00:00.000Z",
+  "updated_at": "2026-05-12T12:00:00.000Z"
+}
+```
 
 ---
 
@@ -97,7 +112,7 @@ A price has `unit_amount_cents`, `currency`, `interval` (e.g. `month`, `year`, o
 An invoice is a set of line items billed to a customer. Create it as a draft, add line items, then `finalize` to lock it and generate the hosted payment page (`public_token`). `void` cancels an unpaid invoice.
 
 ```bash
-GET   /billing/invoices             # list (status, customer_id, page, per_page)
+GET   /billing/invoices             # list (status, customer_id, subscription_id, page, per_page)
 POST  /billing/invoices             # create draft
 GET   /billing/invoices/:id         # read (includes line_items, customer)
 PATCH /billing/invoices/:id         # update draft (incl. line_items)
@@ -151,16 +166,28 @@ Line items are set on `PATCH` via `invoice[line_items][]` with `description`, `q
 
 ## Subscriptions
 
-A subscription bills a customer on a price's interval, issuing an invoice each cycle. Subscriptions are gated behind the billing feature flag.
+A subscription bills a customer on a recurring schedule, issuing an invoice each cycle. Subscriptions are gated behind the billing feature flag.
 
 ```bash
-GET  /billing/subscriptions          # list (status, customer_id, page, per_page)
-POST /billing/subscriptions          # create
-GET  /billing/subscriptions/:id      # read (includes price, customer)
-POST /billing/subscriptions/:id/cancel
-POST /billing/subscriptions/:id/pause
-POST /billing/subscriptions/:id/resume
+GET   /billing/subscriptions             # list (status, customer_id, page, per_page)
+POST  /billing/subscriptions             # create
+GET   /billing/subscriptions/:id         # read (includes items, price, customer)
+PATCH /billing/subscriptions/:id         # change plan (replace items/quantities)
+POST  /billing/subscriptions/:id/cancel     # cancel now or at period end
+POST  /billing/subscriptions/:id/uncancel   # undo a scheduled cancellation
+POST  /billing/subscriptions/:id/pause
+POST  /billing/subscriptions/:id/resume
 ```
+
+### Items
+
+A subscription is billed as one or more **items**, each pairing a price with a quantity. The first item is the anchor: its price sets the billing interval and currency for the whole subscription, and is mirrored on the top-level `price_id`/`quantity`. Add more items for a base plan plus add-ons — every item becomes a line on the same cycle invoice.
+
+All items must share the same `interval`, `interval_count`, and `currency`.
+
+A single price serves any number of customers: reuse one `price_id` across many subscriptions, one per customer.
+
+### Create
 
 <CodeGroup>
 ```bash Create
@@ -171,7 +198,11 @@ Content-Type: application/json
 {
   "subscription": {
     "customer_id": "01J0...",
-    "price_id": "01J2...",
+    "items": [
+      { "price_id": "01J2...", "quantity": 1 },
+      { "price_id": "01J5...", "quantity": 3 }
+    ],
+    "trial_period_days": 14,
     "grace_cycles": 1,
     "metadata": {}
   }
@@ -183,11 +214,29 @@ Content-Type: application/json
   "id": "01J3...",
   "customer_id": "01J0...",
   "price_id": "01J2...",
-  "status": "active",
+  "quantity": 1,
+  "status": "trialing",
+  "items": [
+    {
+      "id": null,
+      "quantity": 1,
+      "price": { "id": "01J2...", "product_id": "01JP...", "product_name": "Pro plan", "unit_amount_cents": 2900, "currency": "USD", "interval": "monthly", "interval_count": 1 }
+    },
+    {
+      "id": "01JI...",
+      "quantity": 3,
+      "price": { "id": "01J5...", "product_id": "01JQ...", "product_name": "Extra seats", "unit_amount_cents": 500, "currency": "USD", "interval": "monthly", "interval_count": 1 }
+    }
+  ],
+  "price": { "id": "01J2...", "product_id": "01JP...", "product_name": "Pro plan", "unit_amount_cents": 2900, "currency": "USD", "interval": "monthly", "interval_count": 1 },
+  "customer": { "id": "01J0...", "email": "ada@example.com", "name": "Ada Lovelace" },
   "current_period_start": "2026-05-12T12:00:00.000Z",
-  "current_period_end": "2026-06-12T12:00:00.000Z",
-  "next_billing_at": "2026-06-12T12:00:00.000Z",
+  "current_period_end": "2026-05-26T12:00:00.000Z",
+  "next_billing_at": "2026-05-26T12:00:00.000Z",
+  "trial_end": "2026-05-26T12:00:00.000Z",
   "started_at": "2026-05-12T12:00:00.000Z",
+  "cancel_at_period_end": false,
+  "cancel_at": null,
   "canceled_at": null,
   "paused_at": null,
   "failed_cycle_count": 0,
@@ -202,8 +251,45 @@ Content-Type: application/json
 | Field | Required | Description |
 | --- | --- | --- |
 | `subscription[customer_id]` | Yes | An existing billing customer. |
-| `subscription[price_id]` | Yes | The recurring price to bill. |
-| `subscription[grace_cycles]` | No | Cycles to allow past-due before treating as failed. Defaults to 1. |
+| `subscription[items]` | Yes* | Array of `{ price_id, quantity }`. The first item is the anchor. |
+| `subscription[price_id]` | Yes* | Shorthand for a single-item subscription. Provide either `items` or `price_id`. |
+| `subscription[quantity]` | No | Quantity for the `price_id` shorthand. Defaults to 1. |
+| `subscription[trial_period_days]` | No | Days of free trial. No invoice is issued during the trial; the first invoice is generated when it ends. Defaults to 0. |
+| `subscription[grace_cycles]` | No | Cycles to allow past-due before the subscription is treated as failed. Defaults to 1. |
 | `subscription[metadata]` | No | Arbitrary key-value pairs. |
 
-If `failed_cycle_count` exceeds `grace_cycles`, Southpay emits `subscription.past_due`.
+### Statuses
+
+| Status | Meaning |
+| --- | --- |
+| `trialing` | In a free trial. Converts to `active` and bills its first cycle at `trial_end`. |
+| `active` | Billing normally each cycle. |
+| `past_due` | A cycle invoice went unpaid within its grace window. |
+| `paused` | Billing suspended. Call `resume` to continue. |
+| `canceled` | Ended. Terminal. |
+
+### Change the plan
+
+`PATCH /billing/subscriptions/:id` replaces the subscription's items. Send the full new set of items; the change applies from the next cycle (there is no mid-cycle proration).
+
+```bash
+PATCH /billing/subscriptions/01J3...
+
+{ "subscription": { "items": [ { "price_id": "01J9...", "quantity": 2 } ] } }
+```
+
+### Cancel
+
+`cancel` ends the subscription immediately. Pass `at_period_end: true` to keep it active until the current period ends and cancel automatically — the response then has `cancel_at_period_end: true` and `cancel_at` set. Call `uncancel` to clear a scheduled cancellation while the subscription is still live.
+
+```bash
+POST /billing/subscriptions/01J3.../cancel
+
+{ "at_period_end": true }
+```
+
+### Pause and resume
+
+`pause` suspends billing; `resume` restarts it and opens a fresh period from now.
+
+If a cycle invoice goes unpaid, Southpay emits `subscription.past_due`. Once the grace window (roughly `grace_cycles` × the billing interval) is exhausted, the invoice is marked uncollectible and the subscription is canceled for non-payment.

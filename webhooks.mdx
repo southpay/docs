@@ -374,11 +374,13 @@ Only emitted for stores with billing enabled. See the [Billing reference](/api-r
 
 | Event | Triggered when |
 | --- | --- |
-| `invoice.finalized` | An invoice is finalized and ready to be paid |
-| `invoice.paid` | An invoice is paid in full |
-| `invoice.voided` | An invoice is voided |
+| `subscription.created` | A subscription is created |
+| `subscription.updated` | A subscription changes (plan/items change, pause, resume, scheduled cancellation) |
 | `subscription.past_due` | A subscription cycle was not paid within its grace period |
 | `subscription.canceled` | A subscription is canceled |
+| `invoice.finalized` | An invoice is finalized and ready to be paid (a subscription renewal generates one each cycle) |
+| `invoice.paid` | An invoice is paid in full |
+| `invoice.voided` | An invoice is voided |
 
 ---
 

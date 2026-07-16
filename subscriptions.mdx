@@ -1,0 +1,104 @@
+---
+title: "Subscriptions"
+description: "Bill customers on a recurring schedule with products, prices, and subscription items, collected on-chain each cycle."
+---
+
+Subscriptions let you charge a customer repeatedly on a fixed schedule. Southpay generates an invoice at the start of every cycle and collects it through the same crypto checkout used for [one-off payments](/payment-intents), so a subscription is really an automatic invoice generator.
+
+<Note>
+  Subscriptions are a gated feature. They require billing to be enabled on your store, otherwise the endpoints return `403`. Contact support to turn it on.
+</Note>
+
+## Building blocks
+
+You compose a subscription from four resources. See the [Billing API reference](/api-reference/billing) for full field shapes.
+
+| Resource | What it is |
+| --- | --- |
+| **Customer** | The billed party. Reused across invoices and subscriptions. |
+| **Product** | Something you sell (a plan, an add-on). |
+| **Price** | An amount, currency, and interval attached to a product. A price is reusable across any number of customers. |
+| **Subscription** | Bills one customer on a price's interval. Made of one or more **items**. |
+
+A price sets `interval` (`daily`, `weekly`, `monthly`, or `yearly`) and `interval_count` — set `interval_count: 3` on a monthly price for quarterly billing. Money fields are immutable once a price exists; archive and create a new one to change them.
+
+## Items
+
+A subscription is billed as one or more items, each pairing a price with a quantity. The first item is the anchor: its price sets the interval and currency for the whole subscription. Add more items for a base plan plus add-ons, and every item becomes a line on the same invoice.
+
+```text
+Subscription
+ ├── Item → Pro plan      ($29 / month × 1)
+ └── Item → Extra seats   ($5 / month × 3)
+
+Invoice each month:
+  Pro plan       $29.00
+  Extra seats    $15.00
+  Total          $44.00
+```
+
+All items must share the same interval, interval count, and currency.
+
+## Create a subscription
+
+Pick a customer and one or more `{ price_id, quantity }` items.
+
+```bash
+POST /api/v2/billing/subscriptions
+Authorization: Bearer sp_test_YOUR_KEY
+Content-Type: application/json
+```
+
+```json
+{
+  "subscription": {
+    "customer_id": "01J0...",
+    "items": [
+      { "price_id": "01J2...", "quantity": 1 },
+      { "price_id": "01J5...", "quantity": 3 }
+    ],
+    "trial_period_days": 14,
+    "grace_cycles": 1
+  }
+}
+```
+
+For a single price, you can use the shorthand `"price_id": "01J2..."` (with an optional `"quantity"`) instead of `items`.
+
+To subscribe several customers to the same plan, create one subscription per customer with the same `items` — a price is shared, a subscription is per-customer.
+
+## Trials
+
+Set `trial_period_days` to start the subscription in a `trialing` status. No invoice is issued during the trial; when it ends, the subscription becomes `active` and its first cycle is billed.
+
+## The billing cycle
+
+At the start of each cycle Southpay creates and finalizes an invoice for every item, then advances the period. The customer pays the invoice on-chain, exactly like a one-off payment. Listen for `invoice.finalized` (a new cycle was billed) and `invoice.paid` (the customer paid) rather than polling.
+
+You can list a subscription's invoices with `GET /billing/invoices?subscription_id=...`.
+
+## Manage the lifecycle
+
+| Status | Meaning |
+| --- | --- |
+| `trialing` | In a free trial; bills its first cycle at trial end. |
+| `active` | Billing normally. |
+| `past_due` | A cycle invoice was not paid in time. |
+| `paused` | Billing suspended; resume to continue. |
+| `canceled` | Ended (terminal). |
+
+- **Change the plan** — `PATCH /billing/subscriptions/:id` with a new `items` set. The change applies from the next cycle; there is no mid-cycle proration.
+- **Cancel** — `POST .../cancel` ends it immediately, or pass `{ "at_period_end": true }` to let the current cycle finish first. Undo a scheduled cancellation with `POST .../uncancel`.
+- **Pause / resume** — `POST .../pause` suspends billing; `POST .../resume` restarts it from a fresh period.
+
+If a cycle goes unpaid, the subscription moves to `past_due` and Southpay emits `subscription.past_due`. Once the grace window (about `grace_cycles` × the interval) is exhausted, the invoice is marked uncollectible and the subscription is canceled for non-payment.
+
+## Webhooks
+
+Subscribe to the [billing webhook events](/webhooks#billing-events): `subscription.created`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`, plus the `invoice.*` events that carry each renewal and payment.
+
+## Next steps
+
+<Card title="Billing API reference" icon="book" href="/api-reference/billing">
+  Full resource shapes and every operation for customers, products, prices, invoices, and subscriptions.
+</Card>
