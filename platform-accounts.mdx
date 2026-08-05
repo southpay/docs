@@ -1,0 +1,185 @@
+---
+title: "Platform accounts"
+description: "Onboard your own merchants onto Southpay, take a fee on everything they process, and manage them from one integration."
+sidebarTitle: "Platform accounts"
+---
+
+<Info>
+  Platform accounts are enabled per partner. Contact Southpay to have your account turned into a platform; you cannot enable it yourself.
+</Info>
+
+A **platform** is a Southpay account that onboards and manages other merchants, called **sub-merchants**. You integrate once, create accounts by API, and earn a fee on every payment your merchants take.
+
+Each sub-merchant is a full Southpay account. It has its own balances, payout destinations, accepted assets, webhook endpoints, refunds and verification. Nothing about the payment API changes for them.
+
+Use platform accounts when you resell Southpay under your own brand and your merchants never sign up with us directly. If your merchants already have their own Southpay accounts and simply authorise you to act for them, use [OAuth apps](/oauth-apps) instead.
+
+---
+
+## How money splits
+
+Every payment a sub-merchant takes is split three ways:
+
+```
+gross - southpay_fee - platform_fee = merchant_net
+```
+
+Both rates apply to the gross amount, so they add rather than compound. If Southpay charges 1.5% and your platform fee is 1%, the merchant pays 2.5% in total.
+
+Your fee is credited to your own Southpay balance in the same asset. You withdraw it exactly like any other balance, through your normal payouts. There is no separate settlement, and no on-chain transfer for the fee itself.
+
+Rates resolve from most specific to least:
+
+| | Southpay fee | Your platform fee |
+| --- | --- | --- |
+| 1 | Rate set on the sub-merchant | Rate set on the sub-merchant |
+| 2 | Rate negotiated with your platform | Your platform default |
+| 3 | Southpay's standard rate | None |
+
+A rate negotiated with your platform applies to every merchant you onboard, so you do not have to set it per account.
+
+Both rates are snapshotted onto the payment when it is created, so changing a rate never alters payments already in flight.
+
+<Warning>
+  When a payment is refunded, your fee is reversed along with it. If you have already withdrawn the fee and your balance cannot cover the reversal, the shortfall is recorded against your account and recovered from later fees.
+</Warning>
+
+---
+
+## Creating a sub-merchant
+
+```bash
+POST /platform/accounts
+Authorization: Bearer <PLATFORM_API_KEY>
+Content-Type: application/json
+
+{
+  "account": {
+    "name": "Corner Coffee",
+    "external_id": "cust_10482",
+    "platform_fee_percentage": "0.005"
+  }
+}
+```
+
+`external_id` is your own identifier for the merchant. Sending the same one again returns the existing account rather than creating a duplicate, so the call is safe to retry.
+
+`platform_fee_percentage` is optional and a decimal rate, so `0.005` is 0.5%. Leave it out to inherit your platform default.
+
+See the [API reference](/api-reference/platform-accounts) for the full endpoint set.
+
+---
+
+## Getting a merchant verified
+
+A sub-merchant cannot receive payouts until it has been verified and has a payout destination. Sub-merchants have no Southpay login of their own, so there are two ways to get them there.
+
+### Hosted onboarding
+
+Southpay collects the details and reviews them. This keeps the compliance work off you.
+
+```bash
+POST /platform/accounts/{account_id}/onboarding_links
+Authorization: Bearer <PLATFORM_API_KEY>
+Content-Type: application/json
+
+{
+  "onboarding_link": {
+    "return_url": "https://yourapp.example/onboarding/done"
+  }
+}
+```
+
+The response contains a `url`. Redirect the merchant to it. They enter their business details and a payout address, and are sent back to your `return_url` when they finish.
+
+Links are single use and expire after seven days by default. The token is shown once, in the create response, and is not retrievable afterwards.
+
+### Platform attestation
+
+If you have already run your own diligence, submit the merchant's details directly:
+
+```bash
+POST /platform/accounts/{account_id}/verification
+Authorization: Bearer <PLATFORM_API_KEY>
+Content-Type: application/json
+
+{
+  "verification_request": {
+    "business_legal_name": "Corner Coffee Lda",
+    "business_country": "PT",
+    "contact_email": "owner@cornercoffee.example",
+    "registration_number": "PT123456789"
+  }
+}
+```
+
+The request is recorded as attested by your platform. Southpay still reviews anything that touches bank payouts.
+
+### Reopening one step
+
+Mint a link scoped to a single step when a merchant needs to fix something. A scoped link only permits that step and refuses the other.
+
+```bash
+POST /platform/accounts/{account_id}/onboarding_links
+
+{ "onboarding_link": { "purpose": "payout_destination" } }
+```
+
+| Purpose | Covers |
+| --- | --- |
+| `onboarding` | Verification and payout destination. The default. |
+| `kyb` | Verification only, for a merchant who was rejected. |
+| `payout_destination` | Payout destination only, to change where they are paid. |
+
+Subscribe to [verification events](#verification-events) to know when a merchant is approved or rejected, rather than polling.
+
+---
+
+## Acting on a sub-merchant
+
+Send `X-Southpay-Account` alongside your platform credentials to scope any request to one of your sub-merchants:
+
+```bash
+GET /payments
+Authorization: Bearer <PLATFORM_API_KEY>
+X-Southpay-Account: <account_id>
+```
+
+Every merchant endpoint accepts this header, so you can create payments, read balances, issue refunds and request payouts on a merchant's behalf without a separate integration.
+
+Requires the `accounts:act` scope. Requesting an account that is not one of your sub-merchants returns `403`.
+
+<Warning>
+  You cannot add, select or remove a sub-merchant's payout destination, even while acting as them. Only the merchant can, through an onboarding link. This stops a compromised platform credential from redirecting a merchant's settlements, and it means a disputed payout has a record of who chose the destination.
+</Warning>
+
+---
+
+## Seeing the whole book
+
+`GET /platform/overview` returns your merchant counts, how many are verified, processed volume, your fee earned per asset, and your busiest merchants.
+
+`GET /platform/payments` lists payments across every sub-merchant, filterable to one account with `?account_id=`.
+
+---
+
+## Verification events
+
+Subscribe your platform's webhook endpoint to these to follow onboarding without polling:
+
+| Event | Triggered when |
+| --- | --- |
+| `store.verification.approved` | A merchant passes verification and can transact |
+| `store.verification.rejected` | Verification is refused. `rejection_reason` says why |
+
+Payment, payout and transaction events for your sub-merchants are also delivered to your platform's endpoints, in addition to the merchant's own. Any event that concerns a sub-merchant carries a top-level `account` field naming it:
+
+```json
+{
+  "type": "payment_intent.completed",
+  "account": "9f2b...",
+  "data": { "object": { "...": "..." } }
+}
+```
+
+Events for your platform's own payments do not carry `account`, so you can route on its presence. See [Webhooks](/webhooks) for signature verification and delivery behaviour.

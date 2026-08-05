@@ -75,6 +75,7 @@
               {
                 "group": "Integrations",
                 "pages": [
+                  "platform-accounts",
                   "oauth-apps",
                   "integrations/n8n"
                 ]
@@ -104,6 +105,12 @@
                   "api-reference/payments",
                   "api-reference/refunds",
                   "api-reference/reconciliation"
+                ]
+              },
+              {
+                "group": "Platform",
+                "pages": [
+                  "api-reference/platform-accounts"
                 ]
               },
               {

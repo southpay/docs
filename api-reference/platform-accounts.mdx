@@ -1,0 +1,234 @@
+---
+title: "Platform accounts"
+description: "Create and manage sub-merchants, onboard them, and read across your whole book."
+sidebarTitle: "Platform accounts"
+---
+
+<Warning>
+  These endpoints are only available to accounts Southpay has enabled as a platform. Every other account receives `403 not_a_platform`. See the [Platform accounts guide](/platform-accounts) for how the model works.
+</Warning>
+
+Base URL: `https://api.southpay.io/api/v2`
+
+## Scopes
+
+| Scope | Grants |
+| --- | --- |
+| `accounts:read` | List and read your sub-merchants, and read platform reports. |
+| `accounts:write` | Create and update sub-merchants, attest verification, mint onboarding links. |
+| `accounts:act` | Send `X-Southpay-Account` to scope a request to a sub-merchant. |
+
+These scopes are not included in a standard secret key. A key created on a platform account carries them by default; a key created before your account was enabled does not, so rotate or recreate it.
+
+---
+
+## The account object
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string (UUID) | The sub-merchant's account id. Use as `X-Southpay-Account`. |
+| `name` | string | Business name. |
+| `external_id` | string \| null | Your own identifier for this merchant. |
+| `platform_fee_percentage` | string \| null | Effective rate as a decimal, e.g. `"0.005"` for 0.5%. Falls back to your platform default. |
+| `charges_enabled` | boolean | Whether the merchant has passed verification. |
+| `payouts_enabled` | boolean | Whether the merchant has a payout destination. |
+| `kyc_confirmed_at` | string \| null | ISO 8601 timestamp of verification. |
+| `created_at` | string | ISO 8601. |
+
+---
+
+## Create a sub-merchant
+
+Idempotent on `external_id`: sending one that already exists returns the existing account with `201` rather than creating a duplicate.
+
+<CodeGroup>
+```bash Request
+POST /platform/accounts
+Authorization: Bearer <PLATFORM_API_KEY>
+Content-Type: application/json
+
+{
+  "account": {
+    "name": "Corner Coffee",
+    "external_id": "cust_10482",
+    "platform_fee_percentage": "0.005",
+    "country": "PT"
+  }
+}
+```
+
+```json Response
+{
+  "id":                      "9f2b7c1e-...",
+  "name":                    "Corner Coffee",
+  "external_id":             "cust_10482",
+  "platform_fee_percentage": "0.005",
+  "charges_enabled":         false,
+  "payouts_enabled":         false,
+  "kyc_confirmed_at":        null,
+  "created_at":              "2026-08-05T14:22:10Z"
+}
+```
+</CodeGroup>
+
+`country` seeds the merchant's default settlement currency. It does not have to match where they are verified.
+
+---
+
+## List sub-merchants
+
+Filter to one with `?external_id=`.
+
+```bash
+GET /platform/accounts
+Authorization: Bearer <PLATFORM_API_KEY>
+```
+
+Returns an array of account objects, newest first. Offboarded accounts are excluded.
+
+---
+
+## Retrieve a sub-merchant
+
+```bash
+GET /platform/accounts/{account_id}
+```
+
+---
+
+## Update a sub-merchant
+
+```bash
+PATCH /platform/accounts/{account_id}
+
+{ "account": { "platform_fee_percentage": "0.0075" } }
+```
+
+A rate change applies to payments created after it. Payments already in flight keep the rate they were created with.
+
+---
+
+## Attest verification
+
+Submit business details you have already verified yourself. Recorded as attested by your platform.
+
+```bash
+POST /platform/accounts/{account_id}/verification
+
+{
+  "verification_request": {
+    "business_legal_name": "Corner Coffee Lda",
+    "business_country":    "PT",
+    "contact_email":       "owner@cornercoffee.example",
+    "registration_number": "PT123456789"
+  }
+}
+```
+
+`business_legal_name`, `business_country` (ISO 3166-1 alpha-2) and `contact_email` are required. Returns `409 verification_already_pending` if one is already under review.
+
+---
+
+## Create an onboarding link
+
+Returns a URL to redirect the merchant to. The token is shown once and cannot be retrieved later.
+
+<CodeGroup>
+```bash Request
+POST /platform/accounts/{account_id}/onboarding_links
+
+{
+  "onboarding_link": {
+    "return_url": "https://yourapp.example/onboarding/done",
+    "purpose":    "onboarding",
+    "expires_in": 604800
+  }
+}
+```
+
+```json Response
+{
+  "id":           "0b91...",
+  "account_id":   "9f2b7c1e-...",
+  "token":        "spob_...",
+  "url":          "https://app.southpay.io/onboarding/spob_...",
+  "purpose":      "onboarding",
+  "return_url":   "https://yourapp.example/onboarding/done",
+  "expires_at":   "2026-08-12T14:22:10Z",
+  "completed_at": null
+}
+```
+</CodeGroup>
+
+| Field | Description |
+| --- | --- |
+| `purpose` | `onboarding` (default), `kyb`, or `payout_destination`. A scoped link permits only that step. |
+| `return_url` | Where the merchant is sent on completion. Must be `https`. |
+| `expires_in` | Seconds. Defaults to 7 days, capped at 30. |
+
+Links are single use. Mint a new one to reopen a step.
+
+---
+
+## Platform overview
+
+<CodeGroup>
+```bash Request
+GET /platform/overview?from=2026-07-01&to=2026-07-31
+Authorization: Bearer <PLATFORM_API_KEY>
+```
+
+```json Response
+{
+  "from":                "2026-07-01",
+  "to":                  "2026-07-31",
+  "livemode":            true,
+  "sub_merchant_count":  24,
+  "activated_count":     19,
+  "completed_payments":  1432,
+  "volume_by_currency":  [ { "currency": "EUR", "amount_cents": 84210050 } ],
+  "platform_fee_earned": [ { "asset_id": "ETH_USDC", "amount_atomic": "421050" } ],
+  "top_sub_merchants":   [ { "account_id": "9f2b...", "name": "Corner Coffee", "amount_cents": 1204000 } ]
+}
+```
+</CodeGroup>
+
+`from` and `to` default to the last 30 days and are capped at a 365 day range. `platform_fee_earned` is net of refund clawbacks.
+
+---
+
+## Payments across sub-merchants
+
+```bash
+GET /platform/payments?account_id=9f2b...&status=completed&page=1
+```
+
+| Parameter | Description |
+| --- | --- |
+| `account_id` | Restrict to one sub-merchant. |
+| `status` | `pending`, `processing`, `completed`, `failed`, `expired`, `refunded`. |
+| `page`, `per_page` | Defaults to 25 per page, max 100. |
+
+Each row carries the `account` it belongs to and the `platform_fee_percentage` snapshotted on that payment.
+
+---
+
+## Acting on a sub-merchant
+
+Add `X-Southpay-Account` to any merchant endpoint:
+
+```bash
+POST /payments
+Authorization: Bearer <PLATFORM_API_KEY>
+X-Southpay-Account: 9f2b7c1e-...
+Content-Type: application/json
+
+{ "payment_intent": { "amount": "24.00", "currency": "EUR" } }
+```
+
+| Error | Meaning |
+| --- | --- |
+| `403 not_a_platform` | Your account is not an enabled platform. |
+| `403 account_not_found` | That account is not one of your sub-merchants, or has been offboarded. |
+| `403 insufficient_scope` | Your credential lacks `accounts:act`. |
+| `403 platform_cannot_change_payout_destination` | Payout destinations can only be changed by the merchant, through an onboarding link. |

@@ -89,6 +89,7 @@ Every webhook is a `POST` with `Content-Type: application/json` and this envelop
 | `created` | integer | Unix timestamp (seconds) |
 | `livemode` | boolean | `false` for test mode events |
 | `api_version` | string | Payload schema version. |
+| `account` | string (UUID) | Present only on events a [platform](/platform-accounts) receives about one of its sub-merchants. Names the account the event concerns. |
 | `data.object` | object | The resource that changed. |
 | `data.object.id` | string | The intent `reference` (the checkout token), not its UUID. |
 | `data.object.settlement_amount_cents` | integer | Settlement amount in minor units (e.g. cents). |
@@ -342,6 +343,15 @@ end
 | `payment_intent.failed` | Payment detected but cannot complete |
 | `payment_intent.expired` | Intent timed out with no payment |
 | `payment_intent.refunded` | Funds returned to sender |
+
+### Verification events
+
+Emitted when a store passes or fails business verification. Most useful to [platforms](/platform-accounts) following their sub-merchants through onboarding.
+
+| Event | Triggered when |
+| --- | --- |
+| `store.verification.approved` | Verification passed; the store can transact |
+| `store.verification.rejected` | Verification refused. `data.object.rejection_reason` says why |
 
 ### Transaction events
 
