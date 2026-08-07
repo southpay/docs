@@ -2,19 +2,73 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "Southpay",
+  "description": "Southpay is a crypto payment gateway. Accept crypto payments, settle in local currency, and automate payouts, refunds, subscriptions, and reconciliation through a single REST API.",
   "colors": {
     "primary": "#4253FE",
-    "light": "#4253FE",
-    "dark": "#4253FE"
+    "light": "#7C88FF",
+    "dark": "#2E3BC7"
   },
   "favicon": "/favicon.png",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://docs.southpay.io"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Inter Tight",
+      "weight": 600
+    },
+    "body": {
+      "family": "Inter",
+      "weight": 400
+    }
+  },
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
+  "background": {
+    "decoration": "gradient"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": {
+      "theme": {
+        "light": "github-light-default",
+        "dark": "github-dark-default"
+      }
+    }
+  },
+  "icons": {
+    "library": "fontawesome"
+  },
   "seo": {
     "metatags": {
       "og:type": "website",
       "og:site_name": "Southpay Documentation",
-      "og:image": "https://docs.southpay.io/images/hero-light.png",
-      "twitter:card": "summary_large_image",
-      "twitter:image": "https://docs.southpay.io/images/hero-light.png"
+      "twitter:card": "summary_large_image"
+    },
+    "organization": {
+      "name": "Southpay",
+      "url": "https://southpay.io",
+      "sameAs": [
+        "https://github.com/southpay",
+        "https://linkedin.com/company/southpay"
+      ]
+    },
+    "indexing": "navigable"
+  },
+  "search": {
+    "prompt": "Search payments, webhooks, payouts, and API reference"
+  },
+  "metadata": {
+    "timestamp": true
+  },
+  "thumbnails": {
+    "appearance": "dark",
+    "fonts": {
+      "family": "Inter Tight"
     }
   },
   "navigation": {
@@ -164,6 +218,123 @@
       ]
     }
   },
+  "navbar": {
+    "links": [
+      {
+        "label": "Changelog",
+        "href": "/changelog"
+      },
+      {
+        "label": "Support",
+        "href": "mailto:support@southpay.io",
+        "icon": "life-ring"
+      },
+      {
+        "type": "github",
+        "href": "https://github.com/southpay"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "https://app.southpay.io"
+    }
+  },
+  "footer": {
+    "socials": {
+      "website": "https://southpay.io",
+      "github": "https://github.com/southpay",
+      "linkedin": "https://linkedin.com/company/southpay"
+    },
+    "links": [
+      {
+        "header": "Get started",
+        "items": [
+          {
+            "label": "Quickstart",
+            "href": "/quickstart"
+          },
+          {
+            "label": "Authentication",
+            "href": "/authentication"
+          },
+          {
+            "label": "Environments",
+            "href": "/environments"
+          },
+          {
+            "label": "Errors",
+            "href": "/errors"
+          }
+        ]
+      },
+      {
+        "header": "API reference",
+        "items": [
+          {
+            "label": "Payments",
+            "href": "/api-reference/payments"
+          },
+          {
+            "label": "Payouts",
+            "href": "/api-reference/payouts"
+          },
+          {
+            "label": "Balances",
+            "href": "/api-reference/balances"
+          },
+          {
+            "label": "Webhook endpoints",
+            "href": "/api-reference/webhook-endpoints"
+          }
+        ]
+      },
+      {
+        "header": "Southpay",
+        "items": [
+          {
+            "label": "Dashboard",
+            "href": "https://app.southpay.io"
+          },
+          {
+            "label": "Changelog",
+            "href": "/changelog"
+          },
+          {
+            "label": "Support",
+            "href": "mailto:support@southpay.io"
+          }
+        ]
+      }
+    ]
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "assistant",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
+  },
+  "markdown": {
+    "instructions": [
+      "The Southpay REST API is served from https://api.southpay.io/api/v2. Always keep the /api/v2 prefix on request paths.",
+      "Southpay has separate test and live modes. API keys are scoped to one mode and are prefixed test_ or live_. Use test mode unless the user explicitly asks for live.",
+      "Send an Idempotency-Key header on every request that creates or moves money so retries cannot double-charge."
+    ]
+  },
+  "errors": {
+    "404": {
+      "redirect": false,
+      "title": "Page not found",
+      "description": "This page moved or never existed. Start from the [quickstart](/quickstart), browse the [API reference](/api-reference/payments), or search from the top of the page."
+    }
+  },
   "redirects": [
     {
       "source": "/api-reference/billing",
@@ -173,52 +344,5 @@
       "source": "/ledger/:slug*",
       "destination": "/"
     }
-  ],
-  "logo": {
-    "light": "/logo/light.png",
-    "dark": "/logo/dark.png",
-    "href": "https://docs.southpay.io"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:support@southpay.io"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://api.southpay.io"
-    }
-  },
-  "contextual": {
-    "options": [
-      "copy",
-      "view",
-      "chatgpt",
-      "claude",
-      "perplexity",
-      "mcp",
-      "cursor",
-      "vscode"
-    ]
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/southpay",
-      "linkedin": "https://linkedin.com/company/southpay"
-    }
-  },
-  "appearance": {
-    "strict": true,
-    "default": "light"
-  },
-  "thumbnails": {
-    "appearance": "light"
-  },
-  "banner": {
-    "content": "SouthPay Documentation",
-    "dismissible": false
-  }
+  ]
 }

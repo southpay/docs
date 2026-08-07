@@ -1,0 +1,77 @@
+mdx-content pre {
+  line-height: 1.55;
+}
+
+mdx-content pre code {
+  font-size: 0.8125rem;
+  font-variant-ligatures: none;
+  font-variant-numeric: tabular-nums lining-nums;
+  tab-size: 2;
+}
+
+mdx-content :not(pre) > code {
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+code-block + code-block,
+code-group + code-group {
+  margin-top: 1.25rem;
+}
+
+mdx-content table {
+  width: 100%;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+mdx-content th,
+mdx-content td {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  vertical-align: top;
+}
+
+mdx-content th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+mdx-content th code,
+mdx-content td:first-child code {
+  white-space: nowrap;
+}
+
+callout {
+  display: block;
+  margin-top: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+callout p:first-child {
+  margin-top: 0;
+}
+
+callout p:last-child,
+step p:last-child,
+field p:last-child {
+  margin-bottom: 0;
+}
+
+callout pre {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+
+field {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+expandable field {
+  margin-top: 0.25rem;
+}
+
+#page-title,
+mdx-content h2,
+mdx-content h3 {
+  letter-spacing: -0.015em;
+}
