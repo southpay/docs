@@ -1,13 +1,13 @@
 ---
 title: "Platform accounts"
-description: "Onboard your own merchants onto Southpay, take a fee on everything they process, and manage them from one integration."
+description: "Onboard your own merchants onto SouthPay, take a fee on everything they process, and manage them from one integration."
 sidebarTitle: "Platform accounts"
 ---
 
 Platform mode is not a feature you can switch on yourself. Read this first.
 
 <Warning>
-**Platform mode is off until Southpay staff turn it on, and there is no way to request it through the API.** The `platform_accounts` feature flag is administrator-only. Until it is set on your store, every endpoint on this page returns:
+**Platform mode is off until SouthPay staff turn it on, and there is no way to request it through the API.** The `platform_accounts` feature flag is administrator-only. Until it is set on your store, every endpoint on this page returns:
 
 ```json 403
 { "error": { "message": "This store is not a platform account", "code": "not_a_platform" } }
@@ -16,11 +16,11 @@ Platform mode is not a feature you can switch on yourself. Read this first.
 The same `403` comes back from any request carrying `X-Southpay-Account`. Email [support@southpay.io](mailto:support@southpay.io) to have your account enabled before you build against this page.
 </Warning>
 
-A **platform** is a Southpay account that onboards and manages other merchants, called **sub-merchants**. You integrate once, create accounts by API, and earn a fee on every payment your merchants take.
+A **platform** is a SouthPay account that onboards and manages other merchants, called **sub-merchants**. You integrate once, create accounts by API, and earn a fee on every payment your merchants take.
 
-Each sub-merchant is a full Southpay account. It has its own balances, payout destinations, accepted assets, webhook endpoints, refunds and verification. Nothing about the payment API changes for them.
+Each sub-merchant is a full SouthPay account. It has its own balances, payout destinations, accepted assets, webhook endpoints, refunds and verification. Nothing about the payment API changes for them.
 
-Use platform accounts when you resell Southpay under your own brand and your merchants never sign up with us directly. If your merchants already have their own Southpay accounts and authorize you to act for them, use [OAuth apps](/oauth-apps) instead.
+Use platform accounts when you resell SouthPay under your own brand and your merchants never sign up with us directly. If your merchants already have their own SouthPay accounts and authorize you to act for them, use [OAuth apps](/oauth-apps) instead.
 
 ## Scopes
 
@@ -42,17 +42,17 @@ Every payment a sub-merchant takes is split three ways:
 gross - southpay_fee - platform_fee = merchant_net
 ```
 
-Both rates apply to the gross amount, so they add rather than compound. If Southpay charges 1.5% and your platform fee is 1%, the merchant pays 2.5% in total.
+Both rates apply to the gross amount, so they add rather than compound. If SouthPay charges 1.5% and your platform fee is 1%, the merchant pays 2.5% in total.
 
-Your fee is credited to your own Southpay balance in the same asset. You withdraw it exactly like any other balance, through your normal payouts. There is no separate settlement, and no on-chain transfer for the fee itself.
+Your fee is credited to your own SouthPay balance in the same asset. You withdraw it exactly like any other balance, through your normal payouts. There is no separate settlement, and no on-chain transfer for the fee itself.
 
 Rates resolve from most specific to least:
 
-| | Southpay fee | Your platform fee |
+| | SouthPay fee | Your platform fee |
 | --- | --- | --- |
 | 1 | Rate set on the sub-merchant | Rate set on the sub-merchant |
 | 2 | Rate negotiated with your platform | Your platform default |
-| 3 | Southpay's standard rate | None |
+| 3 | SouthPay's standard rate | None |
 
 A rate negotiated with your platform applies to every merchant you onboard, so you do not have to set it per account.
 
@@ -92,11 +92,11 @@ See the [API reference](/api-reference/platform-accounts) for the full endpoint 
 
 ## Getting a merchant verified
 
-A sub-merchant cannot receive payouts until it has been verified and has a payout destination. Sub-merchants have no Southpay login of their own, so there are two ways to get them there.
+A sub-merchant cannot receive payouts until it has been verified and has a payout destination. Sub-merchants have no SouthPay login of their own, so there are two ways to get them there.
 
 ### Hosted onboarding
 
-Southpay collects the details and reviews them. This keeps the compliance work off you.
+SouthPay collects the details and reviews them. This keeps the compliance work off you.
 
 ```bash
 POST /platform/accounts/{account_id}/onboarding_links
@@ -135,7 +135,7 @@ Content-Type: application/json
 }
 ```
 
-The request is recorded as attested by your platform. Southpay still reviews anything that touches bank payouts.
+The request is recorded as attested by your platform. SouthPay still reviews anything that touches bank payouts.
 
 ### Reopening one step
 

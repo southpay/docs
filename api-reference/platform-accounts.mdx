@@ -4,12 +4,12 @@ description: "Create and manage sub-merchant accounts, attest their verification
 sidebarTitle: "Platform accounts"
 ---
 
-A platform account lets you onboard other businesses under your own Southpay account, take payments on their behalf, and collect a fee on each one. Each business is a **sub-merchant**: a separate store with its own balances, payouts and verification state.
+A platform account lets you onboard other businesses under your own SouthPay account, take payments on their behalf, and collect a fee on each one. Each business is a **sub-merchant**: a separate store with its own balances, payouts and verification state.
 
 Paths are relative to `https://api.southpay.io/api/v2`.
 
 <Warning>
-Platform mode is not self-serve. It is gated on the `platform_accounts` feature flag, which only Southpay staff can enable. Until it is enabled on your store, **every endpoint on this page returns `403`** with `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}`. Contact support before integrating.
+Platform mode is not self-serve. It is gated on the `platform_accounts` feature flag, which only SouthPay staff can enable. Until it is enabled on your store, **every endpoint on this page returns `403`** with `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}`. Contact support before integrating.
 </Warning>
 
 ## Authentication and scope
@@ -102,7 +102,7 @@ curl -X POST https://api.southpay.io/api/v2/platform/accounts \
 Returns a **bare array** of active sub-merchants, newest first. No envelope, no pagination.
 
 <ParamField query="external_id" type="string">
-  Exact match on your own identifier. The way to resolve one of your ids to a Southpay account id.
+  Exact match on your own identifier. The way to resolve one of your ids to a SouthPay account id.
 </ParamField>
 
 ## Retrieve a sub-merchant

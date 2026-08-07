@@ -4,7 +4,7 @@ description: "Create, retrieve, list and summarize crypto payment intents, read 
 sidebarTitle: "Payment intents"
 ---
 
-A payment intent is how you charge a customer. You post a fiat amount, Southpay locks an exchange rate and allocates one on-chain deposit address per asset your store accepts, and you send the customer to the hosted checkout page. Which assets appear is decided by your store settings, not by anything in the request.
+A payment intent is how you charge a customer. You post a fiat amount, SouthPay locks an exchange rate and allocates one on-chain deposit address per asset your store accepts, and you send the customer to the hosted checkout page. Which assets appear is decided by your store settings, not by anything in the request.
 
 For the walkthrough, see the [payment intents guide](/payment-intents). This page is the field-level reference.
 
@@ -362,7 +362,7 @@ curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6
 </ResponseField>
 
 <ResponseField name="customer_pays_fee" type="boolean">
-  When true the customer was charged the Southpay fee on top of the order amount.
+  When true the customer was charged the SouthPay fee on top of the order amount.
 </ResponseField>
 
 <ResponseField name="fee" type="object | null">
@@ -392,7 +392,7 @@ curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6
   <Expandable title="properties">
     <ResponseField name="tx_hash" type="string">On-chain hash.</ResponseField>
     <ResponseField name="from_address" type="string | null">Sender, used as the default refund destination.</ResponseField>
-    <ResponseField name="deposit_address" type="string | null">The Southpay address that received the funds.</ResponseField>
+    <ResponseField name="deposit_address" type="string | null">The SouthPay address that received the funds.</ResponseField>
     <ResponseField name="confirmations" type="integer">Confirmations seen so far.</ResponseField>
     <ResponseField name="required_confirmations" type="integer">Threshold for this chain.</ResponseField>
     <ResponseField name="status" type="string">`pending`, `confirming`, `submitted`, `confirmed` or `failed`. These are transaction statuses, not intent statuses.</ResponseField>

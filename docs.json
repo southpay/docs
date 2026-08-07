@@ -1,8 +1,8 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Southpay",
-  "description": "Southpay is a crypto payment gateway. Accept crypto payments, settle in local currency, and automate payouts, refunds, subscriptions, and reconciliation through a single REST API.",
+  "name": "SouthPay",
+  "description": "SouthPay is a crypto payment gateway. Accept crypto payments, settle in local currency, and automate payouts, refunds, subscriptions, and reconciliation through a single REST API.",
   "colors": {
     "primary": "#4253FE",
     "light": "#7C88FF",
@@ -46,11 +46,11 @@
   "seo": {
     "metatags": {
       "og:type": "website",
-      "og:site_name": "Southpay Documentation",
+      "og:site_name": "SouthPay Documentation",
       "twitter:card": "summary_large_image"
     },
     "organization": {
-      "name": "Southpay",
+      "name": "SouthPay",
       "url": "https://southpay.io",
       "sameAs": [
         "https://github.com/southpay",
@@ -293,7 +293,7 @@
         ]
       },
       {
-        "header": "Southpay",
+        "header": "SouthPay",
         "items": [
           {
             "label": "Dashboard",
@@ -326,8 +326,8 @@
   },
   "markdown": {
     "instructions": [
-      "The Southpay REST API is served from https://api.southpay.io/api/v2. Always keep the /api/v2 prefix on request paths.",
-      "Southpay has separate test and live modes. API keys are scoped to one mode and are prefixed test_ or live_. Use test mode unless the user explicitly asks for live.",
+      "The SouthPay REST API is served from https://api.southpay.io/api/v2. Always keep the /api/v2 prefix on request paths.",
+      "SouthPay has separate test and live modes. API keys are scoped to one mode and are prefixed test_ or live_. Use test mode unless the user explicitly asks for live.",
       "Send an Idempotency-Key header on every request that creates or moves money so retries cannot double-charge."
     ]
   },

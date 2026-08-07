@@ -3,7 +3,7 @@ title: "Payout destinations"
 description: "Bank accounts and wallet addresses money can be paid out to. What they are, where you configure them, and how payouts reference them."
 ---
 
-Before you can move a balance out of Southpay you need somewhere to send it. That "somewhere" is a **payout destination**, and it comes in two kinds:
+Before you can move a balance out of SouthPay you need somewhere to send it. That "somewhere" is a **payout destination**, and it comes in two kinds:
 
 - A **crypto payout detail** — a wallet address on a specific network.
 - A **fiat payout detail** — a bank account, IBAN or SWIFT.
@@ -85,7 +85,7 @@ A saved wallet address, pinned to one network.
 See [Supported currencies and assets](/currencies) for the deposit side.
 </Warning>
 
-The network on the destination must match the network of the asset you are paying out. Paying `ETH_USDC` to a `polygon` address returns `422` with a message naming both networks. Southpay does not bridge between chains during a payout.
+The network on the destination must match the network of the asset you are paying out. Paying `ETH_USDC` to a `polygon` address returns `422` with a message naming both networks. SouthPay does not bridge between chains during a payout.
 
 Two constraints will surprise you eventually:
 
@@ -94,7 +94,7 @@ Two constraints will surprise you eventually:
 
 ## Fiat payout details
 
-A bank account. Southpay converts a stablecoin balance to fiat and sends it by transfer.
+A bank account. SouthPay converts a stablecoin balance to fiat and sends it by transfer.
 
 | Property | Value |
 | --- | --- |

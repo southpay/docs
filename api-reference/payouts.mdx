@@ -4,7 +4,7 @@ description: "Send funds from your store balance to a bank account or external w
 sidebarTitle: "Payouts"
 ---
 
-A payout moves money off your Southpay balance. You can send crypto on-chain to a wallet you control, or off-ramp USDT and USDC to a bank account.
+A payout moves money off your SouthPay balance. You can send crypto on-chain to a wallet you control, or off-ramp USDT and USDC to a bank account.
 
 Payouts arrive two ways: on demand through `POST /payouts`, or automatically from a [payout schedule](/api-reference/payout-schedules). Both produce the same resource.
 
@@ -182,7 +182,7 @@ Live-mode payouts are irreversible once broadcast. A replayed `Idempotency-Key` 
 </ResponseField>
 
 <ResponseField name="paid_external_reference" type="string | null">
-  The bank reference on the outgoing transfer. Use this to match a Southpay payout to a line on your bank statement.
+  The bank reference on the outgoing transfer. Use this to match a SouthPay payout to a line on your bank statement.
 </ResponseField>
 
 <ResponseField name="paid_at" type="string | null">

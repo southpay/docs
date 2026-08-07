@@ -42,7 +42,7 @@ There is no merchant-facing simulator. Test payments are real transactions on a 
 The intent moves `pending → processing → completed` as the transaction confirms, and your webhook endpoint receives each transition. Send less than the required amount to exercise your underpayment path, or leave the intent alone for an hour to exercise expiry.
 
 <Note>
-Some support and staff tools can simulate deposits. Those are internal, not exposed to merchants, and not part of the API. If your integration needs a deterministic "make this payment succeed" hook, stub the Southpay client in your own test suite rather than waiting for one.
+Some support and staff tools can simulate deposits. Those are internal, not exposed to merchants, and not part of the API. If your integration needs a deterministic "make this payment succeed" hook, stub the SouthPay client in your own test suite rather than waiting for one.
 </Note>
 
 ## Testing webhooks

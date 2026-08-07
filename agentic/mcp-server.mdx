@@ -3,7 +3,7 @@ title: "MCP server"
 description: "Connect an MCP client to mcp.southpay.io: bearer keys, browser login, error handling, and the 19 tools with their parameters and defaults."
 ---
 
-Southpay runs a hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes a merchant store as tools any MCP client can call.
+SouthPay runs a hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes a merchant store as tools any MCP client can call.
 
 ```text
 https://mcp.southpay.io/mcp
@@ -11,7 +11,7 @@ https://mcp.southpay.io/mcp
 
 It speaks the Streamable HTTP transport at `/mcp`. Each session is backed by its own isolated state, which is where a key set through the `login` tool is held.
 
-The server is a thin proxy over the [agentic REST API](/api-reference/agentic) with no business logic of its own. It holds no secrets: the only credential is the merchant's `spa_` agent key, validated by Southpay on every call. Anything gated on the REST side is gated identically here, and session mandates and x402 settlements are not exposed as tools at all — those are [REST-only](/agentic/x402).
+The server is a thin proxy over the [agentic REST API](/api-reference/agentic) with no business logic of its own. It holds no secrets: the only credential is the merchant's `spa_` agent key, validated by SouthPay on every call. Anything gated on the REST side is gated identically here, and session mandates and x402 settlements are not exposed as tools at all — those are [REST-only](/agentic/x402).
 
 ## Connecting
 
@@ -43,9 +43,9 @@ claude mcp add --transport http southpay https://mcp.southpay.io/mcp \
 
 ### Browser login (OAuth)
 
-Connect a client with no token and the server runs an OAuth flow instead. It serves its own metadata discovery, dynamic client registration and token endpoint — which clients like claude.ai require — then forwards you to the Southpay dashboard consent screen, where you pick the store and whether the session is live or test.
+Connect a client with no token and the server runs an OAuth flow instead. It serves its own metadata discovery, dynamic client registration and token endpoint — which clients like claude.ai require — then forwards you to the SouthPay dashboard consent screen, where you pick the store and whether the session is live or test.
 
-On the way back it exchanges the code for an OAuth access token and calls [`POST /api/v2/oauth/agent_credentials`](/agentic/agent-credentials#minting-a-credential-from-an-oauth-token) to mint a scoped `spa_` credential. That credential stays server-side; the MCP client only ever sees tokens issued by the Southpay MCP server.
+On the way back it exchanges the code for an OAuth access token and calls [`POST /api/v2/oauth/agent_credentials`](/agentic/agent-credentials#minting-a-credential-from-an-oauth-token) to mint a scoped `spa_` credential. That credential stays server-side; the MCP client only ever sees tokens issued by the SouthPay MCP server.
 
 <Warning>
   One credential exists per application, user, store and mode. Logging in again **rotates that same credential**, which invalidates the key minted by any earlier login. If you have wired a previous login's key into something else, that thing stops working.
@@ -149,9 +149,9 @@ Call `get_payout_limits` before `create_payout`. `controls_configured: false` on
 | `get_exchange_rate` | `asset_id?`, `currency?` | `assets:read` | `{currency, rates: [{asset_id, coin_symbol, chain_symbol, currency, rate, source}]}` |
 | `research_token` | `symbol_or_id`, `vs_currency` (default `"usd"`) | none | `{query, coin_id, vs_currency, price, market_cap, volume_24h, change_24h_pct, source}` |
 
-`get_exchange_rate` is Southpay's own rate, the one applied when pricing a payment. `currency` defaults to the store's settlement currency and must be one of the ten accepted payment currencies. Omit `asset_id` for every accepted asset.
+`get_exchange_rate` is SouthPay's own rate, the one applied when pricing a payment. `currency` defaults to the store's settlement currency and must be one of the ten accepted payment currencies. Omit `asset_id` for every accepted asset.
 
-`research_token` is public CoinGecko data proxied through Southpay's cached [market data endpoint](/api-reference/agentic). It touches no store data and no funds, and needs no credential. Accepts a ticker such as `"ETH"` or a CoinGecko id such as `"ethereum"`. Use `get_exchange_rate`, not this, for the rate a customer will be charged.
+`research_token` is public CoinGecko data proxied through SouthPay's cached [market data endpoint](/api-reference/agentic). It touches no store data and no funds, and needs no credential. Accepts a ticker such as `"ETH"` or a CoinGecko id such as `"ethereum"`. Use `get_exchange_rate`, not this, for the rate a customer will be charged.
 
 ## Picking up tool changes
 

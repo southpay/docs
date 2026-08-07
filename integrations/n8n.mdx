@@ -1,10 +1,10 @@
 ---
-title: "Southpay for n8n"
+title: "SouthPay for n8n"
 description: "Automate payments, invoices and payouts in n8n. Connect with OAuth, and let the trigger node register and verify its own webhook endpoint."
 sidebarTitle: "n8n"
 ---
 
-The Southpay node for [n8n](https://n8n.io) creates and reads payments, manages billing, triggers payouts, and starts workflows from payment events. You connect once with OAuth, and the trigger node registers its own webhook endpoint rather than making you copy a URL and a secret.
+The SouthPay node for [n8n](https://n8n.io) creates and reads payments, manages billing, triggers payouts, and starts workflows from payment events. You connect once with OAuth, and the trigger node registers its own webhook endpoint rather than making you copy a URL and a secret.
 
 The package is published on npm as [`n8n-nodes-southpay`](https://www.npmjs.com/package/n8n-nodes-southpay). It is a community node, versioned and released independently of the API, so treat the operation list below as indicative and the node's own release notes as authoritative for a given version.
 
@@ -20,7 +20,7 @@ Install it from the GUI like any other [n8n community node](https://docs.n8n.io/
     Enter `n8n-nodes-southpay`, tick **I understand the risks of installing unverified code from a public source**, then click **Install**.
   </Step>
   <Step title="Add a credential">
-    Add a **Southpay** node to a workflow and create a new Southpay OAuth2 credential.
+    Add a **SouthPay** node to a workflow and create a new SouthPay OAuth2 credential.
   </Step>
 </Steps>
 
@@ -28,17 +28,17 @@ On n8n Cloud, once the node is verified it appears in the nodes panel with no in
 
 ## Connect your account
 
-The node authenticates with OAuth 2.0, authorization code plus PKCE. Southpay requires PKCE with `S256` on every authorization request, so a client that cannot do PKCE cannot connect at all.
+The node authenticates with OAuth 2.0, authorization code plus PKCE. SouthPay requires PKCE with `S256` on every authorization request, so a client that cannot do PKCE cannot connect at all.
 
 Click **Connect my account** and approve the consent screen. The resulting access token is bound to one store and one mode, so you never pass a store id and never set a mode header — the grant carries both. Live mode works: the mode is chosen when you authorize, not fixed to test.
 
-An access token issued alongside a refresh token lives for **1 hour**, so the credential relies on the refresh token to stay connected; a connection that stops working after an hour is a refresh problem, not a scope problem. You can revoke the connection from either side — n8n's credential screen, or the connected apps list in the Southpay dashboard.
+An access token issued alongside a refresh token lives for **1 hour**, so the credential relies on the refresh token to stay connected; a connection that stops working after an hour is a refresh problem, not a scope problem. You can revoke the connection from either side — n8n's credential screen, or the connected apps list in the SouthPay dashboard.
 
 If you would rather use your own OAuth client than the first-party one, [register an OAuth app](/oauth-apps) and set its client id on the n8n credential.
 
 ## React to payment events
 
-Add a **Southpay Trigger** node and pick the events you want. Activating the workflow registers a webhook endpoint on your store, stores the signing secret, and verifies the `Southpay-Signature` header on every delivery. Deactivating removes the endpoint.
+Add a **SouthPay Trigger** node and pick the events you want. Activating the workflow registers a webhook endpoint on your store, stores the signing secret, and verifies the `Southpay-Signature` header on every delivery. Deactivating removes the endpoint.
 
 These payment events are emitted and can be subscribed to:
 
@@ -50,7 +50,7 @@ These payment events are emitted and can be subscribed to:
 - `payment_intent.refunded`
 
 <Warning>
-  Southpay retries a delivery on **any** non-2xx response, including 400, 401 and 404, up to 10 attempts. An n8n workflow that errors on a malformed payload will be re-sent the same payload nine more times. Return 2xx as soon as you have accepted the event, and do the work afterwards.
+  SouthPay retries a delivery on **any** non-2xx response, including 400, 401 and 404, up to 10 attempts. An n8n workflow that errors on a malformed payload will be re-sent the same payload nine more times. Return 2xx as soon as you have accepted the event, and do the work afterwards.
 </Warning>
 
 Deliveries are not deduplicated for you. The envelope's top-level `id` stays the same across every retry of one delivery, so deduplicate on it if a repeated run would double-charge, double-ship or double-notify.
@@ -89,7 +89,7 @@ Two other refusals catch people out:
 - **Fiat payouts need a verified store.** `403` until KYC is confirmed on the store, and only `USDT` and `USDC` are eligible for the fiat rail.
 - **Payouts and refunds require an `Idempotency-Key`.** The node sends one; if you are calling the API directly alongside the node, omitting it returns `422`.
 
-Southpay does not use one error shape. Most endpoints return `{"error": "<string>"}`, some return `{"error": {"message": "...", "code": "..."}}`, and validation failures return `{"errors": ["...", "..."]}`. If you parse an error message inside a Function node, handle all three — see [errors](/errors).
+SouthPay does not use one error shape. Most endpoints return `{"error": "<string>"}`, some return `{"error": {"message": "...", "code": "..."}}`, and validation failures return `{"errors": ["...", "..."]}`. If you parse an error message inside a Function node, handle all three — see [errors](/errors).
 
 <Note>
   The mandate and spend-limit controls described under [agent authorization](/agentic/authorization) apply to `spa_` agent credentials only. They do not apply to an OAuth connection, and neither does step-up MFA, which is raised for dashboard sessions and never for a bearer token.

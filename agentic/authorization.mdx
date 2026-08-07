@@ -11,7 +11,7 @@ The denials are the system working as designed. Treat them as a configuration st
 
 ## What happens by default
 
-Southpay resolves an authorization provider per store from the `agent_authorization` feature flag. With no flag, every store gets `NullAuthorizationProvider`, which approves every verification it is asked for — and then each endpoint checks whether the approval came from a real provider, and refuses if it did not.
+SouthPay resolves an authorization provider per store from the `agent_authorization` feature flag. With no flag, every store gets `NullAuthorizationProvider`, which approves every verification it is asked for — and then each endpoint checks whether the approval came from a real provider, and refuses if it did not.
 
 | Agent action | Default behavior |
 | --- | --- |
@@ -41,7 +41,7 @@ Check which provider you are on with `GET /api/v2/agentic/account` (the `get_acc
 
 ## Unblocking payouts with spend limits
 
-Spend limits are per-credential, per-asset payout caps. They are the only control a merchant can configure without Southpay staff involvement, and they are what makes agent payouts possible at all.
+Spend limits are per-credential, per-asset payout caps. They are the only control a merchant can configure without SouthPay staff involvement, and they are what makes agent payouts possible at all.
 
 A spend limit does two things:
 
@@ -56,7 +56,7 @@ An agent reads its own headroom with `GET /api/v2/agentic/payout_limits` (or `ge
 
 Refunds, token toggles and mandate issuance need a real authorization provider. Spend limits do not help here; the check is specifically "is this store's provider something other than the default".
 
-Enabling one sets the `agent_authorization` store feature flag with a `provider` setting. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle — Southpay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
+Enabling one sets the `agent_authorization` store feature flag with a `provider` setting. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle — SouthPay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
 
 <Note>
   If you are building an agent for merchants generally, assume the provider is absent. Discover it at runtime from `GET /agentic/account` and gate your own tool exposure on `authorization.mandates`, rather than offering the agent a refund capability that will always fail.
@@ -77,7 +77,7 @@ curl -X POST https://api.southpay.io/api/v2/agentic/payments/{id}/refunds \
   -d '{"refund": {}}'
 ```
 
-Southpay forwards the presentation and the action's parameters — action type, amount, currency, asset, destination — to the provider, which returns allow or deny. The decision and receipt are stored with the resulting payment, payout or mandate.
+SouthPay forwards the presentation and the action's parameters — action type, amount, currency, asset, destination — to the provider, which returns allow or deny. The decision and receipt are stored with the resulting payment, payout or mandate.
 
 Two details worth planning for:
 

@@ -3,7 +3,7 @@ title: "Authentication"
 description: "API keys, OAuth 2.0 with PKCE, and agent credentials: the four credential types, their scopes, and their real token lifetimes."
 ---
 
-Every request carries `Authorization: Bearer <token>`. The prefix on the token decides which credential type Southpay authenticates it as, and which store and mode the request runs in.
+Every request carries `Authorization: Bearer <token>`. The prefix on the token decides which credential type SouthPay authenticates it as, and which store and mode the request runs in.
 
 | Credential | Prefix | For |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ You never send `X-Store-Id` or `X-Livemode` with an API key, OAuth token or agen
 
 ## API keys
 
-Create keys in the [dashboard](https://app.southpay.io) under **Settings → API keys**. Choose the mode (live or test) and the type (secret or publishable). The full key value is shown once, at creation. There is no endpoint that returns it again, and Southpay stores only a SHA-256 hash.
+Create keys in the [dashboard](https://app.southpay.io) under **Settings → API keys**. Choose the mode (live or test) and the type (secret or publishable). The full key value is shown once, at creation. There is no endpoint that returns it again, and SouthPay stores only a SHA-256 hash.
 
 ```bash
 curl https://api.southpay.io/api/v2/payments \
@@ -73,7 +73,7 @@ A platform sends `X-Southpay-Account: <account_id>` alongside its own credential
 
 ## OAuth 2.0
 
-Use OAuth when you are building an application that other merchants connect to their own Southpay accounts. The flow is Authorization Code with PKCE.
+Use OAuth when you are building an application that other merchants connect to their own SouthPay accounts. The flow is Authorization Code with PKCE.
 
 <Warning>
 **PKCE is mandatory and only `S256` is accepted.** A request without `code_challenge` is rejected with `invalid_request`. `plain` is not supported. This applies to confidential clients too — a client secret does not exempt you.
@@ -245,20 +245,20 @@ OAuth endpoints return errors in the RFC 6749 shape, `{"error": "invalid_request
 sequenceDiagram
   participant Merchant
   participant YourApp
-  participant Southpay
+  participant SouthPay
 
   YourApp->>YourApp: generate code_verifier + S256 challenge
   Merchant->>YourApp: clicks Connect
-  YourApp->>Southpay: GET /oauth/authorize (challenge, livemode, state)
-  Southpay-->>YourApp: consent data
+  YourApp->>SouthPay: GET /oauth/authorize (challenge, livemode, state)
+  SouthPay-->>YourApp: consent data
   YourApp->>Merchant: render consent
   Merchant->>YourApp: approves
-  YourApp->>Southpay: POST /oauth/authorize (decision: allow)
-  Southpay-->>YourApp: redirect_to ?code=...&state=...
+  YourApp->>SouthPay: POST /oauth/authorize (decision: allow)
+  SouthPay-->>YourApp: redirect_to ?code=...&state=...
   YourApp->>YourApp: verify state
-  YourApp->>Southpay: POST /oauth/token (code, code_verifier)
-  Southpay-->>YourApp: access_token spo_... (+ refresh_token)
-  YourApp->>Southpay: Authorization: Bearer spo_...
+  YourApp->>SouthPay: POST /oauth/token (code, code_verifier)
+  SouthPay-->>YourApp: access_token spo_... (+ refresh_token)
+  YourApp->>SouthPay: Authorization: Bearer spo_...
 ```
 
 ## Agent credentials

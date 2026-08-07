@@ -3,7 +3,7 @@ title: "Payment intents"
 description: "Create a payment intent, read its deposit addresses and amounts, list and filter intents, and pull its event history."
 ---
 
-A payment intent is a single payment request. You give it a fiat amount and currency. Southpay allocates a deposit address for every crypto asset your store has enabled, locks an exchange rate against each one, and returns a hosted checkout URL.
+A payment intent is a single payment request. You give it a fiat amount and currency. SouthPay allocates a deposit address for every crypto asset your store has enabled, locks an exchange rate against each one, and returns a hosted checkout URL.
 
 Which assets appear is a property of your store, not of the request. You cannot pick them per intent, and the customer chooses one at checkout. See [Supported currencies and assets](/currencies).
 
@@ -355,17 +355,17 @@ Creating a refund **requires** an `Idempotency-Key` header. Without one you get 
 sequenceDiagram
   participant Customer
   participant YourBackend
-  participant Southpay
+  participant SouthPay
 
   Customer->>YourBackend: checkout
-  YourBackend->>Southpay: POST /payments (Idempotency-Key)
-  Southpay-->>YourBackend: 201 { id, reference, hosted_url, expires_at }
+  YourBackend->>SouthPay: POST /payments (Idempotency-Key)
+  SouthPay-->>YourBackend: 201 { id, reference, hosted_url, expires_at }
   YourBackend->>YourBackend: persist id, reference, expires_at
   YourBackend-->>Customer: redirect to hosted_url
 
-  Customer->>Southpay: sends crypto
-  Southpay->>YourBackend: webhook payment_intent.processing
-  Southpay->>YourBackend: webhook payment_intent.completed
+  Customer->>SouthPay: sends crypto
+  SouthPay->>YourBackend: webhook payment_intent.processing
+  SouthPay->>YourBackend: webhook payment_intent.completed
   YourBackend->>YourBackend: verify signature, dedupe on event id, fulfil
 ```
 

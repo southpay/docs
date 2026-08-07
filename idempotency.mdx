@@ -1,9 +1,9 @@
 ---
 title: "Idempotency"
-description: "How the Idempotency-Key header actually behaves on Southpay: what it protects, what it does not, and how to choose a key."
+description: "How the Idempotency-Key header actually behaves on SouthPay: what it protects, what it does not, and how to choose a key."
 ---
 
-Send an `Idempotency-Key` header on a create request and Southpay will not create a second record if you send the same request twice. That is the whole guarantee. It is narrower than idempotency on most payment APIs, and the differences matter, so this page describes the mechanism rather than the idea.
+Send an `Idempotency-Key` header on a create request and SouthPay will not create a second record if you send the same request twice. That is the whole guarantee. It is narrower than idempotency on most payment APIs, and the differences matter, so this page describes the mechanism rather than the idea.
 
 ## Where the header applies
 
@@ -38,7 +38,7 @@ There is no shared idempotency store and no cached response. The key is a column
 
 - **Nothing tells you it was a replay.** No `Idempotency-Replayed` header, no distinct status. If you need to know, compare the returned `id` to what you have stored.
 - **The body reflects the record as it is now, not as it was.** Replay a payment create an hour later and you get the same intent with `status: "expired"` and, if it was paid, a different `settlement_status`. The response is live, not a snapshot.
-- **A different body with the same key is ignored, silently.** Southpay does not compare request payloads. Send `49.99 USD` with key `K`, then `999.00 USD` with key `K`, and you get the original `49.99` intent back at `201`. There is no `409`, no conflict detection, and no error code for this. Your amount change is dropped without a word.
+- **A different body with the same key is ignored, silently.** SouthPay does not compare request payloads. Send `49.99 USD` with key `K`, then `999.00 USD` with key `K`, and you get the original `49.99` intent back at `201`. There is no `409`, no conflict detection, and no error code for this. Your amount change is dropped without a word.
 
 <Warning>
 Because a mismatched payload is dropped rather than rejected, a key derived only from an order id will silently return a stale intent if the cart total changes. Include something that varies with the request contents, or version the key when the payload changes.
@@ -94,7 +94,7 @@ Persisting the key first is what makes the retry safe. If the `POST` times out, 
 ## What idempotency does not cover
 
 - It does not make `5xx` responses safe on endpoints that ignore the header. Retrying `POST /billing/customers` after a timeout can create two customers; deduplicate on your side.
-- It does not deduplicate webhook deliveries to your endpoint. Southpay uses its own internal key per `(endpoint, event)` pair, but delivery is at-least-once and retries can repeat. [Deduplicate on the event `id`](/webhooks#deduplication).
+- It does not deduplicate webhook deliveries to your endpoint. SouthPay uses its own internal key per `(endpoint, event)` pair, but delivery is at-least-once and retries can repeat. [Deduplicate on the event `id`](/webhooks#deduplication).
 - It does not roll anything back. If a request partly succeeded before failing, the replay returns whatever state exists.
 
 See [Errors](/errors#what-to-retry) for which status codes are worth retrying at all.

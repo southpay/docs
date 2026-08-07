@@ -3,7 +3,7 @@ title: "Supported currencies and assets"
 description: "The fiat currencies you can charge in, and the blockchain networks and tokens your customers can pay with."
 ---
 
-Southpay separates two ideas: the **fiat currency you price a payment in**, and the **crypto assets a customer can pay with**. You always set the price in fiat. Southpay handles the conversion to crypto and tells the customer exactly how much to send.
+SouthPay separates two ideas: the **fiat currency you price a payment in**, and the **crypto assets a customer can pay with**. You always set the price in fiat. SouthPay handles the conversion to crypto and tells the customer exactly how much to send.
 
 ## How currency works in a payment
 
@@ -16,13 +16,13 @@ When you create a [payment intent](/payment-intents), you pass a fiat `amount` a
 That `currency` does two things:
 
 1. It sets the price the customer sees and the `settlement_currency` on the intent. A `149.00 EUR` intent always settles as `149.00 EUR`, whatever crypto the customer sends.
-2. It is the basis for the exchange rate. Southpay converts the fiat amount to the equivalent crypto amount for each asset at a rate it locks at creation time (the `exchange_rate_snapshot` on every payment address).
+2. It is the basis for the exchange rate. SouthPay converts the fiat amount to the equivalent crypto amount for each asset at a rate it locks at creation time (the `exchange_rate_snapshot` on every payment address).
 
 You do not pick the crypto asset. The customer does, at checkout, from the assets your store has enabled.
 
 ## How payment addresses get created
 
-On every payment intent, Southpay generates one deposit address per crypto asset your store has enabled. Each address carries the exact crypto amount due at the locked rate.
+On every payment intent, SouthPay generates one deposit address per crypto asset your store has enabled. Each address carries the exact crypto amount due at the locked rate.
 
 ```json
 "payment_addresses": [

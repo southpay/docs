@@ -38,7 +38,7 @@ Eight agent scopes exist: `payments:read`, `payments:write`, `payouts:read`, `pa
 
 Read this before you write any agent that moves money.
 
-`AuthorizationProvider` is chosen by the `agent_authorization` store feature flag, which only Southpay staff can set. With no flag — the default for every store — payments work and most other writes are **hard-blocked at `403`**.
+`AuthorizationProvider` is chosen by the `agent_authorization` store feature flag, which only SouthPay staff can set. With no flag — the default for every store — payments work and most other writes are **hard-blocked at `403`**.
 
 | Action | Default behaviour |
 | --- | --- |
@@ -429,7 +429,7 @@ This differs from the merchant [balances endpoint](/api-reference/balances): the
 
 **`GET /agentic/exchange_rates`** — scope `assets:read`.
 
-Southpay's own rates — the ones applied when pricing a payment. For public market data, use [market data](#market-data) instead.
+SouthPay's own rates — the ones applied when pricing a payment. For public market data, use [market data](#market-data) instead.
 
 <ParamField query="currency" type="string">
   Fiat currency to quote against. Defaults to the store's settlement currency.
@@ -637,7 +637,7 @@ Settlements are ledger-only by default. On-chain dispatch is behind the `x402_on
 
 **`GET /agentic/market_data`** — **unauthenticated**. No credential, no scope.
 
-Public reference prices from CoinGecko. It touches no Southpay funds and reads no store data, which is why it needs no credential.
+Public reference prices from CoinGecko. It touches no SouthPay funds and reads no store data, which is why it needs no credential.
 
 <ParamField query="symbol_or_id" type="string" required>
   Ticker or CoinGecko id, for example `btc` or `bitcoin`.
@@ -671,7 +671,7 @@ Rate limited to 30 requests per minute **per IP**, separately from the 120-per-c
 | `502` | `market_data_error` | Upstream unavailable. |
 
 <Note>
-These are public market prices, not the rates Southpay applies. For the rate used to price a payment intent, use [exchange rates](#read-exchange-rates).
+These are public market prices, not the rates SouthPay applies. For the rate used to price a payment intent, use [exchange rates](#read-exchange-rates).
 </Note>
 
 ## Payment statuses

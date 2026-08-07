@@ -1,10 +1,10 @@
 ---
 title: "Agentic commerce"
-description: "Run a Southpay store from an AI agent using scoped spa_ credentials, over a hosted MCP server or the /api/v2/agentic REST API."
+description: "Run a SouthPay store from an AI agent using scoped spa_ credentials, over a hosted MCP server or the /api/v2/agentic REST API."
 sidebarTitle: "Overview"
 ---
 
-Southpay lets an AI agent operate a merchant store: create payments, watch them settle, read balances and rates, and — once a human has configured the controls — issue refunds and disburse payouts. Agents authenticate with an agent credential (`spa_live_…` / `spa_test_…`), which is a distinct credential type from an API key or an OAuth token.
+SouthPay lets an AI agent operate a merchant store: create payments, watch them settle, read balances and rates, and — once a human has configured the controls — issue refunds and disburse payouts. Agents authenticate with an agent credential (`spa_live_…` / `spa_test_…`), which is a distinct credential type from an API key or an OAuth token.
 
 There are two ways in, and they reach the same endpoints:
 
@@ -27,7 +27,7 @@ Money movement fails closed. On a store with no extra configuration:
 | Issue a session mandate, settle an x402 charge | Blocked — `403 mandate_required` |
 | Read public token market data | Allowed, no credential required |
 
-Spend limits are configured by the merchant in the dashboard. The rest need an authorization provider, which Southpay support enables per store. [Agent authorization](/agentic/authorization) covers exactly what unblocks what.
+Spend limits are configured by the merchant in the dashboard. The rest need an authorization provider, which SouthPay support enables per store. [Agent authorization](/agentic/authorization) covers exactly what unblocks what.
 
 ## How the pieces fit
 

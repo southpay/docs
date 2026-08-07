@@ -1,18 +1,11 @@
 ---
 title: "Checkout widget"
-description: "Embed Southpay hosted checkout in your page with the SouthPay.js browser SDK: init, mount, createCheckout, and the events it emits."
+description: "Embed SouthPay hosted checkout in your page with the SouthPay.js browser SDK: create intents, mount inline or as a modal, and handle events."
 ---
 
-SouthPay.js renders Southpay's hosted checkout inside your page, inline or as a modal. All payment UI — QR code, wallet connect, network picker, status, countdown — lives in an iframe served from the checkout origin, so the script itself is a thin DOM shell with no framework and no dependencies.
+SouthPay.js renders SouthPay's hosted checkout inside your page, inline or as a modal. All payment UI — QR code, wallet connect, network picker, status, countdown — lives in an iframe served from the checkout origin, so the script itself is a thin DOM shell with no framework and no dependencies.
 
-There are two flows:
-
-- **Server-created** — your server creates the payment intent with a secret key, passes the `reference` to the page, and the browser mounts it. The buyer cannot change the amount. Use this for fixed-price goods.
-- **Browser-created** — the browser creates the intent with a publishable key. Use this for donations and pay-what-you-want, where a buyer-chosen amount is the point.
-
-<Warning>
-  The amount in a browser-created checkout is set on the client and can be altered by the buyer before the request leaves the page. For fixed prices, create the intent on your server (see [payment intents](/payment-intents)) and mount the returned `reference`.
-</Warning>
+It does two things: create a payment intent from the browser with a publishable key, and mount the checkout for a reference you already have.
 
 ## Load the script
 
@@ -20,137 +13,251 @@ There are two flows:
 <script src="https://integrate.southpay.io/widgets/v2.js"></script>
 ```
 
-The script defines a global `SouthPay` with three functions: `init`, `createCheckout` and `mount`. It is also served from the checkout origin at `https://pay.southpay.io/widgets/v2.js`.
+The script defines a global `SouthPay`. Read the version it loaded from `SouthPay.VERSION`.
 
 <Note>
   There is no npm package. SouthPay.js ships only as this hosted bundle — load it with a `<script>` tag rather than a bundler import.
 </Note>
 
-## Initialize
+## Create a client
+
+`SouthPay` is a factory, not a namespace. Call it with a publishable key to get a client.
 
 ```javascript
-SouthPay.init({ publishableKey: "sp_pk_live_..." });
+const southpay = SouthPay("sp_pk_live_...");
 ```
 
-`init` is required before `createCheckout`. It throws if `publishableKey` is missing, and throws again if the value does not start with `sp_pk_`, so a secret key cannot be used in the browser by mistake.
+The key must match `sp_pk_live_...` or `sp_pk_test_...`. Anything else — in particular a secret `sp_` key — throws `invalid_publishable_key` immediately. Publishable keys can only create checkouts, which is what makes them safe to ship to a browser.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `publishableKey` | — | Required. A publishable key, `sp_pk_live_…` or `sp_pk_test_…` |
-| `apiBase` | `https://api.southpay.io` | API base URL. Trailing slashes are stripped |
-| `checkoutOrigin` | The origin the script was loaded from | Origin serving the checkout iframe, and the only origin whose messages the SDK accepts |
-
-`mount` does not require `init`. Called on its own it falls back to the script's own origin as the checkout origin.
+A second argument overrides the endpoints:
 
 ```javascript
-SouthPay.init({
-  publishableKey: "sp_pk_test_...",
-  apiBase: "http://localhost:3000",
-  checkoutOrigin: "http://localhost:5173",
+const southpay = SouthPay("sp_pk_test_...", {
+  apiBase: "https://api.southpay.io",
+  checkoutOrigin: "https://pay.southpay.io",
+  nonce: "<your-csp-nonce>",
 });
 ```
 
-## Server-created checkout
+<ParamField path="apiBase" type="string" default="https://api.southpay.io">
+  Where `paymentIntents.create` posts. Must be a valid `http(s)` URL; trailing slashes are stripped.
+</ParamField>
 
-Create the intent on your server, send the `reference` to the page, then mount it. No key is involved in the browser.
+<ParamField path="checkoutOrigin" type="string" default="https://pay.southpay.io">
+  Origin the checkout iframe is loaded from, and the only origin whose messages the SDK accepts.
+</ParamField>
+
+<ParamField path="nonce" type="string">
+  CSP nonce applied to the `<style>` element the SDK injects. Set this if your policy has no `style-src 'unsafe-inline'`.
+</ParamField>
+
+## Create a payment intent in the browser
+
+```javascript
+const southpay = SouthPay("sp_pk_live_...");
+
+const { reference } = await southpay.paymentIntents.create({
+  amount: "49.99",
+  currency: "USD",
+  orderId: "order_8721",
+  successUrl: "https://yourapp.com/success",
+  failedUrl: "https://yourapp.com/cancel",
+  metadata: { cart_id: "c_991" },
+});
+```
+
+<ParamField path="amount" type="string" required>
+  A positive decimal string in **major** units — `"49.99"`, not `4999`. See [Amount format](#amount-format).
+</ParamField>
+
+<ParamField path="currency" type="string" required>
+  Fiat currency code. Omitting it throws `missing_currency`.
+</ParamField>
+
+<ParamField path="orderId" type="string">
+  Your own order identifier, stored on the intent as `order_id`.
+</ParamField>
+
+<ParamField path="title" type="string">
+  Line title shown on the checkout page.
+</ParamField>
+
+<ParamField path="description" type="string">
+  Longer description shown under the title.
+</ParamField>
+
+<ParamField path="imageUrl" type="string">
+  Product image shown on the checkout page.
+</ParamField>
+
+<ParamField path="successUrl" type="string">
+  Where the buyer lands after a completed payment.
+</ParamField>
+
+<ParamField path="failedUrl" type="string">
+  Where the buyer lands after a failed or canceled payment.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Arbitrary key/value pairs echoed back on the intent and on webhooks.
+</ParamField>
+
+<ParamField path="idempotencyKey" type="string">
+  Sent as the `Idempotency-Key` header. If you omit it the SDK generates a UUID per call, so a retry you did not write is a *new* intent — supply your own to make retries safe. See [Idempotency](/idempotency).
+</ParamField>
+
+<ParamField path="timeoutMs" type="number" default="20000">
+  Aborts the create request and throws `timeout`.
+</ParamField>
+
+<ParamField path="signal" type="AbortSignal">
+  Cancel the request yourself. Aborting throws `network_error`.
+</ParamField>
+
+The call returns only `{ reference }`. To read the full intent — addresses, amounts, status — fetch it server-side with a secret key; a publishable key cannot.
+
+## Mount the checkout
+
+```javascript
+const handle = southpay.checkout.mount({ reference, container: "#checkout" });
+```
+
+<ParamField path="reference" type="string" required>
+  The 16-character reference. Missing throws `missing_reference`.
+</ParamField>
+
+<ParamField path="container" type="string | Element">
+  A CSS selector or element to render into. **Omit it and the checkout opens as a centered modal** with its own overlay and close button.
+</ParamField>
+
+<ParamField path="minHeight" type="number" default="560">
+  Starting iframe height in pixels, before the checkout reports its own. The SDK caps subsequent resizes at 5000px.
+</ParamField>
+
+<Warning>
+  Passing a `container` that matches nothing throws `container_not_found`. It does not silently fall back to a modal — only *omitting* `container` gives you a modal.
+</Warning>
+
+`mount` returns a handle:
+
+```javascript
+handle.reference;
+handle.unmount();
+```
+
+`unmount()` removes the iframe, tears down the modal if there is one, and detaches the message listener. Call it when your component unmounts, or the listener outlives the page.
+
+### Inline
 
 ```html
-<div id="checkout"></div>
+<div id="checkout" style="max-width:460px"></div>
 <script src="https://integrate.southpay.io/widgets/v2.js"></script>
 <script>
-  SouthPay.mount({
-    reference: "N2BD0BZJUVH0XGUD",
+  const southpay = SouthPay("sp_pk_live_...");
+  southpay.checkout.mount({
+    reference: "K4TP9WQZ2XR7HB3M",
     container: "#checkout",
-    onCompleted: ({ successUrl }) => {
-      if (successUrl) window.location.assign(successUrl);
-    },
+    onCompleted: ({ reference }) => console.log("paid", reference),
   });
 </script>
 ```
 
-A reference is always 16 uppercase alphanumeric characters.
-
-## Browser-created checkout
-
-`createCheckout` calls `POST /api/v2/payments` with the publishable key, then mounts the resulting checkout for you. It returns the same handle as `mount`.
+### Modal
 
 ```javascript
-SouthPay.init({ publishableKey: "sp_pk_live_..." });
-
-const handle = await SouthPay.createCheckout({
-  amount: 1000,
-  currency: "EUR",
-  container: "#checkout",
-  onStatusChange: ({ status }) => console.log(status),
-  onCompleted: ({ reference }) => console.log("paid", reference),
+southpay.checkout.mount({
+  reference: "K4TP9WQZ2XR7HB3M",
+  onExpired: () => showRetry(),
 });
 ```
 
-<Warning>
-  `amount` is a **positive integer in minor units**, so `1000` is 10.00 EUR. It is rejected if it is not an integer or is not greater than zero. This differs from the REST API, where `amount` is a decimal string in major units.
-</Warning>
+### Mounting a checkout your server created
 
-Omit `container` on either function to open the checkout as a modal overlay with a close button, instead of inline.
-
-## Options
-
-`mount(options)` returns a handle synchronously. `createCheckout(options)` returns a `Promise` for one.
-
-| Option | Applies to | Type | Description |
-| --- | --- | --- | --- |
-| `reference` | `mount` | `string` | Required. The payment intent reference to render |
-| `amount` | `createCheckout` | `number` | Required. Positive integer, minor units |
-| `currency` | `createCheckout` | `string` | Required. ISO fiat code |
-| `orderId` | `createCheckout` | `string` | Your order identifier |
-| `title` | `createCheckout` | `string` | Shown on checkout |
-| `description` | `createCheckout` | `string` | Shown on checkout |
-| `imageUrl` | `createCheckout` | `string` | Must be `https` |
-| `successUrl` | `createCheckout` | `string` | Passed to the intent, surfaced back on completion |
-| `failedUrl` | `createCheckout` | `string` | Passed to the intent |
-| `metadata` | `createCheckout` | `object` | Up to 50 keys, all values strings |
-| `container` | both | `string \| HTMLElement` | CSS selector or element. Omit for a modal |
-| `minHeight` | both | `number` | Minimum iframe height in pixels, default 560 |
-
-The handle is `{ reference, unmount() }`. `unmount()` removes the iframe or overlay and detaches the message listener.
+The common production shape: create the intent server-side with a secret key so you control pricing, then hand the reference to the browser purely to render.
 
 ```javascript
-const handle = SouthPay.mount({ reference, container: "#checkout" });
-handle.unmount();
+const res = await fetch("/api/checkout", { method: "POST" });
+const { reference } = await res.json();
+
+SouthPay("sp_pk_live_...").checkout.mount({ reference, container: "#checkout" });
 ```
 
 ## Events
 
-The checkout iframe posts messages to your page and the SDK turns them into callbacks. All five are optional and can be passed to either function.
+Pass callbacks to `mount`.
 
-| Callback | Payload | Fires when |
+| Callback | Fires when | Receives |
 | --- | --- | --- |
-| `onReady` | none | The checkout has loaded inside the iframe |
-| `onStatusChange` | `{ reference, status }` | The payment status changes |
-| `onCompleted` | `{ reference, successUrl }` | The payment reaches `completed`. `successUrl` is `null` when the intent has none |
-| `onFailed` | `{ reference, status }` | The payment reaches `failed` |
-| `onExpired` | `{ reference }` | The intent's 60-minute window elapses without payment |
+| `onReady` | The iframe has loaded and handshaked | — |
+| `onStatusChange` | Status changes on-chain | `{ reference, status }` |
+| `onCompleted` | Payment completed | `{ reference, successUrl }` |
+| `onFailed` | Payment failed | `{ reference, status }` |
+| `onExpired` | The 60-minute window elapsed | `{ reference }` |
+| `onError` | The widget could not load | `SouthpayError` |
 
-If you do not supply `onCompleted` and the intent has a `successUrl`, the SDK navigates the top-level page to it. Supplying `onCompleted` suppresses that, and the redirect becomes yours to perform.
+<Warning>
+  **If you do not pass `onCompleted`, the SDK navigates the buyer to `successUrl` itself.** Pass `onCompleted` whenever you want to stay on the page — providing it suppresses the automatic redirect entirely.
+</Warning>
 
-The SDK also handles a `resize` message internally to keep the iframe's height matched to its content; there is no callback for it.
+`onError` covers loading failures only — the iframe erroring, or no handshake within 20 seconds. Errors from `paymentIntents.create` are thrown, not routed here, so wrap that call in `try/catch`.
 
-`status` is the payment intent status, and there are six: `pending`, `processing`, `completed`, `expired`, `failed`, `refunded`. A live payment moves `pending → processing → completed`. There is no `created` status and no `confirming` status. An overpayment arrives as `completed`; the distinction is carried by `state_reason: "completed_overpaid"` on the intent, which the widget does not surface.
+Statuses are the six in the [payment lifecycle](/payment-lifecycle). SouthPay derives status from the chain; you read it, you never set it.
+
+<Warning>
+  Never fulfill an order on a browser callback alone. Any page can invoke `onCompleted` without a real payment. The only source of truth is the intent reaching `completed` server-side — confirm with a [webhook](/webhooks) or by fetching the payment with a secret key.
+</Warning>
+
+## Amount format
+
+`amount` is a decimal string in major units, and the SDK validates precision against the currency before sending anything.
+
+| Currency | Decimals | Valid |
+| --- | --- | --- |
+| Most currencies | 2 | `"49.99"` |
+| `JPY`, `KRW`, `CLP`, `VND`, `XAF`, `XOF`, and other zero-decimal codes | 0 | `"5000"` |
+| `BHD`, `KWD`, `OMR`, `JOD`, `IQD`, `LYD`, `TND` | 3 | `"12.500"` |
+| `CLF` | 4 | `"1.2345"` |
+
+Too many decimal places throws `invalid_amount`, as does a zero amount, a negative sign, or a number rather than a string. The SDK pads to the currency's precision, so `"10"` in USD is sent as `"10.00"`.
 
 ## Errors
 
-The SDK throws plain `Error` objects with a message prefixed by the function that threw. There is no error class and no error code enum to switch on — match on the call site instead.
+Every SDK failure is a `SouthpayError` carrying a machine-readable `code`.
 
-| Thrown by | When |
-| --- | --- |
-| `SouthPay.init` | `publishableKey` is missing, or does not start with `sp_pk_` |
-| `SouthPay.createCheckout` | Called before `init`; `currency` missing; `amount` not a positive integer; the API returned a non-2xx; the response carried no `reference` |
-| `SouthPay.mount` | `reference` is missing |
+```javascript
+try {
+  const { reference } = await southpay.paymentIntents.create({
+    amount: "49.99",
+    currency: "USD",
+  });
+} catch (err) {
+  if (SouthPay.isSouthpayError(err) && err.code === "invalid_amount") {
+    showFieldError(err.message);
+  } else {
+    throw err;
+  }
+}
+```
 
-For an API failure, `createCheckout` reads the message out of the response body, handling both the `{"error": "..."}` and `{"error": {"message": "..."}}` [envelopes](/errors), and falls back to `request failed (<status>)`. A `container` selector that matches nothing does not throw: the checkout opens as a modal instead, which is worth knowing when a typo silently changes your layout.
+`SouthPay.isSouthpayError` is safer than `instanceof` — it also matches errors thrown by a differently-bundled copy of the SDK on the same page.
+
+| Code | Raised by | Cause |
+| --- | --- | --- |
+| `invalid_publishable_key` | `SouthPay()` | Key missing, or not `sp_pk_live_` / `sp_pk_test_` |
+| `invalid_config` | `SouthPay()` | `apiBase` or `checkoutOrigin` is not a valid `http(s)` URL |
+| `missing_currency` | `paymentIntents.create` | No `currency` |
+| `invalid_amount` | `paymentIntents.create` | Not a decimal string, too many decimals, or zero |
+| `request_failed` | `paymentIntents.create` | API returned a non-2xx |
+| `invalid_response` | `paymentIntents.create` | 2xx carried no `reference` |
+| `network_error` | `paymentIntents.create` | Request failed or was aborted via `signal` |
+| `timeout` | `paymentIntents.create` | Exceeded `timeoutMs` |
+| `missing_reference` | `checkout.mount` | No `reference` |
+| `container_not_found` | `checkout.mount` | `container` matched no element |
+| `widget_load_failed` | `onError` | Iframe errored, or no handshake within 20s |
+
+On `request_failed` the SDK unwraps the API's error body for you, handling both the plain-string and structured shapes described in [Errors](/errors), so `err.message` is the API's message rather than a status code.
 
 ## Content Security Policy
-
-The widget loads a script, embeds an iframe, and talks to the API from the top-level page:
 
 ```text
 script-src  https://integrate.southpay.io
@@ -158,42 +265,33 @@ frame-src   https://pay.southpay.io
 connect-src https://api.southpay.io
 ```
 
-`connect-src` is only needed for `createCheckout`; a `mount`-only page makes no API calls of its own. Adjust the hosts if you override `apiBase` or `checkoutOrigin`.
-
-## Verify the payment on your server
-
-Southpay derives the payment status from the chain. You read it; you never set it.
-
-`onCompleted` runs in the buyer's browser, so use it for UI only. Before releasing goods, confirm with Southpay:
-
-- handle the [`payment_intent.completed` webhook](/webhooks), or
-- re-fetch the intent with your secret key.
-
-```bash
-curl https://api.southpay.io/api/v2/payments/{id} \
-  -H "Authorization: Bearer sp_sk_live_..."
-```
-
-<Warning>
-  Never fulfill on the browser callback alone. Any page can call `onCompleted` without a real payment. Southpay marking the intent `completed`, after on-chain confirmation, is the only source of truth.
-</Warning>
-
-## How the embed works
-
-Useful when debugging a page that will not render.
-
-The SDK creates an iframe pointed at `{checkoutOrigin}/{reference}?embed=1&origin={your page origin}`, and the checkout only enters embed mode when both the `embed` parameter is present and it is genuinely framed. Messages travel by `postMessage`, targeted at the `origin` value rather than broadcast, and every payload carries `source: "southpay:checkout"`. The SDK drops any message whose origin is not the configured `checkoutOrigin` or whose `source` does not match.
-
-Inside the iframe, checkout polls `GET /api/v2/checkout/{reference}` every 8 seconds and stops once the intent is terminal or has expired. That poll is the only thing driving `onStatusChange`, so events arrive within roughly that interval, not instantly.
+The SDK injects one `<style>` element. If your policy omits `'unsafe-inline'` for styles, pass `nonce` when you construct the client and the same nonce is applied to that element.
 
 ## Legacy embed script
 
-An older, smaller shell also ships from the checkout origin:
+An older, smaller script is still served from the checkout origin:
 
 ```html
 <script src="https://pay.southpay.io/embed.js"></script>
 ```
 
-It defines a `Southpay` global with only `Southpay.mount({ container, reference, minHeight })`, and different callback names — `onStatus`, `onSuccess`, `onError`, `onExpire` — returning `{ iframe, destroy() }`. It also auto-mounts any element carrying a `data-southpay-checkout="<reference>"` attribute on page load, with `data-southpay-min-height` as an optional companion.
+It defines `window.Southpay` — note the lowercase `p`, unlike the `SouthPay` global above — with a single method:
 
-It cannot create payment intents and takes no key. Prefer SouthPay.js for new integrations; this exists for pages already using it.
+```javascript
+const handle = Southpay.mount({
+  reference: "K4TP9WQZ2XR7HB3M",
+  container: "#checkout",
+  minHeight: 560,
+  onStatus: ({ status }) => {},
+  onSuccess: () => {},
+  onExpire: () => {},
+  onError: () => {},
+});
+
+handle.iframe;
+handle.destroy();
+```
+
+It also auto-mounts on page load: any element carrying `data-southpay-checkout="<reference>"` is mounted automatically, with `data-southpay-min-height` as an optional companion, and is marked `data-southpay-mounted` once done. `Southpay.checkoutOrigin` exposes the origin it talks to.
+
+It cannot create payment intents, takes no key, and uses different callback names. Prefer SouthPay.js for new integrations; this exists for pages already built on it.

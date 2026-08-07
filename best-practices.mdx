@@ -26,7 +26,7 @@ const intent = await southpay.createPaymentIntent(order, attempt.idempotencyKey)
 
 Generate the key once, write it down, then send. If the process dies mid-flight, the next run replays the stored key and gets the original intent back instead of creating a second one.
 
-Two traps specific to Southpay: keys **never expire**, so a key tied to an order id alone will hand a customer last month's dead intent on a retry; and payout keys are **not scoped to your store**, so make them globally unique. [Idempotency](/idempotency) has the details.
+Two traps specific to SouthPay: keys **never expire**, so a key tied to an order id alone will hand a customer last month's dead intent on a retry; and payout keys are **not scoped to your store**, so make them globally unique. [Idempotency](/idempotency) has the details.
 
 ## Return 2xx for events you ignore
 
@@ -52,7 +52,7 @@ An unverified webhook endpoint is a fulfilment endpoint for anyone who finds the
 - Compute the HMAC over the **raw request bytes**. Parsing and re-serializing JSON changes whitespace and key order, and the digest will not match.
 - Key the HMAC with the secret exactly as issued, `whsec_` prefix included. Do not strip it and do not base64-decode it.
 
-Use a timing-safe comparison, never `===`. Southpay does not enforce a timestamp tolerance outbound, so add your own if you want replay protection. [Webhooks](/webhooks#verifying-the-signature) has verified code in four languages.
+Use a timing-safe comparison, never `===`. SouthPay does not enforce a timestamp tolerance outbound, so add your own if you want replay protection. [Webhooks](/webhooks#verifying-the-signature) has verified code in four languages.
 
 ## Claim the event id before doing the work
 

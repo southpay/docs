@@ -3,7 +3,7 @@ title: "Webhooks"
 description: "Signed event deliveries: the envelope, HMAC verification, the event catalogue, and exactly how retries and rotation behave."
 ---
 
-A webhook endpoint is a URL Southpay `POST`s signed JSON to when something changes on your store. You register the URL, name every event you want, store the signing secret, and verify each delivery before acting on it.
+A webhook endpoint is a URL SouthPay `POST`s signed JSON to when something changes on your store. You register the URL, name every event you want, store the signing secret, and verify each delivery before acting on it.
 
 ## Register an endpoint
 
@@ -58,7 +58,7 @@ Requires the `webhooks:write` scope. The endpoint id is a bare UUID — there is
 **Wildcards are not supported.** `"*"` fails validation. So does `"payment_intent.*"`. A merchant who wants everything must enumerate all 23 names. Omitting the field entirely yields an empty array, which then fails the presence check with `422` and a `{"errors": [...]}` body.
 
 <Note>
-If you create a second endpoint with the same `platform` value (`shopify`, `woocommerce`, `prestashop`, `magento`) in the same mode, Southpay does not return a conflict. It adopts the existing row, rotates its secret, and returns `200` with the new `signing_secret`. The old secret stops working immediately. This is how plugin reinstalls are meant to work; it is surprising if you hit it by accident.
+If you create a second endpoint with the same `platform` value (`shopify`, `woocommerce`, `prestashop`, `magento`) in the same mode, SouthPay does not return a conflict. It adopts the existing row, rotates its secret, and returns `200` with the new `signing_secret`. The old secret stops working immediately. This is how plugin reinstalls are meant to work; it is surprising if you hit it by accident.
 </Note>
 
 ## The envelope
@@ -113,9 +113,9 @@ Billing events are different. `invoice.*` and `subscription.*` serialize the ful
 | Header | Value |
 | --- | --- |
 | `Southpay-Signature` | `t=<unix seconds>,v1=<hex digest>` |
-| `Southpay-Delivery-Id` | UUID of this delivery |
+| `SouthPay-Delivery-Id` | UUID of this delivery |
 | `Content-Type` | `application/json` |
-| `User-Agent` | `Southpay-Webhooks/1.0` |
+| `User-Agent` | `SouthPay-Webhooks/1.0` |
 
 ## Verifying the signature
 
@@ -132,7 +132,7 @@ Two details break most first attempts.
 **Use the secret exactly as issued, `whsec_` prefix included.** It is the literal UTF-8 string that keys the HMAC. Do not strip the prefix and do not base64-decode it.
 </Warning>
 
-Southpay does **not** enforce a timestamp tolerance on outbound deliveries — it only stamps `t`. If you want replay protection, reject deliveries whose `t` is more than a few minutes old. That is your decision to make, not something the API does for you.
+SouthPay does **not** enforce a timestamp tolerance on outbound deliveries — it only stamps `t`. If you want replay protection, reject deliveries whose `t` is more than a few minutes old. That is your decision to make, not something the API does for you.
 
 <CodeGroup>
 ```typescript server/webhook.ts
@@ -265,7 +265,7 @@ func abs(n int64) int64 {
 ```ruby app/services/southpay_webhook.rb
 require "openssl"
 
-module SouthpayWebhook
+module SouthPayWebhook
   TOLERANCE_SECONDS = 300
 
   def self.verify(raw_body, header, secret)
@@ -380,7 +380,7 @@ Deliveries are also refused before they leave if the URL resolves to a private, 
 
 ### Deduplication
 
-Delivery is at-least-once. Southpay keys each delivery internally on `(endpoint, event)`, which prevents most duplicates, but a retry can still repeat a delivery your handler already processed and acknowledged slowly. Guard on the envelope `id`.
+Delivery is at-least-once. SouthPay keys each delivery internally on `(endpoint, event)`, which prevents most duplicates, but a retry can still repeat a delivery your handler already processed and acknowledged slowly. Guard on the envelope `id`.
 
 ```typescript
 const claimed = await db.processedEvents.insertIfAbsent(event.id);

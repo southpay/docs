@@ -13,7 +13,7 @@ In test mode your store has exactly one usable asset: **Ethereum Sepolia** (`SET
 
 ## 1. Create a payment intent
 
-You price in fiat. Southpay locks an exchange rate and works out the crypto amount.
+You price in fiat. SouthPay locks an exchange rate and works out the crypto amount.
 
 <CodeGroup>
 ```bash Request
@@ -80,7 +80,7 @@ curl -X POST https://api.southpay.io/api/v2/payments \
 
 Three fields to store against your order right now:
 
-- **`id`** — the UUID you use on every later API call. All Southpay ids are bare UUIDs; there is no `pi_` prefix scheme.
+- **`id`** — the UUID you use on every later API call. All SouthPay ids are bare UUIDs; there is no `pi_` prefix scheme.
 - **`reference`** — 16 uppercase alphanumeric characters. This is the customer-facing identifier and the checkout token, and it is what arrives in webhooks.
 - **`expires_at`** — 60 minutes from creation, always. It is not configurable. See [Payment lifecycle](/payment-lifecycle).
 
@@ -146,7 +146,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
 
 ## 4. Verify and handle the delivery
 
-When the payment confirms, Southpay `POST`s this to your URL:
+When the payment confirms, SouthPay `POST`s this to your URL:
 
 ```json Webhook body
 {

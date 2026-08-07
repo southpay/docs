@@ -4,7 +4,7 @@ description: "Create a test agent credential, connect an MCP client or call the 
 sidebarTitle: "Quickstart"
 ---
 
-This walks from an empty store to an agent charging a customer. You need a Southpay account with at least one accepted crypto asset — see the [payments quickstart](/quickstart) if you are starting fresh.
+This walks from an empty store to an agent charging a customer. You need a SouthPay account with at least one accepted crypto asset — see the [payments quickstart](/quickstart) if you are starting fresh.
 
 Do this in test mode. Test mode has exactly one usable asset, `SETH` on Ethereum Sepolia, and the API surface is otherwise identical to live.
 
@@ -19,7 +19,7 @@ Do this in test mode. Test mode has exactly one usable asset, `SETH` on Ethereum
     - **Scopes** — `payments:read` and `payments:write` are enough for this guide. Omitting scopes grants all eight.
     - **Expiry** — optional, recommended.
 
-    The full token is shown once, in the form `spa_test_` followed by 48 hex characters. Southpay stores only a SHA-256 digest and a 16-character display prefix, so a lost token cannot be recovered — revoke it and create another.
+    The full token is shown once, in the form `spa_test_` followed by 48 hex characters. SouthPay stores only a SHA-256 digest and a 16-character display prefix, so a lost token cannot be recovered — revoke it and create another.
 
     If you are connecting an MCP client and would rather not handle a key at all, skip this step and use [browser login](/agentic/mcp-server#browser-login-oauth) instead, which mints the credential for you.
   </Step>
@@ -133,7 +133,7 @@ Do this in test mode. Test mode has exactly one usable asset, `SETH` on Ethereum
     }
     ```
 
-    These are configuration states, not bugs in your integration. Payouts unlock when the merchant sets a per-asset [spend limit](/agentic/authorization#unblocking-payouts-with-spend-limits) on the credential. Refunds, token changes and mandate issuance need an authorization provider, which Southpay support enables per store. See [agent authorization](/agentic/authorization) for the full picture.
+    These are configuration states, not bugs in your integration. Payouts unlock when the merchant sets a per-asset [spend limit](/agentic/authorization#unblocking-payouts-with-spend-limits) on the credential. Refunds, token changes and mandate issuance need an authorization provider, which SouthPay support enables per store. See [agent authorization](/agentic/authorization) for the full picture.
   </Step>
 </Steps>
 

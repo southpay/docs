@@ -1,10 +1,10 @@
 ---
 title: "Webhook endpoints"
-description: "Register HTTPS destinations for Southpay events, manage subscriptions, rotate signing secrets, and inspect recent deliveries."
+description: "Register HTTPS destinations for SouthPay events, manage subscriptions, rotate signing secrets, and inspect recent deliveries."
 sidebarTitle: "Webhook endpoints"
 ---
 
-A webhook endpoint is a URL Southpay posts events to, plus the list of events it wants and the secret used to sign them. This page covers managing those endpoints. For the payload shape, signature verification and retry behaviour, see the [webhooks guide](/webhooks).
+A webhook endpoint is a URL SouthPay posts events to, plus the list of events it wants and the secret used to sign them. This page covers managing those endpoints. For the payload shape, signature verification and retry behaviour, see the [webhooks guide](/webhooks).
 
 Paths are relative to `https://api.southpay.io/api/v2`.
 
@@ -67,7 +67,7 @@ curl https://api.southpay.io/api/v2/webhook_endpoints \
 All fields go inside a required `webhook_endpoint` object.
 
 <ParamField body="webhook_endpoint.url" type="string" required>
-  Where deliveries are posted. Must resolve to a public address — Southpay rejects private, loopback and link-local hosts at delivery time.
+  Where deliveries are posted. Must resolve to a public address — SouthPay rejects private, loopback and link-local hosts at delivery time.
 </ParamField>
 
 <ParamField body="webhook_endpoint.subscribed_events" type="string[]" required>
@@ -152,7 +152,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
 </ResponseField>
 
 <ResponseField name="status" type="string" required>
-  `active`, `disabled` (you turned it off) or `error` (Southpay turned it off after 10 failed attempts on a delivery).
+  `active`, `disabled` (you turned it off) or `error` (SouthPay turned it off after 10 failed attempts on a delivery).
 </ResponseField>
 
 <ResponseField name="subscribed_events" type="string[]" required>
@@ -218,7 +218,7 @@ Adds the last 25 deliveries and the full event catalogue. Note this view does **
 <ResponseField name="recent_deliveries" type="object[]">
   Last 25 in the current mode, newest first.
   <Expandable title="properties">
-    <ResponseField name="id" type="string">Delivery UUID. Also sent as the `Southpay-Delivery-Id` header.</ResponseField>
+    <ResponseField name="id" type="string">Delivery UUID. Also sent as the `SouthPay-Delivery-Id` header.</ResponseField>
     <ResponseField name="event_type" type="string">Public event name.</ResponseField>
     <ResponseField name="status" type="string">`pending`, `attempting`, `delivered`, `failed` or `ignored`.</ResponseField>
     <ResponseField name="attempts" type="integer">Attempts made. Maximum 10.</ResponseField>

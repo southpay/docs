@@ -1,6 +1,6 @@
 ---
 title: "Changelog"
-description: "Latest updates, new features, and improvements to the Southpay API and platform"
+description: "Latest updates, new features, and improvements to the SouthPay API and platform"
 ---
 
 <Update label="July 16, 2026" description="Subscriptions gain items, trials, plan changes, and scheduled cancellation" tags={["Feature"]}>
@@ -46,7 +46,7 @@ Underpaid payments that fail are now refunded automatically to the sender, OAuth
 
 ### New features
 
-- **Automatic refunds for failed underpaid payments**: When an underpaid payment expires and your store does not [accept underpayments](/payment-intents), Southpay now automatically initiates an on-chain refund of the partial amount to the sender. Refunds are recorded against the payment intent and the refunded amount is debited from your balance. No integration changes required. [Learn more about payment intents](/payment-intents)
+- **Automatic refunds for failed underpaid payments**: When an underpaid payment expires and your store does not [accept underpayments](/payment-intents), SouthPay now automatically initiates an on-chain refund of the partial amount to the sender. Refunds are recorded against the payment intent and the refunded amount is debited from your balance. No integration changes required. [Learn more about payment intents](/payment-intents)
 
 - **List refunds for a payment**: A new `GET /payments/{id}/refunds` endpoint returns every refund associated with a payment intent, including status (`pending`, `submitted`, `confirmed`, `failed`), reason, destination address, amount, and on-chain transaction hash. Use it to surface refund progress in your own dashboards. [See the API reference](/api-reference/payments)
 
@@ -77,7 +77,7 @@ Underpaid payments that fail are now refunded automatically to the sender, OAuth
 <Update label="April 27, 2026" description="Pass processing fees to customers at checkout" tags={["Feature"]}>
 ## Week of April 27
 
-Stores can now opt to have customers cover the Southpay processing fee at checkout instead of absorbing it themselves.
+Stores can now opt to have customers cover the SouthPay processing fee at checkout instead of absorbing it themselves.
 
 ### New features
 
@@ -144,7 +144,7 @@ Account and payment notification emails have been redesigned, new stores ship wi
 
 ### Updates
 
-- **Refreshed transactional emails**: Welcome, email verification, payment completed, payment overpaid, payment expired, payout disbursed, and webhook delivery failure emails now use a unified Southpay-branded template with a friendlier, more consistent tone across every message. Sign-up verification codes are delivered through the same system, so verification emails arrive with the same look and feel as the rest of your account notifications. No integration changes required. [See authentication](/authentication)
+- **Refreshed transactional emails**: Welcome, email verification, payment completed, payment overpaid, payment expired, payout disbursed, and webhook delivery failure emails now use a unified SouthPay-branded template with a friendlier, more consistent tone across every message. Sign-up verification codes are delivered through the same system, so verification emails arrive with the same look and feel as the rest of your account notifications. No integration changes required. [See authentication](/authentication)
 
 - **Auto-swap to USDC or USDT enabled by default for new stores**: New stores are now created with USDT (Ethereum) pre-selected as the auto-swap target asset. You can change the target asset, or turn auto-swap off entirely, from your store settings at any time. Existing stores are unaffected.
 
@@ -170,7 +170,7 @@ Automatically convert incoming crypto payments into a stablecoin, plus faster an
 
 ### New features
 
-- **Auto-swap to USDC or USDT**: Stores can now opt in to automatically swap incoming crypto payments into a stablecoin on Ethereum. Enable auto-swap from your store settings and pick either USDC or USDT (Ethereum) as your target asset; Southpay handles the on-chain swap and credits the converted balance back to your store. Use it to reduce exposure to crypto price volatility without managing swaps yourself.
+- **Auto-swap to USDC or USDT**: Stores can now opt in to automatically swap incoming crypto payments into a stablecoin on Ethereum. Enable auto-swap from your store settings and pick either USDC or USDT (Ethereum) as your target asset; SouthPay handles the on-chain swap and credits the converted balance back to your store. Use it to reduce exposure to crypto price volatility without managing swaps yourself.
 
 ### Updates
 
@@ -202,14 +202,14 @@ Payout schedule minimum thresholds are now set in fiat amounts instead of crypto
 
 ### Updates
 
-- **Fiat-denominated minimum thresholds on payout schedules**: Payout schedules now accept `minimum_fiat_cents` and `minimum_fiat_currency` (one of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`) in place of the previous crypto-denominated `minimum_threshold`. Southpay converts the threshold to the asset's value at payout time using live exchange rates, so a schedule set to "skip payouts below $10" behaves consistently across assets without needing to recalculate atomic amounts. Update any payout schedule requests to send the new fields. [Learn more about payouts](/api-reference/payments)
+- **Fiat-denominated minimum thresholds on payout schedules**: Payout schedules now accept `minimum_fiat_cents` and `minimum_fiat_currency` (one of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`) in place of the previous crypto-denominated `minimum_threshold`. SouthPay converts the threshold to the asset's value at payout time using live exchange rates, so a schedule set to "skip payouts below $10" behaves consistently across assets without needing to recalculate atomic amounts. Update any payout schedule requests to send the new fields. [Learn more about payouts](/api-reference/payments)
 
 </Update>
 
 <Update label="April 24, 2026" description="Financial breakdown on payment intents" tags={["Improvement"]}>
 ## Week of April 24
 
-Payment intents now return a detailed financial breakdown so you can see exactly how each payment splits between your net revenue and Southpay fees.
+Payment intents now return a detailed financial breakdown so you can see exactly how each payment splits between your net revenue and SouthPay fees.
 
 ### Updates
 
@@ -312,7 +312,7 @@ Email confirmation for sign-up, minimum payout thresholds per chain, stricter as
 
 - **Minimum payout amounts per chain**: Automated payouts now enforce a per-chain minimum withdrawal amount to prevent uneconomical "dust" payouts. If your balance is below the minimum for a given chain, the payout is skipped until enough funds accumulate. This ensures you are not charged network fees on tiny transfers. [Learn more about payouts](/api-reference/payments)
 
-- **Live-mode chain validation for assets**: When you enable a payment asset in live mode, Southpay now verifies that the asset's blockchain is supported by the payment provider before activation. This prevents enabling assets that cannot process real transactions.
+- **Live-mode chain validation for assets**: When you enable a payment asset in live mode, SouthPay now verifies that the asset's blockchain is supported by the payment provider before activation. This prevents enabling assets that cannot process real transactions.
 
 ### Bug fixes
 
@@ -333,7 +333,7 @@ Third-party OAuth integrations, environment-scoped asset lists, more flexible pa
 
 ### New features
 
-- **OAuth 2.0 authorization**: Southpay now supports the OAuth 2.0 authorization code flow with PKCE. Third-party applications can request scoped access to your account (including reading payments, managing webhooks, and creating payment requests) without ever handling your password. [See authentication](/authentication)
+- **OAuth 2.0 authorization**: SouthPay now supports the OAuth 2.0 authorization code flow with PKCE. Third-party applications can request scoped access to your account (including reading payments, managing webhooks, and creating payment requests) without ever handling your password. [See authentication](/authentication)
 
 - **Manage connected apps**: You can view and revoke access for any third-party application connected to your store. Revoking a connection immediately invalidates the app's access token.
 
@@ -351,22 +351,22 @@ Third-party OAuth integrations, environment-scoped asset lists, more flexible pa
 
 </Update>
 
-<Update label="April 18, 2026" description="Week of April 14-18: Southpay v2, checkout improvements, and reliability updates" tags={["Release", "Feature", "Improvement"]}>
+<Update label="April 18, 2026" description="Week of April 14-18: SouthPay v2, checkout improvements, and reliability updates" tags={["Release", "Feature", "Improvement"]}>
 ## Week of April 14-18
 
-Southpay v2 is live. This week we shipped the new platform, improved checkout, and hardened reliability across the board.
+SouthPay v2 is live. This week we shipped the new platform, improved checkout, and hardened reliability across the board.
 
 ### New features
 
-- **Southpay v2**: The platform has been rebuilt from the ground up with a new API, expanded crypto asset support, automated payouts, and white-label checkout.
+- **SouthPay v2**: The platform has been rebuilt from the ground up with a new API, expanded crypto asset support, automated payouts, and white-label checkout.
 
 - **Automated payout schedules**: Set up recurring payouts on a daily, weekly, or monthly cadence with configurable minimum balance thresholds. Payouts execute automatically to your registered crypto wallet or bank account. [Learn more](/api-reference/payments)
 
-- **Fiat payout destinations**: Register bank accounts (IBAN/SWIFT) as payout destinations. Southpay handles conversion and settlement in USD, EUR, GBP, HKD, SGD, or JPY.
+- **Fiat payout destinations**: Register bank accounts (IBAN/SWIFT) as payout destinations. SouthPay handles conversion and settlement in USD, EUR, GBP, HKD, SGD, or JPY.
 
 - **Crypto payout destinations**: Add and manage crypto wallet addresses for direct on-chain payouts. Select a default address per asset and funds are routed automatically.
 
-- **White-label checkout**: Customize the hosted checkout page with your own logo, brand name, and colors. Optionally remove Southpay branding entirely. Pair with a custom domain (e.g., `pay.yourcompany.com`) for a fully branded experience.
+- **White-label checkout**: Customize the hosted checkout page with your own logo, brand name, and colors. Optionally remove SouthPay branding entirely. Pair with a custom domain (e.g., `pay.yourcompany.com`) for a fully branded experience.
 
 - **Custom domains**: Serve the checkout page from your own domain with DNS-based verification.
 

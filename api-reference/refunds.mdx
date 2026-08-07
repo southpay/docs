@@ -18,7 +18,7 @@ Agents use a separate endpoint with different error semantics. See [Agentic API]
 
 ## Where refunds come from
 
-**Automatic.** When a payment is rejected — overpaid on a store that does not accept overpayments, or underpaid past expiry on a store that does not accept underpayments — Southpay refunds the confirmed funds itself. These carry `reason` `failed_overpaid` or `failed_underpaid`.
+**Automatic.** When a payment is rejected — overpaid on a store that does not accept overpayments, or underpaid past expiry on a store that does not accept underpayments — SouthPay refunds the confirmed funds itself. These carry `reason` `failed_overpaid` or `failed_underpaid`.
 
 **Requested.** You call `POST /payments/{id}/refunds`. These carry `reason` `merchant_requested`.
 
@@ -72,7 +72,7 @@ All fields go inside an optional `refund` object. Sending them at the top level 
 </ParamField>
 
 <ParamField body="refund.destination_address" type="string">
-  Send the refund somewhere other than the address the customer paid from. Must be valid for the asset's chain and must not be a Southpay deposit address.
+  Send the refund somewhere other than the address the customer paid from. Must be valid for the asset's chain and must not be a SouthPay deposit address.
 </ParamField>
 
 <Warning>
@@ -115,7 +115,7 @@ curl -X POST https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2
 
 ### Idempotency behaviour
 
-Your `Idempotency-Key` is not used verbatim. Southpay derives a per-asset key from it, so a payment that received two assets produces two refund records under one key you sent. Replaying the same key returns the existing refunds — still with status `201`, not `200`.
+Your `Idempotency-Key` is not used verbatim. SouthPay derives a per-asset key from it, so a payment that received two assets produces two refund records under one key you sent. Replaying the same key returns the existing refunds — still with status `201`, not `200`.
 
 For `failed` and `expired` intents the response contains **every** refund on the intent, not only the ones this call created.
 
@@ -185,8 +185,8 @@ Every failure on this endpoint returns `422` with the flat envelope `{"error": "
 | `Payment has confirmed funds in multiple assets; specify asset_id` | Partial refund on a multi-asset intent without `asset_id`. |
 | `Payment has confirmed funds in multiple assets; specify asset_id when overriding the destination` | `destination_address` on a multi-asset intent without `asset_id`. |
 | `Payment has confirmed funds in multiple assets; a single destination override cannot apply to all of them` | Destination override cannot be resolved to one asset. |
-| `Destination override matches a Southpay deposit address` | The override is one of ours. |
-| `Refund destination resolves to own deposit address` | The customer's source address is a Southpay address. |
+| `Destination override matches a SouthPay deposit address` | The override is one of ours. |
+| `Refund destination resolves to own deposit address` | The customer's source address is a SouthPay address. |
 | `Refund destination address failed format validation for ETH` | Malformed address for that chain. |
 | `No source address on confirmed transaction` | No sender recorded and no override supplied. |
 | `Refund exceeds merchant ledger balance for intent …` | Your ledger balance for the asset is short. |
