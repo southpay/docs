@@ -1,6 +1,6 @@
 ---
 title: "x402 and session mandates"
-description: "Capped spending envelopes for pay-per-call commerce. Both prerequisites are off by default: mandates need a provider, dispatch needs a flag."
+description: "Capped spending envelopes for pay-per-call commerce. Both prerequisites are off by default: mandates need a provider, on-chain dispatch must be enabled."
 sidebarTitle: "x402 mandates"
 ---
 
@@ -12,11 +12,11 @@ Both resources are REST-only, under the `x402:read` and `x402:write` scopes. Nei
 
 Read this before building against x402. On a store with no configuration, the flow does not run at all, and even with it running the money does not leave the chain-side.
 
-**Mandate issuance requires an authorization provider.** `POST /agentic/mandates` returns `403 mandate_required` unless the store's `agent_authorization` feature flag names a provider. There is no API to enable that flag and no dashboard toggle — SouthPay support sets it per store. Because a settlement needs a usable mandate, `POST /agentic/x402/settlements` is blocked by the same wall. On a default store, every x402 write returns `403`.
+**Mandate issuance requires an authorization provider.** `POST /agentic/mandates` returns `403 mandate_required` unless a provider is configured for the store. There is no API to configure one and no dashboard toggle — SouthPay support sets it per store. Because a settlement needs a usable mandate, `POST /agentic/x402/settlements` is blocked by the same wall. On a default store, every x402 write returns `403`.
 
 **On-chain dispatch is off by default.** Settlements are a ledger accrual, not a transfer. SouthPay broadcasts a settlement on-chain only when all of the following hold:
 
-- the store has the `x402_onchain_dispatch` feature flag enabled — it is off unless staff turn it on;
+- on-chain dispatch is enabled for the store — it is off unless SouthPay staff turn it on;
 - the settlement is in **live mode** — test-mode settlements are never dispatched;
 - `amount_atomic` is non-zero;
 - `pay_to` is set — a settlement without one is failed with reason `missing_pay_to`.
@@ -24,7 +24,7 @@ Read this before building against x402. On a store with no configuration, the fl
 With dispatch off, a settlement stays `submitted` indefinitely and `tx_ref` stays `null`. The spend is real on SouthPay's internal ledger — it reduces the store balance and the mandate envelope — but no on-chain transfer exists. Do not treat `submitted` as settlement finality, and do not release goods against it.
 
 <Warning>
-  Polling a `submitted` settlement for `confirmed` on a store without `x402_onchain_dispatch` is an infinite loop. Check for the flag with your SouthPay contact before you build a state machine that waits on it.
+  Polling a `submitted` settlement for `confirmed` on a store without on-chain dispatch is an infinite loop. Confirm dispatch is enabled with your SouthPay contact before you build a state machine that waits on it.
 </Warning>
 
 ## How the flow runs
@@ -150,7 +150,7 @@ curl -X POST https://api.southpay.io/api/v2/agentic/x402/settlements \
 ```
 </CodeGroup>
 
-`Idempotency-Key` is required; without it the request is refused with `422 idempotency_key_required`. Retrying with the same key returns the original settlement, rendered with the controller's normal `201`.
+`Idempotency-Key` is required; without it the request is refused with `422 idempotency_key_required`. Retrying with the same key returns the original settlement, with the normal `201`.
 
 `nonce` defaults to a random 32-character hex value. `payer` and `requirements` — the service's own 402 payment requirements, stored for audit — are optional.
 
@@ -171,9 +171,9 @@ Under a row lock on the mandate, each settlement:
 | --- | --- |
 | `pending` | Created but not yet enforced |
 | `submitted` | Enforced against the envelope and recorded on the ledger. **Not an on-chain transfer** |
-| `confirmed` | On-chain transfer confirmed. Only reachable with `x402_onchain_dispatch` enabled, in live mode |
+| `confirmed` | On-chain transfer confirmed. Only reachable with on-chain dispatch enabled, in live mode |
 | `failed` | Dispatch failed; `failure_reason` is set. Same preconditions |
 
-`confirmed` and `failed` are terminal. Without the dispatch flag a settlement finishes its life as `submitted`, which is the state most integrations will see today.
+`confirmed` and `failed` are terminal. Without on-chain dispatch a settlement finishes its life as `submitted`, which is the state most integrations will see today.
 
-If dispatch is enabled for your store, `tx_ref` carries the provider transaction reference once broadcast, and dispatch is keyed deterministically per settlement so retries and concurrent workers cannot double-send.
+If dispatch is enabled for your store, `tx_ref` carries the provider transaction reference once broadcast. Dispatch is keyed deterministically per settlement, so a retry cannot double-send.

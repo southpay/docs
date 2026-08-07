@@ -38,7 +38,7 @@ Eight agent scopes exist: `payments:read`, `payments:write`, `payouts:read`, `pa
 
 Read this before you write any agent that moves money.
 
-`AuthorizationProvider` is chosen by the `agent_authorization` store feature flag, which only SouthPay staff can set. With no flag — the default for every store — payments work and most other writes are **hard-blocked at `403`**.
+The authorization provider is configured per store, and only SouthPay staff can set it. With no provider — the default for every store — payments work and most other writes are **hard-blocked at `403`**.
 
 | Action | Default behaviour |
 | --- | --- |
@@ -97,7 +97,7 @@ curl https://api.southpay.io/api/v2/agentic/account \
 <ResponseField name="authorization" type="object" required>
   <Expandable title="properties">
     <ResponseField name="provider" type="string">
-      The provider class name. `"NullAuthorizationProvider"` means no provider is configured.
+      Identifies the authorization provider in force. `"NullAuthorizationProvider"` means no provider is configured.
     </ResponseField>
     <ResponseField name="mandates" type="boolean">
       False when the null provider is active. Treat false as "refunds, token changes, mandates and x402 will all return 403".
@@ -614,7 +614,7 @@ A mandate is a signed spending envelope an agent draws down against, used by x40
 ```
 
 <Warning>
-Settlements are ledger-only by default. On-chain dispatch is behind the `x402_onchain_dispatch` store feature flag, which is off unless staff enable it. A `confirmed` settlement without the flag means the internal ledger moved, not that a transaction was broadcast — `tx_ref` stays null.
+Settlements are ledger-only by default. On-chain dispatch is off unless SouthPay staff enable it for your store. A `confirmed` settlement without dispatch enabled means the internal ledger moved, not that a transaction was broadcast — `tx_ref` stays null.
 </Warning>
 
 `status` is `pending`, `submitted`, `confirmed` or `failed`.

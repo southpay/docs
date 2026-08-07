@@ -171,7 +171,7 @@ When a refund reaches `confirmed`, its payment intent moves to `refunded` with `
 
 ## Errors
 
-Every failure on this endpoint returns `422` with the flat envelope `{"error": "<message>"}`. The value is the human-readable sentence below — **not** a machine code and **not** a Ruby class name.
+Every failure on this endpoint returns `422` with the flat envelope `{"error": "<message>"}`. The value is the human-readable sentence below — **not** a machine-readable code and **not** an internal identifier.
 
 | Message | Cause |
 | --- | --- |

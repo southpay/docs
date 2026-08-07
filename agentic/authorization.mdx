@@ -11,7 +11,7 @@ The denials are the system working as designed. Treat them as a configuration st
 
 ## What happens by default
 
-SouthPay resolves an authorization provider per store from the `agent_authorization` feature flag. With no flag, every store gets `NullAuthorizationProvider`, which approves every verification it is asked for — and then each endpoint checks whether the approval came from a real provider, and refuses if it did not.
+SouthPay resolves an authorization provider per store. No provider is configured by default, so every store gets `NullAuthorizationProvider`, which approves every verification it is asked for — and then each endpoint checks whether the approval came from a real provider, and refuses if it did not.
 
 | Agent action | Default behavior |
 | --- | --- |
@@ -26,7 +26,7 @@ SouthPay resolves an authorization provider per store from the `agent_authorizat
 
 Payment creation is the deliberate exception. Charging a customer creates a receivable rather than an outflow, so it needs no mandate.
 
-Check which provider you are on with `GET /api/v2/agentic/account` (the `get_account` MCP tool). `authorization.provider` is the Ruby class name of the resolved provider and `authorization.mandates` is a boolean:
+Check which provider you are on with `GET /api/v2/agentic/account` (the `get_account` MCP tool). `authorization.provider` identifies the authorization provider in force and `authorization.mandates` is a boolean:
 
 ```json Response 200
 {
@@ -56,7 +56,7 @@ An agent reads its own headroom with `GET /api/v2/agentic/payout_limits` (or `ge
 
 Refunds, token toggles and mandate issuance need a real authorization provider. Spend limits do not help here; the check is specifically "is this store's provider something other than the default".
 
-Enabling one sets the `agent_authorization` store feature flag with a `provider` setting. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle — SouthPay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
+A provider is configured per store. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle — SouthPay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
 
 <Note>
   If you are building an agent for merchants generally, assume the provider is absent. Discover it at runtime from `GET /agentic/account` and gate your own tool exposure on `authorization.mandates`, rather than offering the agent a refund capability that will always fail.

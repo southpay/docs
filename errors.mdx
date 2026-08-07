@@ -33,14 +33,14 @@ The API returns errors in **three different JSON shapes**. Which one you get dep
 
 | Shape | Where you get it |
 | --- | --- |
-| `{"error": "<string>"}` | The majority of endpoints. Hand-written guard clauses in controllers. |
-| `{"error": {"message", "code"}}` | Framework-level rescues (404, 422, 502, 500), every `/agentic/*` endpoint, platform endpoints, and some payout and balance-swap paths. |
-| `{"errors": ["…", "…"]}` | ActiveRecord validation failures: webhook endpoints, payout schedules, billing creates and updates, custom domains, OAuth apps. |
+| `{"error": "<string>"}` | The majority of endpoints. Hand-written guard clauses on the endpoint itself. |
+| `{"error": {"message", "code"}}` | Generic error handling (404, 422, 502, 500), every `/agentic/*` endpoint, platform endpoints, and some payout and balance-swap paths. |
+| `{"errors": ["…", "…"]}` | Validation failures: webhook endpoints, payout schedules, billing creates and updates, custom domains, OAuth apps. |
 
 Two things follow from this that surprise people:
 
 - **`error` is sometimes a string and sometimes an object.** `error.message` throws on most 4xx responses. Check the type first.
-- **`code` is frequently `null`.** Every framework-rescued exception renders `{"error": {"message": "…", "code": null}}`. Only hand-written failures set a code. Never key your control flow on `code` alone.
+- **`code` is frequently `null`.** Every generically handled exception renders `{"error": {"message": "…", "code": null}}`. Only hand-written failures set a code. Never key your control flow on `code` alone.
 
 ### Normalizing all three
 
@@ -101,7 +101,7 @@ A `403` means your credential is valid and the request was refused. Six distinct
 | --- | --- | --- |
 | `insufficient_scope` | The credential lacks the scope for this resource and verb | Reissue the key with the scope. See [Authentication](/authentication#scopes). |
 | `publishable_key_forbidden` | A `sp_pk_` key called anything other than `POST /payments` | Use a secret key server-side |
-| `not_a_platform` | Platform endpoints, or `X-Southpay-Account`, on a store without the platform flag | SouthPay staff must enable it. See [Platform accounts](/platform-accounts). |
+| `not_a_platform` | Platform endpoints, or `X-Southpay-Account`, on a store where platform mode is not enabled | SouthPay staff must enable it. See [Platform accounts](/platform-accounts). |
 | `account_not_found` | `X-Southpay-Account` names a store that is not your sub-merchant | Check the account id |
 | `platform_cannot_issue_credentials` | A platform tried to manage a sub-merchant's API keys or agent credentials while acting as them | Not permitted, by design |
 | `platform_cannot_change_payout_destination` | A platform tried to change a sub-merchant's payout destination | Only the merchant can, through an onboarding link |
@@ -136,7 +136,7 @@ Every code below appears in the API source. If you see a code that is not here, 
 | `account_not_found` | 404 | A platform account id in the path does not resolve |
 | `onboarding_link_unusable` | 404 / 410 | Onboarding token is unknown, consumed, or expired |
 
-Most 404s carry no code at all — `ActiveRecord::RecordNotFound` renders `{"error": {"message": "Couldn't find …", "code": null}}`.
+Most 404s carry no code at all — a record that does not resolve renders `{"error": {"message": "Couldn't find …", "code": null}}`.
 
 ### 409
 

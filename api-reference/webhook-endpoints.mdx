@@ -292,7 +292,7 @@ An unknown `event_type` returns `422` `{"error": "Unknown event type"}`.
 Returns `200` `{"message": "Redelivery queued"}`. A delivery that is not retryable returns `422` `{"error": "Delivery is not retryable"}`.
 
 <Warning>
-This endpoint is currently broken: it does not load the endpoint before looking up the delivery, so every call returns `500` `{"error": {"message": "Internal server error", "code": null}}`. Until it is fixed, recover missed events with the [payment events endpoint](/api-reference/payments#list-payment-events).
+This endpoint is currently broken: every call returns `500` `{"error": {"message": "Internal server error", "code": null}}`. Until it is fixed, recover missed events with the [payment events endpoint](/api-reference/payments#list-payment-events).
 </Warning>
 
 ## Platform integrations

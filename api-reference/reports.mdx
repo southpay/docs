@@ -62,7 +62,7 @@ curl "https://api.southpay.io/api/v2/reports/accounting_transactions?start_date=
 ```json Response 200
 {
   "status": "generated",
-  "url": "https://southpay-reports.7f3a1c.r2.cloudflarestorage.com/1a2b/accounting_transactions/2026-04-01_2026-04-30_EUR.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=…",
+  "url": "https://<presigned-host>/accounting_transactions/2026-04-01_2026-04-30_EUR.pdf?…",
   "expires_in": 3600
 }
 ```
@@ -96,7 +96,7 @@ A `failed` report is retried automatically on your next request. So is a `pendin
 </ResponseField>
 
 <Note>
-Presigned URLs point at Cloudflare R2, on a `*.r2.cloudflarestorage.com` host. There is no `storage.southpay.io`. Treat `url` as opaque and follow it as returned rather than allowlisting a hostname.
+`url` is a time-limited presigned download link. Treat it as opaque: follow it exactly as returned, query string included. The host is not a `southpay.io` domain, and neither the hostname nor the path shape is stable, so do not allowlist a hostname, parse the URL, or try to reconstruct it.
 </Note>
 
 ## List recent reports
@@ -123,7 +123,7 @@ curl https://api.southpay.io/api/v2/reports \
       "currency": "EUR",
       "generated_at": "2026-05-02T08:14:33.000Z",
       "error": null,
-      "url": "https://southpay-reports.7f3a1c.r2.cloudflarestorage.com/1a2b/accounting_transactions/2026-04-01_2026-04-30_EUR.pdf?X-Amz-Signature=…",
+      "url": "https://<presigned-host>/accounting_transactions/2026-04-01_2026-04-30_EUR.pdf?…",
       "expires_in": 3600
     },
     {

@@ -9,7 +9,7 @@ A platform account lets you onboard other businesses under your own SouthPay acc
 Paths are relative to `https://api.southpay.io/api/v2`.
 
 <Warning>
-Platform mode is not self-serve. It is gated on the `platform_accounts` feature flag, which only SouthPay staff can enable. Until it is enabled on your store, **every endpoint on this page returns `403`** with `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}`. Contact support before integrating.
+Platform mode is not self-serve. It is not enabled by default, and only SouthPay staff can turn it on for your store. Until it is enabled on your store, **every endpoint on this page returns `403`** with `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}`. Contact support before integrating.
 </Warning>
 
 ## Authentication and scope
@@ -337,4 +337,4 @@ Billing events do **not** fan out to platforms.
 | --- | --- | --- |
 | `422` | `{"error": {"message": "Name can't be blank", "code": "invalid_account"}}` | Missing or blank `name`. |
 | `422` | `{"error": {"message": "A sub-merchant with external_id merchant_8812 already exists", "code": null}}` | Duplicate `external_id` that could not be adopted. |
-| `403` | `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}` | Feature flag not enabled. |
+| `403` | `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}` | Platform mode not enabled on your store. |

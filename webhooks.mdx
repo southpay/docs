@@ -105,7 +105,7 @@ For payment and transaction events, `data.object` has exactly seven keys: `id`, 
 Billing events are different. `invoice.*` and `subscription.*` serialize the full detail view of the invoice or subscription into `data.object`, so you get line items, customer, period boundaries and every other field rather than the seven-key summary. `store.verification.*` events use a freshly generated UUID as the envelope `id` and carry the store's verification state.
 
 <Note>
-`api_version` is stamped from a constant, not from the `api_version` column on your endpoint. Changing that column has no effect on what you receive. Treat the field as informational.
+`api_version` is stamped from a fixed value, not from the `api_version` field on your endpoint. Changing that field has no effect on what you receive. Treat the field as informational.
 </Note>
 
 ## Headers

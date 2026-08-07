@@ -7,7 +7,7 @@ sidebarTitle: "Platform accounts"
 Platform mode is not a feature you can switch on yourself. Read this first.
 
 <Warning>
-**Platform mode is off until SouthPay staff turn it on, and there is no way to request it through the API.** The `platform_accounts` feature flag is administrator-only. Until it is set on your store, every endpoint on this page returns:
+**Platform mode is off until SouthPay staff turn it on.** There is no API and no dashboard toggle that enables it. Until it is enabled on your store, every endpoint on this page returns:
 
 ```json 403
 { "error": { "message": "This store is not a platform account", "code": "not_a_platform" } }
@@ -82,7 +82,7 @@ Content-Type: application/json
 
 `platform_fee_percentage` is optional and a decimal rate, so `0.005` is 0.5%. Leave it out to inherit your platform default.
 
-Accounts come back as `SubMerchantBlueprint`: `id`, `name`, `external_id`, `platform_fee_percentage`, `kyc_confirmed_at`, `charges_enabled`, `payouts_enabled`, `verification_status`, `created_at`. `verification_status` is `not_started`, `pending`, `approved` or `rejected` — and it reads `approved` once KYC is confirmed, whatever the underlying verification request says.
+Accounts come back with: `id`, `name`, `external_id`, `platform_fee_percentage`, `kyc_confirmed_at`, `charges_enabled`, `payouts_enabled`, `verification_status`, `created_at`. `verification_status` is `not_started`, `pending`, `approved` or `rejected` — and it reads `approved` once KYC is confirmed, whatever the underlying verification request says.
 
 <Note>
 `external_id` and `country` are accepted by the update endpoint but not applied. Only `name` and `platform_fee_percentage` actually change on a `PATCH`. Set `external_id` at creation time; you cannot correct it later through the API.
