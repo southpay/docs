@@ -1,33 +1,31 @@
 ---
 title: "Agentic quickstart"
-description: "Create an agent credential, connect an MCP client, and take your first agent-driven payment."
+description: "Create a test agent credential, connect an MCP client or call the REST API, and take your first agent-driven payment."
 sidebarTitle: "Quickstart"
 ---
 
-This guide takes you from zero to an AI agent charging a customer on your store. You need a Southpay account with at least one accepted crypto asset (see the [payments quickstart](/quickstart) if you are starting fresh).
+This walks from an empty store to an agent charging a customer. You need a Southpay account with at least one accepted crypto asset — see the [payments quickstart](/quickstart) if you are starting fresh.
+
+Do this in test mode. Test mode has exactly one usable asset, `SETH` on Ethereum Sepolia, and the API surface is otherwise identical to live.
 
 <Steps>
   <Step title="Create an agent credential">
-    In the dashboard, open **Agents** and click **Create credential**. Choose:
+    Agent credentials are created in the dashboard under **Agents**. There is no API-key call that creates one; the endpoint behind that screen accepts dashboard sessions only.
 
-    - **Mode**: `test` to start. Test credentials only see testnet assets and test data.
-    - **Name** and **principal**: who the agent is, for your audit trail (for example `Support bot` / `claude@yourcompany.com`).
-    - **Scopes**: which capabilities the token carries. For a first run, `payments:read` and `payments:write` are enough.
-    - **Expiry**: optional, recommended.
+    Choose:
 
-    The full token is shown once:
+    - **Mode** — `test` to start. The mode is baked into the token prefix and cannot be changed later.
+    - **Name** and **principal** — who the agent is, for your audit trail, for example `Support bot` / `claude@yourcompany.com`.
+    - **Scopes** — `payments:read` and `payments:write` are enough for this guide. Omitting scopes grants all eight.
+    - **Expiry** — optional, recommended.
 
-    ```
-    spa_test_4f6a...48 hex characters
-    ```
+    The full token is shown once, in the form `spa_test_` followed by 48 hex characters. Southpay stores only a SHA-256 digest and a 16-character display prefix, so a lost token cannot be recovered — revoke it and create another.
 
-    Store it in a secrets manager. Only a SHA-256 digest is kept server-side; if you lose the token, revoke it and create a new one.
-
-    You can also create credentials [via the API](/agentic/agent-credentials#create-a-credential).
+    If you are connecting an MCP client and would rather not handle a key at all, skip this step and use [browser login](/agentic/mcp-server#browser-login-oauth) instead, which mints the credential for you.
   </Step>
 
-  <Step title="Connect an MCP client">
-    Point any MCP-capable client at the hosted server and pass the credential as a bearer token.
+  <Step title="Connect a client">
+    Over MCP, point the client at the hosted server and pass the credential as a bearer token:
 
     <CodeGroup>
     ```bash Claude Code
@@ -35,7 +33,7 @@ This guide takes you from zero to an AI agent charging a customer on your store.
       --header "Authorization: Bearer spa_test_..."
     ```
 
-    ```json Claude Desktop / generic MCP config
+    ```json Generic MCP config
     {
       "mcpServers": {
         "southpay": {
@@ -49,20 +47,22 @@ This guide takes you from zero to an AI agent charging a customer on your store.
     ```
     </CodeGroup>
 
-    If your client cannot send headers, the agent can call the `login` tool with the credential instead; the session then holds the key until `logout`.
+    Confirm the connection by having the agent call `get_account`. It returns the store, the mode, the credential's scopes, and which authorization provider is in effect.
 
-    Verify the connection by asking the agent to call `get_account`. It returns the store, mode, the credential's scopes, and whether an authorization provider is active.
+    Over plain HTTP, send the same token to the REST API and skip MCP entirely:
 
-    Prefer plain HTTP? Skip the MCP server and call the [REST API](/api-reference/agentic) directly with the same `Authorization: Bearer spa_test_...` header.
+    ```bash
+    curl https://api.southpay.io/api/v2/agentic/account \
+      -H "Authorization: Bearer spa_test_..."
+    ```
   </Step>
 
   <Step title="Create a payment">
-    Ask the agent to charge a customer, or call the API yourself:
-
     <CodeGroup>
     ```bash Request
     curl -X POST https://api.southpay.io/api/v2/agentic/payments \
       -H "Authorization: Bearer spa_test_..." \
+      -H "Idempotency-Key: order-1042" \
       -H "Content-Type: application/json" \
       -d '{
         "payment_intent": {
@@ -75,23 +75,28 @@ This guide takes you from zero to an AI agent charging a customer on your store.
 
     ```json Response 201
     {
-      "id": "01HZ...",
-      "reference": "SPX7K2M9",
+      "id": "5f2c9d84-1b7a-4c3e-9a10-8d4f6b21c907",
+      "reference": "N2BD0BZJUVH0XGUD",
       "status": "pending",
+      "state_reason": null,
       "settlement_amount": "49.99",
       "settlement_currency": "USD",
       "order_id": "ORDER-1042",
-      "hosted_url": "https://pay.southpay.io/SPX7K2M9",
+      "hosted_url": "https://pay.southpay.io/N2BD0BZJUVH0XGUD",
       "expires_at": "2026-07-12T13:00:00.000Z",
+      "terminal": false,
       "payment_addresses": [
         {
-          "address": "0x8f3C...",
-          "crypto_amount_atomic": "49990000",
+          "id": "b04c1f6e-2a53-4d18-91cf-77e0a3d5b2aa",
+          "address": "0x8f3C4a91B7e0D2Ff5A6c81b4E3d9077aC2b15E4d",
+          "status": "pending",
+          "crypto_amount_atomic": "22541000000000000",
+          "exchange_rate_snapshot": "2217.000000000000000000",
           "supported_asset": {
-            "asset_id": "ETH_USDC",
-            "coin_symbol": "USDC",
-            "chain_symbol": "ETH",
-            "atomic_decimals": 6
+            "asset_id": "SETH",
+            "coin_symbol": "ETH",
+            "chain_symbol": "SETH",
+            "atomic_decimals": 18
           }
         }
       ]
@@ -99,30 +104,46 @@ This guide takes you from zero to an AI agent charging a customer on your store.
     ```
     </CodeGroup>
 
-    Give the customer the `hosted_url`, or the deposit address and exact crypto amount directly.
+    A few things to note about the response. `reference` is always 16 uppercase alphanumeric characters and is what appears in webhooks and on the hosted page; `id` is a bare UUID. `crypto_amount_atomic` is a string of base units, so divide by `10 ** atomic_decimals` for a human amount. `exchange_rate_snapshot` is a plain numeric string, not an object.
+
+    Give the customer the `hosted_url`, or the deposit address and the exact crypto amount.
+
+    The `amount` is a decimal string in major units, with at most two decimal places and a ceiling of `100000000.00`. `Idempotency-Key` is optional here but not on refunds, payouts or settlements, where it is required.
   </Step>
 
   <Step title="Wait for it to complete">
-    Over MCP, the agent calls `wait_for_payment` with the payment id or reference; it polls server-side and returns when the payment reaches a terminal state (`completed`, `expired`, `failed`, or `refunded`) or the timeout passes. Over REST, poll `GET /agentic/payments/:id`, or configure a [webhook](/webhooks) for push delivery.
+    Intents expire 60 minutes after creation, and that window is not configurable.
+
+    Over MCP, `wait_for_payment` takes the payment id or its reference and polls server-side until the payment is `completed`, `expired`, `failed` or `refunded`, returning `{done: true, status, polls, payment}`. If the budget runs out first it returns `{done: false, timed_out: true, status, polls, hint, payment}` — a timeout is not a failed payment, so call it again.
+
+    Over REST, poll `GET /api/v2/agentic/payments/{id}`, or configure a [webhook](/webhooks) for push delivery, which is the better choice for anything long-running.
+
+    There are six payment statuses: `pending`, `processing`, `completed`, `expired`, `failed`, `refunded`. An overpayment lands as `completed` with `state_reason: "completed_overpaid"` — there is no `overpaid` status. An agent cancel lands as `expired` with `state_reason: "canceled_by_agent"`.
   </Step>
 
-  <Step title="Add money-movement controls (when you are ready)">
-    Reads and payment creation work out of the box. Refunds, token changes, and payouts are **fail-closed**: they return `403` with `mandate_required` or `payout_controls_required` until you configure controls.
+  <Step title="Expect the money-movement denials">
+    Reads, payment creation and cancellation work with nothing further configured. Refunds, token changes, mandates and payouts do not:
 
-    - Set per-asset [spend limits](/agentic/agent-credentials#spend-limits) on the credential to allow capped payouts.
-    - Enable an [authorization provider](/agentic/authorization) to approve refunds, token changes, and mandate issuance.
+    ```json Response 403
+    {
+      "error": {
+        "message": "Refunding a payment requires a configured authorization provider (mandate)",
+        "code": "mandate_required"
+      }
+    }
+    ```
 
-    These denials are expected behavior, not errors in your integration.
+    These are configuration states, not bugs in your integration. Payouts unlock when the merchant sets a per-asset [spend limit](/agentic/authorization#unblocking-payouts-with-spend-limits) on the credential. Refunds, token changes and mandate issuance need an authorization provider, which Southpay support enables per store. See [agent authorization](/agentic/authorization) for the full picture.
   </Step>
 </Steps>
 
 ## Next steps
 
-<CardGroup cols={2}>
+<Columns cols={2}>
   <Card title="MCP tool reference" icon="plug" href="/agentic/mcp-server">
-    All 19 tools with parameters and return shapes.
+    All 19 tools, their parameters, defaults and return shapes.
   </Card>
   <Card title="Authorization model" icon="shield" href="/agentic/authorization">
-    Scopes, spend limits, mandates, and every error code.
+    What is blocked by default, what unblocks it, and every error code.
   </Card>
-</CardGroup>
+</Columns>

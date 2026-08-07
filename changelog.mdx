@@ -31,11 +31,11 @@ You can now scope API keys to least privilege, mint publishable keys for the bro
 
 ### New features
 
-- **Publishable API keys**: A new key type (`sp_pk_live_...` / `sp_pk_test_...`) is safe to use in browser and client-side code. Publishable keys can only create checkouts. Create one from **Settings → API Keys** by choosing the **Publishable** type, or via the API with `"key_type": "publishable"`. [See authentication](/authentication#key-types)
+- **Publishable API keys**: A new key type (`sp_pk_live_...` / `sp_pk_test_...`) is safe to use in browser and client-side code. Publishable keys can only create checkouts. Create one from **Settings → API Keys** by choosing the **Publishable** type, or via the API with `"key_type": "publishable"`. [See authentication](/authentication#publishable-keys)
 
 - **Scoped secret keys**: Secret keys now carry scopes (`payments:write`, `refunds:read`, `payouts:write`, and more). Restrict a key to least privilege by passing a `scopes` array when you create it. A request missing a required scope returns `403` with code `insufficient_scope`. [See scopes](/authentication#scopes)
 
-- **Checkout widget (`@southpay/js`)**: Embed the hosted checkout inline or as a modal with a few lines of JavaScript, using a publishable key. Create checkouts in the browser, or mount a checkout your server created. [Read the guide](/checkout-widget)
+- **Checkout widget (SouthPay.js)**: Embed the hosted checkout inline or as a modal with a few lines of JavaScript, using a publishable key. Create checkouts in the browser, or mount a checkout your server created. Load it from `https://integrate.southpay.io/widgets/v2.js` — it ships as a hosted bundle, not an npm package. [Read the guide](/checkout-widget)
 
 </Update>
 
@@ -50,13 +50,13 @@ Underpaid payments that fail are now refunded automatically to the sender, OAuth
 
 - **List refunds for a payment**: A new `GET /payments/{id}/refunds` endpoint returns every refund associated with a payment intent, including status (`pending`, `submitted`, `confirmed`, `failed`), reason, destination address, amount, and on-chain transaction hash. Use it to surface refund progress in your own dashboards. [See the API reference](/api-reference/payments)
 
-- **Shopify and Magento webhook platforms**: When [creating a webhook endpoint](/api-reference/webhook-endpoints), you can now set the `platform` to `shopify` or `magento` in addition to `woocommerce` and `custom`. The legacy `whmcs` option has been removed.
+- **Shopify and Magento webhook platforms**: When [creating a webhook endpoint](/api-reference/webhook-endpoints), you can now set the `platform` to `shopify` or `magento`. The full set is `woocommerce`, `prestashop`, `shopify`, `magento` and `custom`. The legacy `whmcs` option has been removed.
 
 ### Updates
 
 - **OAuth live mode chosen at authorization**: OAuth applications now request live or test mode at authorization time by passing `livemode=true` to `/oauth/authorize`. The resulting access token is permanently scoped to that mode, so the previous `X-Livemode` header on OAuth requests is no longer required (or honored). Update your authorization URLs to include `livemode` if your application needs production access. [See authentication](/authentication)
 
-- **New `processing_underpaid` state reason**: Payment intents that are in `processing` but have not yet received the full required amount now report a `state_reason` of `processing_underpaid`, making it easier to distinguish partially-funded payments from those that have already met the required total. [View the full lifecycle](/payment-intents)
+- **New `processing_underpaid` state reason**: Payment intents that are in `processing` but have not yet received the full required amount now report a `state_reason` of `processing_underpaid`, making it easier to distinguish partially-funded payments from those that have already met the required total. [View the full lifecycle](/payment-lifecycle)
 
 - **`failed → refunded` transition**: Payment intents that ended in `failed` (for example, due to underpayment) can now move to `refunded` once the automatic refund completes on-chain. Listen for `payment_intent.refunded` to update order state in your system. [See webhooks](/webhooks)
 
@@ -64,7 +64,7 @@ Underpaid payments that fail are now refunded automatically to the sender, OAuth
 
 - **Accurate confirmation handling for in-flight transactions**: Fixed an issue where transactions reported as `confirming` by the upstream chain provider were marked as fully confirmed before reaching the required number of block confirmations. Transactions now stay in `confirming` until `confirmations >= required_confirmations`, preventing payments from completing prematurely.
 
-- **Processing transition only on real on-chain activity**: Payment intents now move from `pending` to `processing` only when at least one transaction for the deposit address is `confirming` or `confirmed`. Stray webhook events without on-chain activity no longer flip an intent into `processing`. [View the full lifecycle](/payment-intents)
+- **Processing transition only on real on-chain activity**: Payment intents now move from `pending` to `processing` only when at least one transaction for the deposit address is `confirming` or `confirmed`. Stray webhook events without on-chain activity no longer flip an intent into `processing`. [View the full lifecycle](/payment-lifecycle)
 
 - **Webhook delivery blocked for private addresses**: Outbound [webhook deliveries](/webhooks) to private, loopback, link-local, and unique-local IP addresses are now rejected before the request is sent, and the endpoint is automatically marked as `error`. This prevents misconfigured endpoints from causing requests to internal networks.
 
@@ -289,7 +289,7 @@ Shared deposit addresses across EVM chains, faster exchange rate lookups during 
 
 ### Updates
 
-- **Shared deposit addresses for EVM chains**: Payments that accept multiple EVM-compatible assets (such as Ethereum, Polygon, Avalanche, and Base) now share a single deposit address per payment instead of generating one per chain. This simplifies the checkout experience and reduces the number of addresses your customers see.
+- **Shared deposit addresses for EVM chains**: Payments that accept multiple EVM-compatible assets (Ethereum, Polygon and Avalanche C-Chain) now share a single deposit address per payment instead of generating one per chain. This simplifies the checkout experience and reduces the number of addresses your customers see. Match a received payment on the address **and** the asset, never on the address alone.
 
 - **Faster checkout pricing**: Exchange rates are now pre-fetched in batch when a payment is created, so pricing loads faster on the hosted checkout page. You don't need to change anything in your integration.
 
@@ -316,7 +316,7 @@ Email confirmation for sign-up, minimum payout thresholds per chain, stricter as
 
 ### Bug fixes
 
-- **EVM cross-chain payment routing**: Fixed an issue where incoming payments on EVM-compatible chains (such as Ethereum, Polygon, Arbitrum, and Base) could be matched to the wrong payment when the same deposit address was shared across multiple chains. Payments are now resolved using both the deposit address and the asset, ensuring funds are attributed to the correct transaction.
+- **EVM cross-chain payment routing**: Fixed an issue where incoming payments on EVM-compatible chains (Ethereum, Polygon and Avalanche C-Chain) could be matched to the wrong payment when the same deposit address was shared across multiple chains. Payments are now resolved using both the deposit address and the asset, ensuring funds are attributed to the correct transaction.
 
 - **Deposit address chain mismatch**: Fixed an issue where deposit addresses could be generated using an incorrect chain identifier, potentially routing payments to the wrong network. Addresses are now created using the correct chain for each asset.
 
@@ -378,7 +378,7 @@ Southpay v2 is live. This week we shipped the new platform, improved checkout, a
 
 - **Checkout redirect URLs**: Pass `success_url` and `failed_url` when [creating a payment intent](/api-reference/payments). Customers are automatically redirected after completing or failing a payment.
 
-- **Sandbox environment**: Test your integration in a dedicated sandbox without affecting live data. Sandbox users and stores are provisioned on demand.
+- **Test mode**: Develop against test data without affecting live data. There is no separate sandbox host — test and live mode share `https://api.southpay.io` and are selected by the credential you send. [See environments](/environments)
 
 - **Live and test mode API keys**: Generate separate API keys for live and test environments from the dashboard or via the API. Live keys (`sp_live_`) process real payments; test keys (`sp_test_`) operate against sandbox data. All resources (payments, webhooks, balances) are automatically scoped to the key's mode, so live and test data never mix. [See authentication](/authentication)
 
@@ -386,13 +386,17 @@ Southpay v2 is live. This week we shipped the new platform, improved checkout, a
 
 ### Updates
 
-- **Expanded crypto asset support**: Accept payments across Ethereum, Bitcoin, Solana, Avalanche, BNB Chain, Tron, Polygon, Arbitrum, Base, Optimism, Litecoin, Stellar, Algorand, SUI, TON, and more, including USDC and USDT on multiple chains.
+- **Expanded crypto asset support**: Accept deposits on Ethereum, Bitcoin, Solana, Avalanche C-Chain, Tron, Polygon, Litecoin, Ethereum Classic, Stellar, SUI and TON, including USDC and USDT on multiple chains. [See the full catalog](/currencies)
+
+<Note>
+  **Correction, August 2026.** This entry originally also listed BNB Chain, Arbitrum, Base, Optimism and Algorand as deposit chains. They are not, and never have been — no deposit asset exists on any of them. BNB Smart Chain, Arbitrum, Base and Optimism are supported as **payout destination networks** only; Algorand is not supported at all. [Deposit chains and payout networks are two different lists](/currencies#deposit-chains-are-not-payout-networks).
+</Note>
 
 - **Multi-currency settlement**: Set your store's settlement currency to USD, EUR, GBP, HKD, SGD, or JPY. Amounts and balances are denominated in your chosen currency with live exchange rates.
 
 - **Idempotent payment creation**: Pass an `Idempotency-Key` header when [creating payments](/api-reference/payments) to safely retry requests without creating duplicates.
 
-- **Payment status reasons**: The `state_reason` field on payment intents now explains why a payment reached its current state (e.g., `completed_exact`, `failed_underpaid`, `expired_timeout`). [View the full lifecycle](/api-reference/payments)
+- **Payment status reasons**: The `state_reason` field on payment intents now explains why a payment reached its current state (e.g., `completed_exact`, `failed_underpaid`, `expired_timeout`). [View the full lifecycle](/payment-lifecycle)
 
 - **Real-time balance tracking**: Per-asset balances for your store update automatically as payments confirm and payouts execute.
 

@@ -1,236 +1,300 @@
 ---
 title: "Quickstart"
-description: "Create your first payment and receive a webhook confirmation in under 5 minutes."
+description: "Create a payment intent, send your customer to checkout, and verify the webhook that confirms it. Working code in four steps."
 ---
 
-<Info>
-  All API requests must be authenticated. [Get your API key](https://api.southpay.io) from the dashboard before starting.
-</Info>
+You need a test secret API key. Create one in the [dashboard](https://app.southpay.io) under **Settings → API keys**, choosing **Test** and **Secret**. It starts with `sp_sk_test_`.
 
----
+Everything below runs against `https://api.southpay.io/api/v2`. There is no separate sandbox host — test and live mode are selected by which key you send.
 
-## 1. Create a Payment Intent
+<Note>
+In test mode your store has exactly one usable asset: **Ethereum Sepolia** (`SETH`). Every test payment intent returns one deposit address on Sepolia. Live mode returns one address per asset your store has enabled. See [Environments](/environments).
+</Note>
 
-A Payment Intent represents a single payment request for a specific fiat amount. Create one with a `POST` to `/api/v2/payments`.
+## 1. Create a payment intent
 
-```bash
+You price in fiat. Southpay locks an exchange rate and works out the crypto amount.
+
+<CodeGroup>
+```bash Request
 curl -X POST https://api.southpay.io/api/v2/payments \
-  -H "Authorization: Bearer sp_test_YOUR_API_KEY" \
+  -H "Authorization: Bearer sp_sk_test_YOUR_API_KEY" \
+  -H "Idempotency-Key: test-8f14e45f-order-8721" \
   -H "Content-Type: application/json" \
   -d '{
     "payment_intent": {
       "amount": "49.99",
       "currency": "USD",
-      "success_url": "https://yourapp.com/success",
-      "failed_url": "https://yourapp.com/cancel",
-      "metadata": {
-        "order_id": "order_8721"
-      }
+      "success_url": "https://yourapp.example/success",
+      "failed_url": "https://yourapp.example/cancel",
+      "order_id": "order_8721",
+      "metadata": { "order_id": "order_8721" }
     }
   }'
 ```
 
-**Response:**
-
-```json
+```json Response 201
 {
-  "id": "018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b",
-  "reference": "A1B2C3D4E5F6G7H8",
+  "id": "9c1d7f42-6a3b-4e58-9f10-2b8c5d4e7a91",
+  "reference": "K4TP9WQZ2XR7HB3M",
+  "hosted_url": "https://pay.southpay.io/K4TP9WQZ2XR7HB3M",
   "status": "pending",
+  "state_reason": null,
   "settlement_currency": "USD",
   "settlement_amount": "49.99",
-  "expires_at": "2026-04-19T15:00:00.000Z",
-  "created_at": "2026-04-19T14:00:00.000Z",
-  "success_url": "https://yourapp.com/success",
-  "failed_url": "https://yourapp.com/cancel",
+  "expires_at": "2026-08-07T15:00:00.000Z",
+  "created_at": "2026-08-07T14:00:00.000Z",
+  "success_url": "https://yourapp.example/success",
+  "failed_url": "https://yourapp.example/cancel",
+  "order_id": "order_8721",
+  "title": null,
+  "description": null,
   "terminal": false,
+  "settlement_status": null,
+  "auto_swap_status": null,
+  "reconciliation_status": null,
   "payment_addresses": [
     {
-      "id": "018f1a2b-0001-7000-8000-000000000001",
+      "id": "3f2a8b19-40cd-4c7e-8a55-11d9e6b0c342",
       "address": "0xAbCdEf1234567890AbCdEf1234567890AbCdEf12",
       "status": "pending",
-      "crypto_amount_atomic": "22549000000000000",
-      "exchange_rate_snapshot": "2218.50",
+      "crypto_amount_atomic": "22533243243243243",
+      "exchange_rate_snapshot": "2218.500000000000000000",
+      "created_at": "2026-08-07T14:00:00.000Z",
       "supported_asset": {
-        "asset_id": "ETH_ETH",
+        "asset_id": "SETH",
         "coin_symbol": "ETH",
-        "chain_symbol": "ETH",
-        "atomic_decimals": 18
+        "chain_symbol": "SETH",
+        "token_standard": "Native",
+        "chain_name": "Ethereum Sepolia",
+        "network": "ethereum",
+        "atomic_decimals": 18,
+        "min_withdrawal_atomic": "100000000000000",
+        "fiat_eligible": false
       }
     }
   ]
 }
 ```
+</CodeGroup>
 
-The `payment_addresses` array contains one address per blockchain your store has enabled. Each address has a `crypto_amount_atomic` - the exact amount the customer must send in the asset's smallest unit (e.g. wei for ETH).
+Three fields to store against your order right now:
 
----
+- **`id`** — the UUID you use on every later API call. All Southpay ids are bare UUIDs; there is no `pi_` prefix scheme.
+- **`reference`** — 16 uppercase alphanumeric characters. This is the customer-facing identifier and the checkout token, and it is what arrives in webhooks.
+- **`expires_at`** — 60 minutes from creation, always. It is not configurable. See [Payment lifecycle](/payment-lifecycle).
 
-## 2. Redirect your customer
+`crypto_amount_atomic` is the exact amount the customer must send, in the asset's smallest unit. Divide by `10 ** atomic_decimals` for a human amount — here, `0.022533243243243243 ETH`.
 
-Construct the hosted checkout URL from the `reference` field:
+The `Idempotency-Key` header is optional on this endpoint but retrying without one creates a second intent. Read [Idempotency](/idempotency) before you build a retry loop; the behaviour has edges.
+
+## 2. Send the customer to checkout
+
+Redirect to the `hosted_url` on the response. Do not build the URL yourself.
 
 ```text
-https://pay.southpay.io/{reference}
+https://pay.southpay.io/K4TP9WQZ2XR7HB3M
 ```
 
-For the example above:
+The page shows a QR code and the exact amount for each address on the intent, tracks confirmations live, and redirects to your `success_url` when the payment completes. There is no frontend work to do.
 
-```text
-https://pay.southpay.io/A1B2C3D4E5F6G7H8
-```
+## 3. Register a webhook endpoint
 
-The checkout page shows a QR code, address, amount, and a 60-minute countdown timer. No frontend integration required. Once the customer pays and the transaction confirms, they are redirected to your `success_url`.
-
----
-
-## 3. Handle the webhook
-
-Register a webhook endpoint from your dashboard or via the API:
-
-```bash
+<CodeGroup>
+```bash Request
 curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
-  -H "Authorization: Bearer sp_test_YOUR_API_KEY" \
+  -H "Authorization: Bearer sp_sk_test_YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "webhook_endpoint": {
-      "url": "https://yourapp.com/webhooks/southpay",
-      "subscribed_events": ["payment_intent.completed", "payment_intent.failed", "payment_intent.expired"]
+      "url": "https://yourapp.example/webhooks/southpay",
+      "description": "Order fulfillment",
+      "subscribed_events": [
+        "payment_intent.completed",
+        "payment_intent.failed",
+        "payment_intent.expired",
+        "payment_intent.refunded"
+      ]
     }
   }'
 ```
 
-The response includes a `signing_secret` - **save it immediately, it is only shown once.**
-
-When the payment confirms, Southpay sends a `POST` to your endpoint:
-
-```json
+```json Response 201
 {
-  "id": "018f1a2b-ffff-7000-8000-000000000099",
+  "id": "b7e4c210-5d83-4f16-9c02-6ea1f3d85b47",
+  "url": "https://yourapp.example/webhooks/southpay",
+  "description": "Order fulfillment",
+  "status": "active",
+  "subscribed_events": [
+    "payment_intent.completed",
+    "payment_intent.failed",
+    "payment_intent.expired",
+    "payment_intent.refunded"
+  ],
+  "signing_secret": "whsec_4f8b1c...",
+  "delivery_success_rate": null,
+  "created_at": "2026-08-07T14:01:00.000Z"
+}
+```
+</CodeGroup>
+
+<Warning>
+`signing_secret` is returned **only** here and on secret rotation. Store it before you close the terminal — there is no endpoint that will show it to you again.
+</Warning>
+
+`subscribed_events` is required and must list every event you want by name. **Wildcards are not supported** — `"*"` and `"payment_intent.*"` both fail validation. See the [full event list](/webhooks#event-catalogue).
+
+## 4. Verify and handle the delivery
+
+When the payment confirms, Southpay `POST`s this to your URL:
+
+```json Webhook body
+{
+  "id": "d31a5c88-9b74-4c02-b6ff-7e2a4d190c65",
   "type": "payment_intent.completed",
-  "created": 1745071260,
+  "created": 1786125600,
   "livemode": false,
+  "api_version": "2026-04-14",
   "data": {
     "object": {
-      "id": "018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b",
-      "reference": "A1B2C3D4E5F6G7H8",
+      "id": "K4TP9WQZ2XR7HB3M",
       "status": "completed",
+      "settlement_amount_cents": 4999,
       "settlement_currency": "USD",
-      "settlement_amount": "49.99",
+      "from_status": "processing",
+      "to_status": "completed",
       "metadata": { "order_id": "order_8721" }
     }
   }
 }
 ```
 
-Verify the signature before processing (see [Webhooks - Signature verification](/webhooks#verifying-signatures)):
+<Warning>
+**`data.object.id` is the `reference`, not the payment intent UUID.** There is no `reference` key in the payload, and the amount is `settlement_amount_cents` (an integer in minor units), not `settlement_amount`. Look the intent up by reference, or fetch it by UUID from your own order record.
+</Warning>
+
+Verify the signature against the **raw request body** before you trust anything in it.
 
 <CodeGroup>
+```typescript server/webhook.ts
+import express from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
-```typescript Node.js
-import { createHmac, timingSafeEqual } from "crypto";
-
-function verifySignature(rawBody: string, header: string, secret: string): boolean {
+function verify(rawBody: Buffer, header: string, secret: string): boolean {
   const parts = Object.fromEntries(
-    header.split(",").map(p => p.split("=") as [string, string])
+    header.split(",").map(p => p.split("=", 2) as [string, string])
   );
-  const timestamp = parts["t"];
-  const expectedSig = parts["v1"];
-  if (!timestamp || !expectedSig) return false;
+  if (!parts.t || !parts.v1) return false;
 
   const computed = createHmac("sha256", secret)
-    .update(`${timestamp}.${rawBody}`)
+    .update(`${parts.t}.${rawBody.toString("utf8")}`)
     .digest("hex");
 
   const a = Buffer.from(computed);
-  const b = Buffer.from(expectedSig);
+  const b = Buffer.from(parts.v1);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-app.post("/webhooks/southpay", express.raw({ type: "application/json" }), (req, res) => {
-  const sig = req.headers["southpay-signature"] as string;
-  const secret = process.env.SOUTHPAY_WEBHOOK_SECRET!;
+const app = express();
 
-  if (!verifySignature(req.body.toString(), sig, secret)) {
-    return res.status(401).json({ error: "Invalid signature" });
+app.post(
+  "/webhooks/southpay",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["southpay-signature"] as string | undefined;
+    if (!sig || !verify(req.body, sig, process.env.SOUTHPAY_WEBHOOK_SECRET!)) {
+      return res.status(401).end();
+    }
+
+    const event = JSON.parse(req.body.toString());
+    res.json({ received: true });
+
+    if (await alreadyProcessed(event.id)) return;
+    await markProcessed(event.id);
+
+    if (event.type === "payment_intent.completed") {
+      await fulfillOrder(event.data.object.metadata.order_id, event.data.object.id);
+    }
   }
-
-  const event = JSON.parse(req.body.toString());
-
-  if (event.type === "payment_intent.completed") {
-    const { reference, metadata } = event.data.object;
-    fulfillOrder(metadata.order_id, reference);
-  }
-
-  res.json({ received: true });
-});
+);
 ```
 
-```python Python
-import hmac, hashlib, os
-from flask import Flask, request, jsonify
+```python server/webhook.py
+import hashlib
+import hmac
+import os
+
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-def verify_signature(raw_body: bytes, header: str, secret: str) -> bool:
+
+def verify(raw_body: bytes, header: str, secret: str) -> bool:
     parts = dict(p.split("=", 1) for p in header.split(","))
-    timestamp = parts.get("t")
-    expected = parts.get("v1")
-    if not timestamp or not expected:
+    timestamp, v1 = parts.get("t"), parts.get("v1")
+    if not timestamp or not v1:
         return False
-    signed = f"{timestamp}.{raw_body.decode()}"
-    computed = hmac.new(secret.encode(), signed.encode(), hashlib.sha256).hexdigest()
-    return hmac.compare_digest(computed, expected)
+
+    computed = hmac.new(
+        secret.encode(),
+        f"{timestamp}.{raw_body.decode()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(computed, v1)
+
 
 @app.post("/webhooks/southpay")
 def webhook():
     sig = request.headers.get("Southpay-Signature", "")
-    secret = os.environ["SOUTHPAY_WEBHOOK_SECRET"]
-
-    if not verify_signature(request.data, sig, secret):
+    if not verify(request.data, sig, os.environ["SOUTHPAY_WEBHOOK_SECRET"]):
         return jsonify(error="Invalid signature"), 401
 
-    event = request.json
+    event = request.get_json()
+    if already_processed(event["id"]):
+        return jsonify(received=True)
+    mark_processed(event["id"])
+
     if event["type"] == "payment_intent.completed":
         obj = event["data"]["object"]
-        fulfill_order(obj["metadata"]["order_id"], obj["reference"])
+        fulfill_order(obj["metadata"]["order_id"], obj["id"])
 
     return jsonify(received=True)
 ```
-
 </CodeGroup>
 
----
+Return `2xx` within 30 seconds. **Any** non-`2xx` response is retried, up to 10 attempts over roughly 18 hours — including a `400` or `404` your framework returns by accident. Deduplicate on the event `id`.
 
-## 4. Poll for status (alternative)
-
-If webhooks aren't practical, poll the payment status using the `id` or `reference`:
+Test the whole path without paying anything:
 
 ```bash
-curl https://api.southpay.io/api/v2/payments/018f1a2b-3c4d-7e5f-9a0b-1c2d3e4f5a6b \
-  -H "Authorization: Bearer sp_test_YOUR_API_KEY"
+curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/send_test \
+  -H "Authorization: Bearer sp_sk_test_YOUR_API_KEY"
 ```
 
-Check the `terminal` field - when `true`, the payment is in a final state and will not change.
+## Polling instead
 
----
+If you cannot receive webhooks, fetch the intent by UUID and read `status`.
 
-## Next steps
+```bash
+curl https://api.southpay.io/api/v2/payments/9c1d7f42-6a3b-4e58-9f10-2b8c5d4e7a91 \
+  -H "Authorization: Bearer sp_sk_test_YOUR_API_KEY"
+```
+
+`terminal: true` means the outcome is settled. It does not mean the record is frozen — a terminal intent can still become `refunded` later.
+
+## Next
 
 <Columns cols={2}>
-  <Card title="Payment Intents" icon="bolt" href="/payment-intents">
-    Full lifecycle, all statuses, and the events API.
+  <Card title="Payment lifecycle" icon="diagram-project" href="/payment-lifecycle">
+    The six statuses, the ten state reasons, and what each one means for an order.
   </Card>
-
   <Card title="Webhooks" icon="webhook" href="/webhooks">
-    Signature verification, retries, and all event types.
+    Signing, retries, the event catalogue, and the five events that never fire.
   </Card>
-
-  <Card title="Idempotency" icon="shield" href="/idempotency">
-    Safely retry API calls without duplicate charges.
+  <Card title="Errors" icon="triangle-exclamation" href="/errors">
+    Three response shapes, and why `error.message` will throw if you assume one.
   </Card>
-
-  <Card title="Environments" icon="flask" href="/environments">
-    Use test mode to develop without real funds.
+  <Card title="Payout destinations" icon="building-columns" href="/payout-destinations">
+    Where the money goes, and how to configure it before your first payout.
   </Card>
 </Columns>

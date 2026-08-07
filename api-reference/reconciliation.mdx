@@ -1,30 +1,30 @@
 ---
 title: "Reconciliation"
-description: "Compare the amount a payment intent expected against what actually arrived on-chain."
+description: "Compare what a payment intent expected against what actually arrived on-chain, including any auto-swap delta."
 sidebarTitle: "Reconciliation"
 ---
 
-<Warning>
-  All endpoints require authentication. See [Authentication](/authentication).
-</Warning>
+Reconciliation answers one question about a payment intent: did the funds that arrived match what was expected, and if an auto-swap ran, what did it cost? Southpay writes a snapshot each time it checks. This endpoint returns the most recent one.
 
-Base URL: `https://api.southpay.io/api/v2`
+Use it when a payment settled for an amount you did not expect, or when closing your books against the [reports](/api-reference/reports) export.
 
-Reconciliation answers one question for a payment intent: did the on-chain funds that arrived match what was expected, and if an auto-swap ran, what was the delta? Southpay records a snapshot whenever it checks. This endpoint returns the most recent snapshot.
-
-Amounts are returned both as human-readable decimals (`expected_amount`, `received_amount`, `swap_delta`) and as atomic-unit strings (`*_atomic`). The `currency` is the coin symbol of the asset the intent was paid in.
-
----
+Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Get the reconciliation snapshot
 
+**`GET /payment_intents/{payment_intent_id}/reconciliation`** — scope `payments:read`.
+
+<Note>
+This is the only payment route that uses the `payment_intents` path segment. Every other payment route uses `payments`. The `reconciliation_status` field on a payment intent is a shortcut to the `status` returned here.
+</Note>
+
 <CodeGroup>
 ```bash Request
-GET /payments/:payment_intent_id/reconciliation
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/payment_intents/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f/reconciliation \
+  -H "Authorization: Bearer sp_sk_test_…"
 ```
 
-```json Response
+```json Response 200
 {
   "status": "final",
   "expected_amount": "49.99",
@@ -39,18 +39,78 @@ Authorization: Bearer <API_KEY>
 ```
 </CodeGroup>
 
-When no snapshot exists yet (for example, the intent has not been paid), the endpoint returns a placeholder with `status: "under_investigation"`, null amounts, and `"0"` atomic values.
+### Response fields
 
-| Field | Type | Description |
+<ResponseField name="status" type="string" required>
+  One of `final`, `under_investigation`, `disputed`, `closed`. See [statuses](#statuses).
+</ResponseField>
+
+<ResponseField name="expected_amount" type="string | null">
+  What the intent asked for, as a decimal string with trailing zeros stripped.
+</ResponseField>
+
+<ResponseField name="received_amount" type="string | null">
+  What actually arrived, as a decimal string.
+</ResponseField>
+
+<ResponseField name="swap_delta" type="string | null">
+  Difference introduced by an auto-swap. Can be negative, for example `"-0.001"`.
+</ResponseField>
+
+<ResponseField name="currency" type="string | null">
+  The **coin symbol** of the asset that was paid, such as `USDC`. This is not a fiat currency, despite the field name.
+</ResponseField>
+
+<ResponseField name="expected_amount_atomic" type="string" required>
+  Atomic units. `"0"` when no snapshot exists.
+</ResponseField>
+
+<ResponseField name="received_amount_atomic" type="string" required>
+  Atomic units.
+</ResponseField>
+
+<ResponseField name="swap_delta_atomic" type="string" required>
+  Atomic units, signed.
+</ResponseField>
+
+<ResponseField name="last_checked_at" type="string | null">
+  ISO 8601 timestamp of the snapshot. Null when none exists.
+</ResponseField>
+
+## Before the first check
+
+An intent that has never been reconciled — because it is unpaid, or because the checker has not run yet — still returns `200`, not `404`. You get a placeholder:
+
+```json Response 200
+{
+  "status": "under_investigation",
+  "expected_amount": null,
+  "received_amount": null,
+  "swap_delta": null,
+  "currency": "USDC",
+  "expected_amount_atomic": "0",
+  "received_amount_atomic": "0",
+  "swap_delta_atomic": "0",
+  "last_checked_at": null
+}
+```
+
+Treat `last_checked_at: null` as "not yet checked", not as a discrepancy. `currency` is still filled in from the intent's deposit address when one exists.
+
+## Statuses
+
+| Status | Meaning |
+| --- | --- |
+| `final` | Checked and balanced. Nothing further to do. |
+| `under_investigation` | A check is in progress, or no snapshot has been written yet. |
+| `disputed` | A discrepancy was found and is being worked. |
+| `closed` | The discrepancy was resolved and the snapshot was filed. |
+
+## Errors
+
+| Status | Body | Cause |
 | --- | --- | --- |
-| `status` | string | Reconciliation outcome: `final` (checked and balanced), `under_investigation` (in progress, or no snapshot exists yet), or `disputed` (a discrepancy is being worked). |
-| `expected_amount` | string \| null | Expected amount as a decimal. |
-| `received_amount` | string \| null | Amount actually received as a decimal. |
-| `swap_delta` | string \| null | Difference introduced by an auto-swap, as a decimal. |
-| `currency` | string \| null | Coin symbol of the paid asset (e.g. `USDC`). |
-| `expected_amount_atomic` | string | Expected amount in atomic units. |
-| `received_amount_atomic` | string | Received amount in atomic units. |
-| `swap_delta_atomic` | string | Auto-swap delta in atomic units. |
-| `last_checked_at` | string \| null | ISO 8601 timestamp of the snapshot. |
+| `403` | `{"error": {"message": "Insufficient scope: payments:read required", "code": "insufficient_scope"}}` | Credential lacks `payments:read`. |
+| `404` | `{"error": "Payment intent not found"}` | Unknown id, or the intent belongs to the other mode. |
 
-Returns `404` if the payment intent does not exist in the current mode.
+Note the `404` here uses the flat string envelope, unlike most `404` responses in the API, which use `{"error": {"message": …, "code": …}}`.

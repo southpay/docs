@@ -1,77 +1,80 @@
 ---
-title: "Introduction"
-description: "Developer-first crypto payment infrastructure. Accept crypto, settle in fiat, integrate in minutes."
+title: "Southpay"
+description: "Accept crypto payments priced in fiat. Create a payment intent, send the customer to checkout, act on a signed webhook."
+sidebarTitle: "Introduction"
 ---
 
-## What is Southpay?
+Southpay is a crypto payment gateway. You charge in fiat; your customer pays in crypto; Southpay allocates the deposit address, locks the exchange rate, watches the chain for confirmations, credits your balance and pays you out.
 
-Southpay is a crypto payment processing API for merchants. Your customers pay in cryptocurrency; Southpay handles address allocation, on-chain confirmation, ledger accounting, and disbursement to your configured payout destination.
+There is one object you need to understand: the **payment intent**. You create it with an amount and a currency, and it carries everything else — the deposit addresses, the crypto amounts, the checkout URL, the status.
 
-You interact with one resource: a **Payment Intent**. Everything else - crypto address generation, exchange rate locking, blockchain confirmation, balance crediting - happens automatically.
+## The shortest working path
 
----
+```bash
+curl -X POST https://api.southpay.io/api/v2/payments \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_intent": {"amount": "49.99", "currency": "USD"}}'
+```
 
-## Core flow
+The response has a `hosted_url`. Redirect your customer there. When the payment confirms, a signed `payment_intent.completed` webhook arrives at your endpoint and you fulfil the order.
 
-<Steps>
-  <Step title="Create a Payment Intent">
-    POST a fiat amount and currency. Get back a hosted checkout URL and one deposit address per supported asset.
-  </Step>
-  <Step title="Redirect your customer">
-    Send the customer to the checkout URL. Southpay handles the UI, QR code, and countdown timer.
-  </Step>
-  <Step title="Receive a webhook">
-    When the on-chain transaction confirms, Southpay sends a signed `payment_intent.completed` event to your endpoint.
-  </Step>
-  <Step title="Fulfill the order">
-    Verify the webhook signature, check the status, and fulfill. Done.
-  </Step>
-</Steps>
+That is the whole integration. The [quickstart](/quickstart) walks the four steps with the real response bodies and a verified webhook handler.
 
----
+<Card title="Quickstart" icon="rocket" href="/quickstart" horizontal>
+  Payment intent, checkout redirect, webhook verification. Copy-pasteable, in test mode.
+</Card>
 
-## Payment lifecycle
+## Three things to know before you build
 
-Every Payment Intent moves through a well-defined set of states:
+**The base URL is `https://api.southpay.io` and every path sits under `/api/v2`.** There is no `/v1` and no other version.
 
-| Status | Description |
-| --- | --- |
-| `pending` | Created and waiting for the customer to send funds |
-| `processing` | Payment detected on-chain, awaiting required confirmations |
-| `completed` | Confirmed and credited to your balance |
-| `expired` | No payment received within 60 minutes |
-| `failed` | Payment received but could not complete (e.g. underpayment) |
-| `refunded` | Funds returned to the sender |
+**Test and live mode are chosen by the credential, not by the host.** An `sp_sk_test_` key reads and writes test data on the same URL. Test mode has exactly one usable asset, Ethereum Sepolia.
 
----
+**Errors come back in three different JSON shapes.** `error` is sometimes a string and sometimes an object. Write the parser first — [Errors](/errors) has one you can copy.
 
 ## Core concepts
 
 <Columns cols={2}>
-  <Card title="Authentication" icon="key" href="/authentication">
-    Use API keys for server-side integrations and OAuth 2.0 for third-party applications.
+  <Card title="Payment intents" icon="bolt" href="/payment-intents">
+    The one object. Creating it, reading it, and every field it carries.
   </Card>
-  <Card title="Payment Intents" icon="bolt" href="/payment-intents">
-    The primary resource. One call to create, one webhook to confirm.
+  <Card title="Payment lifecycle" icon="diagram-project" href="/payment-lifecycle">
+    Six statuses, ten state reasons, a 60-minute expiry. Stated once, here.
   </Card>
   <Card title="Webhooks" icon="webhook" href="/webhooks">
-    Signed, retried, and logged. Get real-time payment events without polling.
+    Signing, retries, the event catalogue, and the five events that never fire.
   </Card>
-  <Card title="Idempotency" icon="shield" href="/idempotency">
-    Pass an `Idempotency-Key` header to safely retry any request.
-  </Card>
-  <Card title="Environments" icon="flask" href="/environments">
-    Test with synthetic transactions before going live.
+  <Card title="Authentication" icon="key" href="/authentication">
+    API keys, OAuth with PKCE, agent credentials, and what each scope grants.
   </Card>
   <Card title="Errors" icon="triangle-exclamation" href="/errors">
-    Structured error responses with machine-readable codes.
+    Three response shapes, real status codes, and every error code that exists.
+  </Card>
+  <Card title="Idempotency" icon="shield" href="/idempotency">
+    What `Idempotency-Key` protects, and the three places it does not.
+  </Card>
+  <Card title="Currencies and assets" icon="coins" href="/currencies">
+    Ten fiat currencies to price in, and the chains customers can pay on.
+  </Card>
+  <Card title="Payout destinations" icon="building-columns" href="/payout-destinations">
+    Where your balance goes. A prerequisite for every payout.
   </Card>
 </Columns>
 
----
+## Beyond one-off payments
 
-## Start building
-
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  Create your first payment and handle a webhook in under 5 minutes.
-</Card>
+<Columns cols={2}>
+  <Card title="Subscriptions" icon="repeat" href="/subscriptions">
+    Products, prices and recurring invoices collected through the same checkout.
+  </Card>
+  <Card title="Platform accounts" icon="sitemap" href="/platform-accounts">
+    Onboard your own merchants and take a fee. Admin-gated; read before you build.
+  </Card>
+  <Card title="Agentic commerce" icon="robot" href="/agentic/index">
+    Scoped credentials, mandates and spend limits for autonomous agents.
+  </Card>
+  <Card title="API reference" icon="book" href="/api-reference/payments">
+    Every endpoint, parameter and response field.
+  </Card>
+</Columns>

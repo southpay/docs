@@ -1,75 +1,142 @@
 ---
-title: "Payment Intents"
-description: "Create and manage crypto payment intents. Each payment intent generates a hosted checkout URL and on-chain payment addresses."
-sidebarTitle: "Payment Intents"
+title: "Payment intents"
+description: "Create, retrieve, list and summarize crypto payment intents, read their event log, and download the invoice PDF."
+sidebarTitle: "Payment intents"
 ---
 
-<Warning>
-  All endpoints require authentication. With an API key the store is implicit; dashboard sessions must add `X-Store-Id`. See [Authentication](/authentication).
-</Warning>
+A payment intent is how you charge a customer. You post a fiat amount, Southpay locks an exchange rate and allocates one on-chain deposit address per asset your store accepts, and you send the customer to the hosted checkout page. Which assets appear is decided by your store settings, not by anything in the request.
 
-Base URL: `https://api.southpay.io/api/v2`
+For the walkthrough, see the [payment intents guide](/payment-intents). This page is the field-level reference.
 
-A Payment Intent is the single resource you need to accept a crypto payment. You submit a fiat amount; Southpay locks an exchange rate, allocates a deposit address for each crypto asset your store has enabled, and returns a hosted checkout URL. The set of `payment_addresses` reflects the store's enabled assets, not anything in the request. See the [Payment Intents guide](/payment-intents) for the walkthrough and [Supported currencies and assets](/currencies) for the catalog.
+Every path below is relative to `https://api.southpay.io/api/v2`. All amounts you send are fiat major units; all crypto amounts you read back are atomic-unit strings.
 
----
+## Authentication and scope
+
+Reads require `payments:read`, writes require `payments:write`. A secret API key (`sp_sk_…`), an OAuth token, or a dashboard session all work. A publishable key (`sp_pk_…`) can call `POST /payments` and nothing else — any other path returns `403` `publishable_key_forbidden`.
 
 ## Create a payment intent
 
+**`POST /payments`** — scope `payments:write`. Publishable keys allowed. `Idempotency-Key` optional.
+
+All fields go inside a required `payment_intent` object.
+
+<ParamField body="payment_intent.amount" type="string" required>
+  Fiat amount in major units, as a decimal string (`"49.99"`). Must be greater than zero. Multiplied by 100 and stored as `settlement_amount_cents`.
+</ParamField>
+
+<ParamField body="payment_intent.currency" type="string" required>
+  Uppercase ISO 4217 code. One of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK`, `NOK`. This prices the payment; it does not restrict which crypto assets the customer may pay with.
+</ParamField>
+
+<ParamField body="payment_intent.success_url" type="string">
+  Where checkout sends the customer after a successful payment.
+</ParamField>
+
+<ParamField body="payment_intent.failed_url" type="string">
+  Where checkout sends the customer after a failure or expiry.
+</ParamField>
+
+<ParamField body="payment_intent.order_id" type="string">
+  Your own order reference. Maximum 255 characters. Filterable on the list endpoint.
+</ParamField>
+
+<ParamField body="payment_intent.title" type="string">
+  Short label shown on the checkout page. Maximum 150 characters.
+</ParamField>
+
+<ParamField body="payment_intent.description" type="string">
+  Longer description shown on the checkout page. Maximum 500 characters.
+</ParamField>
+
+<ParamField body="payment_intent.image_url" type="string">
+  Product or order image shown on checkout. Must be `https` and at most 2048 characters. Surfaces as `display_image_url` on the detail view.
+</ParamField>
+
+<ParamField body="payment_intent.metadata" type="object">
+  Key-value pairs echoed back on the intent and in every payment webhook. At most 50 keys, and **every value must be a string** — numbers and booleans are rejected.
+</ParamField>
+
+<ParamField body="payment_intent.line_items" type="object[]">
+  Order breakdown shown on checkout. At most 50 items.
+
+  <Expandable title="line item properties">
+    <ParamField body="description" type="string" required>
+      Maximum 255 characters.
+    </ParamField>
+    <ParamField body="quantity" type="integer" required>
+      Must be a positive integer.
+    </ParamField>
+    <ParamField body="unit_amount_cents" type="integer" required>
+      Minor units of `currency`. Must be a non-negative integer.
+    </ParamField>
+    <ParamField body="image_url" type="string">
+      Must be `https`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
 <CodeGroup>
 ```bash Request
-POST /payments
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-Idempotency-Key: order_123
-
-{
-  "payment_intent": {
-    "amount": "49.99",
-    "currency": "USD",
-    "success_url": "https://yourapp.com/orders/123/success",
-    "failed_url":  "https://yourapp.com/orders/123/failed",
-    "order_id": "order_123",
-    "title": "Order #123",
-    "description": "2x Widget, 1x Gadget",
-    "metadata": {
-      "cart_id": "cart_abc"
+curl -X POST https://api.southpay.io/api/v2/payments \
+  -H "Authorization: Bearer sp_sk_test_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order_1043" \
+  -d '{
+    "payment_intent": {
+      "amount": "49.99",
+      "currency": "USD",
+      "order_id": "order_1043",
+      "title": "Order #1043",
+      "success_url": "https://example.com/orders/1043/thanks",
+      "failed_url": "https://example.com/orders/1043/retry",
+      "line_items": [
+        { "description": "Widget", "quantity": 2, "unit_amount_cents": 1999 },
+        { "description": "Gadget", "quantity": 1, "unit_amount_cents": 1001 }
+      ],
+      "metadata": { "cart_id": "cart_abc" }
     }
-  }
-}
+  }'
 ```
 
 ```json Response 201
 {
-  "id": "01HX...",
+  "id": "7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f",
   "reference": "A1B2C3D4E5F6G7H8",
+  "hosted_url": "https://pay.southpay.io/A1B2C3D4E5F6G7H8",
   "status": "pending",
   "state_reason": null,
   "settlement_currency": "USD",
   "settlement_amount": "49.99",
-  "terminal": false,
+  "settlement_status": null,
+  "auto_swap_status": null,
   "reconciliation_status": null,
+  "terminal": false,
   "expires_at": "2026-04-10T13:00:00.000Z",
   "created_at": "2026-04-10T12:00:00.000Z",
-  "success_url": "https://yourapp.com/orders/123/success",
-  "failed_url":  "https://yourapp.com/orders/123/failed",
-  "order_id": "order_123",
-  "title": "Order #123",
-  "description": "2x Widget, 1x Gadget",
+  "success_url": "https://example.com/orders/1043/thanks",
+  "failed_url": "https://example.com/orders/1043/retry",
+  "order_id": "order_1043",
+  "title": "Order #1043",
+  "description": null,
   "payment_addresses": [
     {
-      "id": "01HX...",
-      "address": "0xabc...",
+      "id": "2f9d8c7b-6a5e-4d3c-2b1a-0f9e8d7c6b5a",
+      "address": "0x9a3f…c2d1",
       "status": "pending",
       "crypto_amount_atomic": "49990000",
-      "exchange_rate_snapshot": "1.0000",
+      "exchange_rate_snapshot": "1.000000000000000000",
       "created_at": "2026-04-10T12:00:00.000Z",
       "supported_asset": {
         "asset_id": "ETH_USDC",
         "coin_symbol": "USDC",
         "chain_symbol": "ETH",
         "token_standard": "ERC20",
-        "atomic_decimals": 6
+        "settlement_currency": "USD",
+        "atomic_decimals": 6,
+        "min_withdrawal_atomic": "1000000",
+        "chain_name": "Ethereum",
+        "network": "ethereum",
+        "fiat_eligible": true
       }
     }
   ]
@@ -77,68 +144,137 @@ Idempotency-Key: order_123
 ```
 </CodeGroup>
 
-**Request fields**
+Send the customer to `hosted_url`. It is `https://pay.southpay.io/{reference}` unless your store has a verified custom domain.
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `payment_intent[amount]` | string | Yes | Decimal fiat amount (e.g. `"49.99"`). |
-| `payment_intent[currency]` | string | Yes | ISO 4217 fiat code, uppercase (e.g. `"USD"`). One of the [supported currencies](/currencies). Determines pricing only - not which assets the customer can pay with. |
-| `payment_intent[success_url]` | string | No | Redirect after successful payment. |
-| `payment_intent[failed_url]` | string | No | Redirect after failure/expiration. |
-| `payment_intent[order_id]` | string | No | Your own order reference. Max 255 characters. Filterable on the list endpoint. |
-| `payment_intent[title]` | string | No | Short label shown on the checkout page. Max 150 characters. |
-| `payment_intent[description]` | string | No | Longer description shown on the checkout page. Max 500 characters. |
-| `payment_intent[metadata]` | object | No | Arbitrary key-value pairs returned in every payment-intent webhook. |
-| `Idempotency-Key` | header | No, but **strongly recommended** | Re-sending the same value returns the existing intent instead of creating a duplicate. See [Idempotency](/idempotency). |
+<Warning>
+An intent expires 60 minutes after creation. That window is fixed and cannot be configured. Do not create the intent until the customer is ready to pay.
+</Warning>
+
+### Response fields
+
+<ResponseField name="id" type="string" required>
+  Bare UUID. There is no prefixed-id scheme anywhere in this API.
+</ResponseField>
+
+<ResponseField name="reference" type="string" required>
+  16 uppercase alphanumeric characters. This is the checkout token and the value that appears as `data.object.id` in webhooks.
+</ResponseField>
+
+<ResponseField name="hosted_url" type="string">
+  The customer-facing checkout page.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  One of `pending`, `processing`, `completed`, `expired`, `failed`, `refunded`. See [lifecycle](#lifecycle).
+</ResponseField>
+
+<ResponseField name="state_reason" type="string | null">
+  Why the intent reached its current status. See [payment lifecycle](/payment-lifecycle#state-reasons).
+</ResponseField>
+
+<ResponseField name="settlement_amount" type="string" required>
+  Fiat amount as a string with exactly two decimals, for example `"49.99"`. Note that the webhook envelope carries `settlement_amount_cents` as an integer instead.
+</ResponseField>
+
+<ResponseField name="settlement_currency" type="string" required>
+  The fiat currency the intent is priced in.
+</ResponseField>
+
+<ResponseField name="terminal" type="boolean" required>
+  True when `status` is `completed`, `expired`, `refunded` or `failed` — the intent will not change again.
+</ResponseField>
+
+<ResponseField name="expires_at" type="string" required>
+  ISO 8601. Always 60 minutes after `created_at`.
+</ResponseField>
+
+<ResponseField name="settlement_status" type="string | null">
+  The underlying settlement record: `pending`, `processing`, `completed`, `failed`, or `null`. It is never `"settled"`.
+</ResponseField>
+
+<ResponseField name="auto_swap_status" type="string | null">
+  `completed`, `pending`, `failed`, `skipped`, or `null` when no auto-swap applies.
+</ResponseField>
+
+<ResponseField name="reconciliation_status" type="string | null">
+  Status of the most recent reconciliation snapshot. See [Reconciliation](/api-reference/reconciliation).
+</ResponseField>
+
+<ResponseField name="payment_addresses" type="object[]">
+  One deposit address per asset your store accepts. Returned by create and retrieve.
+
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">Address record UUID.</ResponseField>
+    <ResponseField name="address" type="string">The on-chain deposit address. Send funds here.</ResponseField>
+    <ResponseField name="status" type="string">`pending` or `confirmed`.</ResponseField>
+    <ResponseField name="crypto_amount_atomic" type="string">Exact amount to send, in atomic units of the asset.</ResponseField>
+    <ResponseField name="exchange_rate_snapshot" type="string">
+      The locked rate as a plain decimal string, for example `"2217.000000000000000000"`. It is a number, not an object.
+    </ResponseField>
+    <ResponseField name="supported_asset" type="object">
+      `asset_id`, `coin_symbol`, `chain_symbol`, `token_standard`, `settlement_currency`, `atomic_decimals`, `min_withdrawal_atomic`, `chain_name`, `network`, `fiat_eligible`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Create errors
+
+Validation failures on this endpoint return `422` with the flat envelope `{"error": "<message>"}`.
+
+| Message | Cause |
+| --- | --- |
+| `amount is required and must be positive` | `amount` missing or blank. |
+| `amount must be positive` | `amount` rounds to zero or below. |
+| `title must be at most 150 characters` | Over the limit. |
+| `description must be at most 500 characters` | Over the limit. |
+| `order_id must be at most 255 characters` | Over the limit. |
+| `image_url must be a valid https URL` | Not `https`, no host, or over 2048 characters. |
+| `line_items must be an array` | Sent as an object or scalar. |
+| `line_items must have at most 50 items` | Over the limit. |
+| `each line item requires a description` | Blank `description`. |
+| `line item quantity must be a positive integer` | Zero, negative or non-integer. |
+| `line item unit_amount_cents must be a non-negative integer` | Negative or non-integer. |
+| `metadata must have at most 50 keys` | Over the limit. |
+| `metadata values must be strings` | A value was a number, boolean or nested object. |
+
+An unsupported `currency` also returns `422`, but through the global handler, so it uses the *structured* envelope: `{"error": {"message": "Unsupported settlement currency: XYZ", "code": null}}`. Write your client to handle both shapes.
 
 <Note>
-  `amount` must be a positive decimal. Sending a missing or non-positive amount returns `422`. `title`, `description`, and `order_id` over their length limits also return `422`.
+Omitting `currency` entirely, or omitting the `payment_intent` wrapper, currently returns `500` rather than a validation error. Always send both.
 </Note>
 
-**Building the checkout URL.** The `reference` field is the checkout token. The customer URL is:
+`POST /payments` is rate limited to 120 requests per minute, keyed on your credential. Over the limit you get `429` with `{"error": "Too many requests. Please try again later."}` and no `Retry-After` header.
 
-```
-https://api.southpay.io/api/v2/checkout/{reference}
-```
+## Retrieve a payment intent
 
-If your store has a verified custom domain (configured in the dashboard), substitute that hostname.
+**`GET /payments/{id}`** — scope `payments:read`.
 
-<Tip>
-  Redirect your customer to the checkout URL - no frontend integration required. Southpay handles QR codes, asset selection, and the countdown timer.
-</Tip>
-
----
-
-## Get a payment intent
-
-Returns the intent with full lifecycle detail: ledger-derived financials, the auto-swap status if any, and the full event timeline.
+`{id}` is the intent UUID, not the reference. Returns the detail view: everything from create, plus ledger-derived financials, the on-chain transaction, and the full event history.
 
 <CodeGroup>
 ```bash Request
-GET /payments/:id
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f \
+  -H "Authorization: Bearer sp_sk_test_…"
 ```
 
-```json Response
+```json Response 200
 {
-  "id": "01HX...",
+  "id": "7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f",
   "reference": "A1B2C3D4E5F6G7H8",
   "status": "completed",
   "state_reason": "completed_exact",
-  "settlement_currency": "USD",
   "settlement_amount": "49.99",
+  "settlement_currency": "USD",
   "terminal": true,
-  "expires_at": "2026-04-10T13:00:00.000Z",
-  "reconciliation_status": "final",
-  "created_at": "2026-04-10T12:00:00.000Z",
-  "success_url": "https://yourapp.com/orders/123/success",
-  "failed_url":  "https://yourapp.com/orders/123/failed",
-  "order_id": "order_123",
-  "title": "Order #123",
-  "description": "2x Widget, 1x Gadget",
-  "checkout_url": "https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8",
+  "paid_at": "2026-04-10T12:09:44.000Z",
   "amount_paid": "49.99",
+  "checkout_url": "https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8",
+  "display_image_url": "https://cdn.example.com/orders/1043.png",
   "customer_pays_fee": false,
+  "metadata": { "cart_id": "cart_abc" },
+  "line_items": [
+    { "description": "Widget", "quantity": 2, "unit_amount_cents": 1999 }
+  ],
   "fee": {
     "fee_atomic": "499900",
     "fee_percentage": "0.01",
@@ -146,46 +282,226 @@ Authorization: Bearer <API_KEY>
   },
   "financials": {
     "gross_amount": "49.99",
-    "fee_amount":   "0.50",
-    "net_amount":   "49.49",
+    "fee_amount": "0.50",
+    "net_amount": "49.49",
     "fee_percentage": "1.00",
     "currency": "USD",
-    "asset_id": "ETH_USDC"
+    "asset_id": "ETH_USDC",
+    "exchange_rate": "1.0"
+  },
+  "transaction": {
+    "tx_hash": "0x9f8e…",
+    "from_address": "0x1234…",
+    "deposit_address": "0x9a3f…c2d1",
+    "confirmations": 24,
+    "required_confirmations": 12,
+    "status": "confirmed",
+    "coin_symbol": "USDC",
+    "chain_symbol": "ETH",
+    "chain_name": "Ethereum",
+    "network": "ethereum",
+    "explorer_url": "https://etherscan.io/tx/0x9f8e…",
+    "confirmed_at": "2026-04-10T12:09:40.000Z"
+  },
+  "overpayment": null,
+  "onramp_session": null,
+  "onramp_unavailable": null,
+  "merchant": {
+    "name": "Example Store",
+    "legal_name": "Example Trading Ltd",
+    "country": "PT",
+    "registration_number": "512345678",
+    "tax_id": "PT512345678",
+    "website": "https://example.com",
+    "support_email": "support@example.com"
   },
   "auto_swap_status": "completed",
-  "auto_swap_detail": null,
-  "payment_addresses": [ { "...": "..." } ],
+  "auto_swap_detail": {
+    "status": "completed",
+    "sell_amount": "49.49",
+    "sell_coin_symbol": "USDC",
+    "sell_chain_symbol": "ETH",
+    "buy_amount": "49.41",
+    "buy_coin_symbol": "USDT",
+    "buy_chain_symbol": "ETH",
+    "estimated": false,
+    "expected_buy_amount": "49.45",
+    "actual_buy_amount": "49.41",
+    "slippage_bps": 8
+  },
+  "payment_addresses": [ { "…": "…" } ],
+  "payment_events": [ { "…": "…" } ],
   "timeline": [
-    { "type": "payment_intent.processing", "from": "pending",    "to": "processing", "at": "2026-04-10T12:01:00Z", "payload": {} },
-    { "type": "payment_intent.completed",  "from": "processing", "to": "completed",  "at": "2026-04-10T12:03:14Z", "payload": {} }
+    { "type": "payment_intent.processing", "from": "pending", "to": "processing", "at": "2026-04-10T12:04:11.000Z", "payload": {} },
+    { "type": "payment_intent.completed", "from": "processing", "to": "completed", "at": "2026-04-10T12:09:44.000Z", "payload": {} }
   ]
 }
 ```
 </CodeGroup>
 
----
+### Detail-only fields
+
+<ResponseField name="checkout_url" type="string">
+  The API-hosted checkout endpoint, `https://api.southpay.io/api/v2/checkout/{reference}`. Distinct from `hosted_url`, which is the customer-facing page.
+</ResponseField>
+
+<ResponseField name="display_image_url" type="string | null">
+  The `image_url` you supplied on create.
+</ResponseField>
+
+<ResponseField name="line_items" type="object[] | null">
+  The line items you supplied on create.
+</ResponseField>
+
+<ResponseField name="amount_paid" type="string">
+  Fiat value of confirmed funds, two decimals. `"0.00"` when nothing has confirmed.
+</ResponseField>
+
+<ResponseField name="paid_at" type="string | null">
+  Timestamp of the transition into `completed`, falling back to the last transition.
+</ResponseField>
+
+<ResponseField name="customer_pays_fee" type="boolean">
+  When true the customer was charged the Southpay fee on top of the order amount.
+</ResponseField>
+
+<ResponseField name="fee" type="object | null">
+  Null until fee revenue is booked.
+  <Expandable title="properties">
+    <ResponseField name="fee_atomic" type="string">Fee in atomic units of the paid asset.</ResponseField>
+    <ResponseField name="fee_percentage" type="string">Rate applied, as a fraction (`"0.01"` is 1%).</ResponseField>
+    <ResponseField name="asset_id" type="string">Asset the fee was taken in.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="financials" type="object | null">
+  Ledger-derived fiat view. Null until crypto is received.
+  <Expandable title="properties">
+    <ResponseField name="gross_amount" type="string">Two decimals.</ResponseField>
+    <ResponseField name="fee_amount" type="string">Two decimals, `"0.00"` when no fee is booked.</ResponseField>
+    <ResponseField name="net_amount" type="string">Gross minus fee.</ResponseField>
+    <ResponseField name="fee_percentage" type="string">Percentage points (`"1.00"` is 1%), unlike `fee.fee_percentage`.</ResponseField>
+    <ResponseField name="currency" type="string">Settlement currency.</ResponseField>
+    <ResponseField name="asset_id" type="string">Asset received.</ResponseField>
+    <ResponseField name="exchange_rate" type="string | null">Rate applied.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="transaction" type="object | null">
+  The confirmed deposit transaction, or the most recent one if none has confirmed. Null when nothing has arrived.
+  <Expandable title="properties">
+    <ResponseField name="tx_hash" type="string">On-chain hash.</ResponseField>
+    <ResponseField name="from_address" type="string | null">Sender, used as the default refund destination.</ResponseField>
+    <ResponseField name="deposit_address" type="string | null">The Southpay address that received the funds.</ResponseField>
+    <ResponseField name="confirmations" type="integer">Confirmations seen so far.</ResponseField>
+    <ResponseField name="required_confirmations" type="integer">Threshold for this chain.</ResponseField>
+    <ResponseField name="status" type="string">`pending`, `confirming`, `submitted`, `confirmed` or `failed`. These are transaction statuses, not intent statuses.</ResponseField>
+    <ResponseField name="coin_symbol" type="string | null">For example `USDC`.</ResponseField>
+    <ResponseField name="chain_symbol" type="string | null">For example `ETH`.</ResponseField>
+    <ResponseField name="chain_name" type="string | null">For example `Ethereum`.</ResponseField>
+    <ResponseField name="network" type="string | null">For example `ethereum`.</ResponseField>
+    <ResponseField name="explorer_url" type="string | null">Block explorer link for `tx_hash`.</ResponseField>
+    <ResponseField name="confirmed_at" type="string">Derived from the transaction record's last update, not a separate confirmation timestamp.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="overpayment" type="object | null">
+  Present once an address is confirmed. `excess_atomic` is clamped to `"0"` for exact and under payments, so a non-zero value here is the only reliable signal of a genuine overpayment.
+  <Expandable title="properties">
+    <ResponseField name="required_atomic" type="string">Amount the intent asked for.</ResponseField>
+    <ResponseField name="received_atomic" type="string">Amount confirmed.</ResponseField>
+    <ResponseField name="excess_atomic" type="string">Received minus required, floored at `"0"`.</ResponseField>
+    <ResponseField name="asset_id" type="string" />
+    <ResponseField name="coin_symbol" type="string" />
+    <ResponseField name="atomic_decimals" type="integer" />
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="merchant" type="object">
+  Your own store details, for rendering receipts. `legal_name`, `country`, `registration_number`, `tax_id` and `website` are null until a verification is approved.
+</ResponseField>
+
+<ResponseField name="onramp_session" type="object | null">
+  The most recent card-to-crypto session, when the `onramp` feature is enabled for your store. Keys: `provider`, `provider_name`, `status`, `amount_cents`, `currency`, `provider_txid`, `destination_address`, `paid_at`, `expires_at`, `created_at`.
+</ResponseField>
+
+<ResponseField name="onramp_unavailable" type="object | null">
+  Why an onramp session could not be offered. Always null once a session exists.
+</ResponseField>
+
+<ResponseField name="auto_swap_detail" type="object | null">
+  Populated only when an auto-swap has moved past `pending` and has not failed. Keys: `status`, `sell_amount`, `sell_coin_symbol`, `sell_chain_symbol`, `buy_amount`, `buy_coin_symbol`, `buy_chain_symbol`, `estimated`, `expected_buy_amount`, `actual_buy_amount`, `slippage_bps`.
+</ResponseField>
+
+<ResponseField name="payment_events" type="object[]">
+  Same rows as the [events endpoint](#list-payment-events): `id`, `event_type`, `from_status`, `to_status`, `payload`, `created_at`.
+</ResponseField>
+
+<ResponseField name="timeline" type="object[]">
+  The same events under different key names: `type`, `from`, `to`, `at`, `payload`. No `id`.
+</ResponseField>
+
+An unknown or out-of-mode id returns `404` with `{"error": {"message": "…", "code": null}}`.
 
 ## List payment intents
 
+**`GET /payments`** — scope `payments:read`.
+
+Returns the list view — the create fields plus `settlement_status` and `auto_swap_status`, without `payment_addresses`. Ordered newest first.
+
+<ParamField query="status" type="string">
+  Filter by status. Unrecognized values are ignored rather than rejected.
+</ParamField>
+
+<ParamField query="q" type="string">
+  Case-insensitive substring match on `reference`.
+</ParamField>
+
+<ParamField query="order_id" type="string">
+  Exact match on the `order_id` you set at create time.
+</ParamField>
+
+<ParamField query="from" type="string">
+  ISO date. Includes intents created on or after this day.
+</ParamField>
+
+<ParamField query="to" type="string">
+  ISO date. Includes intents created up to and including this day.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="10">
+  Between 1 and 100.
+</ParamField>
+
 <CodeGroup>
 ```bash Request
-GET /payments?status=completed&order_id=order_123&page=1&per_page=25
-Authorization: Bearer <API_KEY>
+curl "https://api.southpay.io/api/v2/payments?status=completed&per_page=25" \
+  -H "Authorization: Bearer sp_sk_test_…"
 ```
 
-```json Response
+```json Response 200
 {
   "data": [
     {
-      "id": "01HX...",
+      "id": "7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f",
       "reference": "A1B2C3D4E5F6G7H8",
+      "hosted_url": "https://pay.southpay.io/A1B2C3D4E5F6G7H8",
       "status": "completed",
       "state_reason": "completed_exact",
       "settlement_currency": "USD",
       "settlement_amount": "49.99",
-      "terminal": true,
-      "settlement_status": "settled",
+      "settlement_status": "completed",
       "auto_swap_status": null,
+      "reconciliation_status": "final",
+      "terminal": true,
+      "order_id": "order_1043",
+      "title": "Order #1043",
+      "description": null,
+      "success_url": "https://example.com/orders/1043/thanks",
+      "failed_url": "https://example.com/orders/1043/retry",
+      "expires_at": "2026-04-10T13:00:00.000Z",
       "created_at": "2026-04-10T12:00:00.000Z"
     }
   ],
@@ -199,74 +515,92 @@ Authorization: Bearer <API_KEY>
 ```
 </CodeGroup>
 
-**Query parameters**
+<Warning>
+`status=confirming` is accepted by the filter but `confirming` is not a payment intent status. It always matches zero rows. `confirming` exists only as a *transaction* status inside the `transaction` object. Do not use it as a filter.
+</Warning>
 
-| Parameter | Description |
-| --- | --- |
-| `status` | One of `pending`, `processing`, `completed`, `failed`, `expired`, `refunded`, `confirming`. Unknown values are ignored. |
-| `q` | Substring match against `reference`. |
-| `order_id` | Exact match against the `order_id` you set on create. |
-| `page`, `per_page` | Pagination. `per_page` defaults to 10, capped at 100. |
+<Note>
+Pagination is not uniform across this API. Payments, billing, agentic payments and platform endpoints wrap the page in `meta`. Payouts, agentic payouts, balance swaps and x402 settlements use `pagination` instead. Balances, payout schedules, webhook endpoints, billing products, prices and subscriptions return **bare arrays with no pagination at all**.
+</Note>
 
----
+## Summarize payments
 
-## Lifecycle
+**`GET /payments/summary`** — scope `payments:read`.
 
-The `status` field is the single source of truth for what happened. `state_reason` further explains why a state was reached. The `terminal` flag is a convenience - once `true`, the intent will not change again.
+Aggregates order counts, volume and success rate over a date range, bucketed by day. Useful for dashboards; it is not a substitute for [reports](/api-reference/reports), which are ledger-accurate PDFs.
 
-| Status | Terminal | Description |
-| --- | --- | --- |
-| `pending` | No | Created, awaiting customer payment. |
-| `processing` | No | Crypto received, blockchain confirmations in progress. |
-| `completed` | Yes | Required funds received and confirmed. |
-| `expired` | Yes | Payment window elapsed before funds were received. |
-| `failed` | Yes | Payment could not be completed (under/overpaid). |
-| `refunded` | Yes | Funds were returned to the customer. |
+<ParamField query="from" type="string">
+  ISO date. Defaults to 29 days before `to`.
+</ParamField>
 
-### `state_reason`
+<ParamField query="to" type="string">
+  ISO date. Defaults to today.
+</ParamField>
 
-| Reason | Status | Description |
-| --- | --- | --- |
-| `pending_confirmations` | processing | Crypto received, confirmations pending. |
-| `processing_underpaid` | processing | Confirmed funds received but still below the required amount. |
-| `completed_exact` | completed | Exact required amount received. |
-| `completed_overpaid` | completed | More than required amount received. |
-| `completed_underpaid` | completed | Less than required amount accepted (store accepts underpayments). |
-| `failed_underpaid` | failed | Insufficient funds before expiration. |
-| `failed_overpaid` | failed | Excess funds rejected. |
-| `expired_timeout` | expired | No funds received before timeout. |
-| `refund_completed` | refunded | A refund was confirmed on-chain. |
-
----
-
-## Sub-resources
-
-### Events
-
-Returns the immutable event log for an intent in chronological order. Each event records a state transition with the payload that triggered it. This is the underlying log behind your [webhook deliveries](/webhooks); use this endpoint to backfill or reconcile event history on demand. Event names match the [webhook event types](/webhooks) exactly.
+A range longer than 366 days is silently clamped to 366, and `from` later than `to` is clamped to `to`. Unparseable dates fall back to the defaults instead of erroring.
 
 <CodeGroup>
 ```bash Request
-GET /payments/:id/events
-Authorization: Bearer <API_KEY>
+curl "https://api.southpay.io/api/v2/payments/summary?from=2026-04-01&to=2026-04-07" \
+  -H "Authorization: Bearer sp_sk_test_…"
+```
+
+```json Response 200
+{
+  "range": { "from": "2026-04-01", "to": "2026-04-07", "granularity": "day" },
+  "livemode": false,
+  "currencies": ["USD", "EUR"],
+  "totals": {
+    "order_count": 412,
+    "order_count_by_currency": { "USD": 380, "EUR": 32 },
+    "volume_cents": { "USD": 1904500, "EUR": 158000 },
+    "avg_order_value_cents": { "USD": 5012, "EUR": 4938 },
+    "status_counts": { "completed": 361, "expired": 44, "pending": 7 },
+    "success_rate": 0.8762,
+    "success_rate_by_currency": { "USD": 0.8789, "EUR": 0.8438 }
+  },
+  "timeseries": [
+    {
+      "date": "2026-04-01",
+      "order_count": 58,
+      "order_count_by_currency": { "USD": 54, "EUR": 4 },
+      "volume_cents": { "USD": 271200, "EUR": 19800 }
+    }
+  ]
+}
+```
+</CodeGroup>
+
+`currencies` is sorted by descending volume. `timeseries` has one zero-filled entry per day in the range. `success_rate` is a fraction rounded to four places, not a percentage.
+
+## List payment events
+
+**`GET /payments/{payment_intent_id}/events`** — scope `payments:read`.
+
+The immutable transition log behind your webhook deliveries. Use it to backfill history or to reconcile after a webhook outage. Returns a **bare array**, oldest first, with no pagination.
+
+<CodeGroup>
+```bash Request
+curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f/events \
+  -H "Authorization: Bearer sp_sk_test_…"
 ```
 
 ```json Response 200
 [
   {
-    "id": "01HX...",
+    "id": "c3a1b2d4-5e6f-4708-9a1b-2c3d4e5f6071",
     "event_type": "payment_intent.processing",
     "from_status": "pending",
     "to_status": "processing",
     "payload": {
-      "address": "0xabc...",
-      "tx_hash": "0x9f8e...",
+      "address": "0x9a3f…c2d1",
+      "tx_hash": "0x9f8e…",
       "amount_atomic": "49990000"
     },
     "created_at": "2026-04-10T12:04:11.000Z"
   },
   {
-    "id": "01HX...",
+    "id": "d4b2c3e5-6f70-4819-ab2c-3d4e5f607182",
     "event_type": "payment_intent.completed",
     "from_status": "processing",
     "to_status": "completed",
@@ -277,38 +611,38 @@ Authorization: Bearer <API_KEY>
 ```
 </CodeGroup>
 
-| Field | Type | Description |
+`event_type` is the public event name, matching the [webhook event catalogue](/webhooks). Some events appear here that no webhook endpoint can subscribe to, notably `payment_intent.canceled` from the agentic cancel endpoint.
+
+## Download the invoice PDF
+
+**`GET /payments/{id}/invoice`** — scope `payments:read`.
+
+Returns `application/pdf` as an attachment named `invoice-{reference}.pdf`. There is no JSON variant, and no status check — an unpaid intent still renders. The only failure is `404` for an unknown id.
+
+```bash Request
+curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f/invoice \
+  -H "Authorization: Bearer sp_sk_test_…" \
+  -o invoice.pdf
+```
+
+## Lifecycle
+
+The `status` field has exactly six values. There is no `created`, no `confirming` and no `overpaid`.
+
+| Status | Terminal | Meaning |
 | --- | --- | --- |
-| `id` | string | Event identifier |
-| `event_type` | string | Event name, matching the [webhook event types](/webhooks) (e.g. `payment_intent.completed`). |
-| `from_status` | string \| null | Intent status before the transition |
-| `to_status` | string | Intent status after the transition |
-| `payload` | object | Event-specific data (transaction hash, amounts, and so on) |
-| `created_at` | string | ISO 8601 timestamp |
+| `pending` | No | Created, waiting for the customer to send funds. |
+| `processing` | No | Funds detected on-chain, confirmations in progress. |
+| `completed` | Yes | Required funds received and confirmed. |
+| `expired` | Yes | The 60-minute window elapsed, or an agent canceled the intent. |
+| `failed` | Yes | The payment could not be accepted. |
+| `refunded` | Yes | Funds were returned to the customer. |
 
-### Refunds
+An overpayment is not a separate status: it is `status: "completed"` with `state_reason: "completed_overpaid"`, and the excess is in the `overpayment` object.
 
-List refunds for an intent, or request a new one. See the [Refunds reference](/api-reference/refunds) for full detail.
+For the allowed transitions, all ten `state_reason` values and how statuses map to webhook events, see [payment lifecycle](/payment-lifecycle).
 
-```bash
-GET  /payments/:id/refunds
-POST /payments/:id/refunds
-```
+## Sub-resources
 
-### Reconciliation
-
-Returns the latest reconciliation snapshot for an intent: the expected vs received on-chain amount and any auto-swap delta. See the [Reconciliation reference](/api-reference/reconciliation).
-
-```bash
-GET /payments/:id/reconciliation
-```
-
-### Invoice (PDF)
-
-Downloads a PDF invoice for the intent. Useful for accounting export.
-
-```bash
-GET /payments/:id/invoice
-```
-
-Returns `application/pdf` as an attachment.
+- [Refunds](/api-reference/refunds) — `GET` and `POST /payments/{id}/refunds`.
+- [Reconciliation](/api-reference/reconciliation) — `GET /payment_intents/{id}/reconciliation`. Note the path segment is `payment_intents`, not `payments`, for that route only.

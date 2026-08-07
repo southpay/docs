@@ -1,34 +1,30 @@
 ---
 title: "Balances"
-description: "Read your store's accumulated crypto balances per asset, plus a stablecoin rollup."
+description: "Read your store's per-asset crypto balances, the USDC and USDT rollup, and the settlement-currency total."
 sidebarTitle: "Balances"
 ---
 
-<Warning>
-  Requires authentication. Callable with an API key - the store is implicit. See [Authentication](/authentication).
-</Warning>
+Balances are derived from the ledger at read time, not stored on a row. Every confirmed receipt, fee, refund, swap and payout is already reflected in what you read back.
 
-Base URL: `https://api.southpay.io/api/v2`
-
-Balances are **derived from the ledger**, not stored. Every confirmed receipt and disbursement is reflected at read time.
-
-Amounts are returned in **atomic units** (the smallest indivisible unit of the asset). Use `atomic_decimals` to convert to a decimal value:
+Amounts are atomic-unit strings. Convert with the asset's own `atomic_decimals`:
 
 ```text
 decimal_amount = atomic_amount / 10^atomic_decimals
 ```
 
----
+Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## List balances
 
+**`GET /balances`** — scope `balances:read`. No parameters.
+
 <CodeGroup>
 ```bash Request
-GET /balances
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/balances \
+  -H "Authorization: Bearer sp_sk_live_…"
 ```
 
-```json Response
+```json Response 200
 {
   "balances": [
     {
@@ -48,7 +44,7 @@ Authorization: Bearer <API_KEY>
   ],
   "stablecoin_summary": [
     { "coin_symbol": "USDC", "total_atomic": "1499870000", "atomic_decimals": 6 },
-    { "coin_symbol": "USDT", "total_atomic": "892410000",  "atomic_decimals": 6 }
+    { "coin_symbol": "USDT", "total_atomic": "892410000", "atomic_decimals": 6 }
   ],
   "settlement_balance": {
     "currency": "USD",
@@ -58,12 +54,81 @@ Authorization: Bearer <API_KEY>
 ```
 </CodeGroup>
 
-**Response fields**
+### Response fields
 
-| Field | Description |
-| --- | --- |
-| `balances[]` | One entry per asset with a non-zero or tracked balance, with `asset_id`, `coin_symbol`, `chain_symbol`, `atomic_decimals`, and `balance_atomic`. |
-| `stablecoin_summary[]` | Rollup of USDC and USDT totals across chains, in atomic units. |
-| `settlement_balance` | Your stablecoin balance converted to the store's settlement currency, in cents. `amount_cents` is `null` if a conversion rate could not be resolved. |
+<ResponseField name="balances" type="object[]" required>
+  One entry per asset your store holds, sorted by coin symbol.
 
-The `asset_id` is the canonical reference for any asset across the API (e.g. when filtering payouts by asset). It uses the `CHAIN_COIN` form: `ETH_USDC`, `TRON_USDT`, `BSC_USDT`.
+  <Expandable title="properties">
+    <ResponseField name="asset_id" type="string">
+      The canonical asset identifier used everywhere else in the API — payouts, refunds, swaps, schedules.
+    </ResponseField>
+    <ResponseField name="coin_symbol" type="string">For example `USDC`.</ResponseField>
+    <ResponseField name="chain_symbol" type="string">For example `ETH`.</ResponseField>
+    <ResponseField name="atomic_decimals" type="integer">Divisor exponent for `balance_atomic`.</ResponseField>
+    <ResponseField name="balance_atomic" type="string">
+      Available balance in atomic units, as a string. Large values exceed the precision of a JavaScript number — parse it as a BigInt or decimal, not with `Number()`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="stablecoin_summary" type="object[]" required>
+  Cross-chain totals for USDC and USDT. **Always exactly two entries in that order**, even when you hold none — a zero balance shows as `total_atomic: "0"` with `atomic_decimals: 6`.
+
+  <Expandable title="properties">
+    <ResponseField name="coin_symbol" type="string">`USDC` or `USDT`.</ResponseField>
+    <ResponseField name="total_atomic" type="string">Sum across every chain, in atomic units.</ResponseField>
+    <ResponseField name="atomic_decimals" type="integer">Highest decimals among the contributing assets, defaulting to 6.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="settlement_balance" type="object" required>
+  Your stablecoin holdings converted to the store's settlement currency.
+
+  <Expandable title="properties">
+    <ResponseField name="currency" type="string">The store's settlement currency, for example `USD`.</ResponseField>
+    <ResponseField name="amount_cents" type="integer | null">
+      Minor units. **Null when a conversion rate could not be resolved** — treat null as "unknown", never as zero.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Note>
+`settlement_balance` counts USDC and USDT only. Non-stablecoin assets such as `BTC` or `ETH` appear in `balances` but contribute nothing to the fiat total.
+</Note>
+
+## No pagination
+
+This endpoint returns everything in one response. There is no `data` wrapper, no `meta`, no `pagination` and no page parameter. Balances, payout schedules, webhook endpoints, billing products, prices and subscriptions all behave this way, while payments use `meta` and payouts use `pagination`. Do not write a shared paging helper that assumes one shape.
+
+## Asset identifiers
+
+`asset_id` is the primary key for an asset across the whole API. It is not always `CHAIN_COIN` — native coins use a bare symbol.
+
+| asset_id | Coin | Chain |
+| --- | --- | --- |
+| `BTC` | BTC | Bitcoin |
+| `ETH` | ETH | Ethereum |
+| `SOL` | SOL | Solana |
+| `TRON` | TRX | Tron |
+| `ETH_USDC` | USDC | Ethereum |
+| `TRON_USDT` | USDT | Tron |
+| `SETH` | ETH | Ethereum Sepolia (test mode) |
+
+<Warning>
+`ETH_ETH` and `BSC_USDT` do not exist. Native Ethereum is `ETH`, and there is no BSC deposit asset at all — BSC appears only as a payout *destination* network. A request naming a non-existent `asset_id` returns `404` `Asset not found`.
+</Warning>
+
+Test mode has exactly one usable asset, `SETH` on Ethereum Sepolia. The seeded `USDT_SETH` and `USDC_SETH` assets are inactive, so a test-mode store's balances list is `SETH` or empty. See [supported currencies and assets](/currencies) for the full live catalogue.
+
+## Agentic balances
+
+Agent credentials read balances from `GET /api/v2/agentic/balances` instead, with scope `assets:read`. That response has no `stablecoin_summary`, but accepts an `asset_id` filter. See [Agentic API](/api-reference/agentic#read-balances).
+
+## Errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `401` | `{"error": {"message": "Invalid or revoked API key", "code": "invalid_api_key"}}` | Bad or revoked credential. |
+| `403` | `{"error": {"message": "Insufficient scope: balances:read required", "code": "insufficient_scope"}}` | Credential lacks `balances:read`. |
+| `403` | `{"error": {"message": "This endpoint is not available for publishable keys", "code": "publishable_key_forbidden"}}` | Called with an `sp_pk_` key. |

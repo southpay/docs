@@ -1,154 +1,180 @@
 ---
 title: "Reports"
-description: "Generate and download accounting transaction reports and merchant statements as PDFs over a date range."
+description: "Generate accounting transaction listings and merchant statements as PDFs over a date range, and download them from a presigned URL."
 sidebarTitle: "Reports"
 ---
 
-<Warning>
-  Requires authentication. Callable with an API key - the store is implicit. See [Authentication](/authentication).
-</Warning>
+Reports are PDFs covering a closed date range, generated from the ledger. Two types exist:
 
-Base URL: `https://api.southpay.io/api/v2`
+- `accounting_transactions` — a ledger-level listing of every entry in the period.
+- `merchant_statement` — a summarized statement for the period.
 
-Reports are generated PDFs covering a date range. Two report types are available:
+Generation is asynchronous and cached. The first request for a given type, range and currency queues a job and returns `202`. Once the job finishes, the same request returns `200` with a download link. Repeating the request reuses the existing report rather than regenerating it.
 
-- `accounting_transactions` - a ledger-level transaction listing.
-- `merchant_statement` - a summarized statement for the period.
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-Generation is asynchronous and cached. The first request for a given (type, date range, currency) enqueues a job and returns `pending`; once the job finishes, the same request returns `generated` with a short-lived download URL. Requesting the same parameters again reuses the existing report rather than regenerating it.
+## Authentication and scope
 
----
+Reports map to the `balances` resource, so `GET` requires **`balances:read`** — not a `reports` scope, which does not exist. Publishable keys are rejected.
 
 ## Data availability
 
-Reports only cover dates that have fully closed. The latest available date is:
+Reports only cover days that have fully closed. The latest available date is:
 
-- **Yesterday** once the current UTC day has passed noon (12:00 UTC).
-- **The day before yesterday** before noon UTC.
+- **Yesterday**, once the current UTC day has passed 12:00.
+- **The day before yesterday**, before 12:00 UTC.
 
-Requesting an `end_date` beyond the latest available date returns `422` with `error: "date_range_unavailable"` and an `available_through` date. The `available_through` value is also returned from the [index endpoint](#list-recent-reports).
+Read the current boundary from `available_through` on the [index endpoint](#list-recent-reports) rather than computing it yourself.
 
-A single report may span at most **366 days**.
+## Request a report
 
----
+**`GET /reports/accounting_transactions`** and **`GET /reports/merchant_statement`** — scope `balances:read`.
 
-## Supported currencies
+Both take the same parameters and return the same body shapes.
 
-The optional `currency` filter must be one of: `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK`, `NOK`. The value is uppercased; any unrecognized value is ignored and the report covers all currencies.
+<ParamField query="start_date" type="string" required>
+  ISO date, inclusive. Missing or unparseable dates currently produce `500` rather than a validation error, so send a well-formed value.
+</ParamField>
 
----
+<ParamField query="end_date" type="string" required>
+  ISO date, inclusive. Must be on or after `start_date` and no later than `available_through`.
+</ParamField>
 
-## Generate or fetch a report
+<ParamField query="currency" type="string">
+  Restrict to one settlement currency: `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK` or `NOK`. Anything else is ignored and the report covers all currencies.
+</ParamField>
 
-Both report endpoints take the same parameters and return the same response shapes. Substitute the action path:
-
-- `GET /reports/accounting_transactions`
-- `GET /reports/merchant_statement`
+The maximum range is 366 days.
 
 <CodeGroup>
 ```bash Request
-GET /reports/accounting_transactions?start_date=2026-04-01&end_date=2026-04-30&currency=EUR
-Authorization: Bearer <API_KEY>
+curl "https://api.southpay.io/api/v2/reports/accounting_transactions?start_date=2026-04-01&end_date=2026-04-30&currency=EUR" \
+  -H "Authorization: Bearer sp_sk_live_…"
 ```
 
-```json Generated 200
+```json Response 202
 {
-  "status": "generated",
-  "url": "https://storage.southpay.io/reports/...&X-Amz-Signature=...",
-  "expires_in": 3600
+  "status": "pending",
+  "report_id": 4821
 }
 ```
 
-```json Pending 202
+```json Response 200
 {
-  "status": "pending",
-  "report_id": "01HX..."
+  "status": "generated",
+  "url": "https://southpay-reports.7f3a1c.r2.cloudflarestorage.com/1a2b/accounting_transactions/2026-04-01_2026-04-30_EUR.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Expires=3600&X-Amz-Signature=…",
+  "expires_in": 3600
 }
 ```
 </CodeGroup>
 
-**Query parameters**
+### Polling
 
-| Parameter | Required | Description |
+Poll the same URL with the same parameters. The status code tells you where you are.
+
+| Report status | HTTP | Body |
 | --- | --- | --- |
-| `start_date` | Yes | Inclusive start of the period, `YYYY-MM-DD`. |
-| `end_date` | Yes | Inclusive end of the period, `YYYY-MM-DD`. Must be on or after `start_date` and not beyond the latest available date. |
-| `currency` | No | One of the [supported currencies](#supported-currencies). Omit to cover all currencies. |
+| `pending` | **202** | `{"status": "pending", "report_id": 4821}` |
+| `generated` | 200 | `{"status": "generated", "url": "…", "expires_in": 3600}` |
+| `no_data` | 422 | `{"status": "no_data", "error": "No transactions found for the selected period and filters."}` |
+| `failed` | 422 | `{"status": "failed", "report_id": 4821, "error": "…"}` |
 
-**Responses**
+Treat `202` as "not ready, try again", not as success. A few seconds between polls is enough for typical ranges.
 
-| Status | Body | When |
-| --- | --- | --- |
-| `200` | `{ "status": "generated", "url", "expires_in" }` | The report is ready. `url` is a presigned download link valid for `expires_in` seconds (`3600`). |
-| `202` | `{ "status": "pending", "report_id" }` | Generation is in progress. Retry the same request shortly. |
-| `422` | `{ "status": "no_data", "error" }` | The period contains no data to report. |
-| `422` | `{ "status": "failed", "report_id", "error" }` | Generation failed. Retrying the same request re-enqueues the job. |
+A `failed` report is retried automatically on your next request. So is a `pending` report that has not been touched in five minutes, which recovers a job that died mid-run.
 
-**Date and range errors**
+<ResponseField name="url" type="string">
+  A presigned download link, valid for `expires_in` seconds.
+</ResponseField>
 
-| Status | Body | When |
-| --- | --- | --- |
-| `422` | `{ "error": "start_date must be on or before end_date" }` | `start_date` is after `end_date`. |
-| `422` | `{ "error": "date_range_too_large", "max_days": 366 }` | The period exceeds 366 days. |
-| `422` | `{ "error": "date_range_unavailable", "available_through": "2026-05-28" }` | `end_date` is beyond the latest available date. |
+<ResponseField name="expires_in" type="integer">
+  Always 3600. Fetch the PDF promptly, or re-request the report to mint a fresh link.
+</ResponseField>
 
-<Tip>
-  Poll with the same `start_date`, `end_date`, and `currency` until the response flips from `pending` to `generated`. A stuck `pending` report (older than 5 minutes) is automatically retried on the next request, as is a `failed` one.
-</Tip>
+<ResponseField name="report_id" type="integer">
+  The report record's id. Also appears in the index listing.
+</ResponseField>
 
----
+<Note>
+Presigned URLs point at Cloudflare R2, on a `*.r2.cloudflarestorage.com` host. There is no `storage.southpay.io`. Treat `url` as opaque and follow it as returned rather than allowlisting a hostname.
+</Note>
 
 ## List recent reports
 
-Returns the 50 most recent reports for the store, newest first, plus the latest date the data covers.
+**`GET /reports`** — scope `balances:read`. No parameters.
+
+Returns the 50 most recent reports for the store, newest first, plus the current availability boundary.
 
 <CodeGroup>
 ```bash Request
-GET /reports
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/reports \
+  -H "Authorization: Bearer sp_sk_live_…"
 ```
 
-```json Response
+```json Response 200
 {
   "reports": [
     {
-      "id": "01HX...",
+      "id": 4821,
       "report_type": "accounting_transactions",
       "status": "generated",
       "period_from": "2026-04-01",
       "period_to": "2026-04-30",
       "currency": "EUR",
-      "generated_at": "2026-05-01T06:00:00.000Z",
+      "generated_at": "2026-05-02T08:14:33.000Z",
       "error": null,
-      "url": "https://storage.southpay.io/reports/...&X-Amz-Signature=...",
+      "url": "https://southpay-reports.7f3a1c.r2.cloudflarestorage.com/1a2b/accounting_transactions/2026-04-01_2026-04-30_EUR.pdf?X-Amz-Signature=…",
       "expires_in": 3600
     },
     {
-      "id": "01HY...",
+      "id": 4790,
       "report_type": "merchant_statement",
       "status": "pending",
       "period_from": "2026-05-01",
-      "period_to": "2026-05-15",
+      "period_to": "2026-05-10",
       "currency": null,
       "generated_at": null,
       "error": null
     }
   ],
-  "available_through": "2026-05-28"
+  "available_through": "2026-05-11"
 }
 ```
 </CodeGroup>
 
-**Response fields**
+<ResponseField name="reports" type="object[]" required>
+  <Expandable title="properties">
+    <ResponseField name="id" type="integer">Report id. An integer, not a UUID — reports are the exception in this API.</ResponseField>
+    <ResponseField name="report_type" type="string">`accounting_transactions` or `merchant_statement`.</ResponseField>
+    <ResponseField name="status" type="string">`pending`, `generated`, `failed` or `no_data`.</ResponseField>
+    <ResponseField name="period_from" type="string">Start of the covered range.</ResponseField>
+    <ResponseField name="period_to" type="string">End of the covered range.</ResponseField>
+    <ResponseField name="currency" type="string | null">Null when the report covers all currencies.</ResponseField>
+    <ResponseField name="generated_at" type="string | null">Null until generation finishes.</ResponseField>
+    <ResponseField name="error" type="string | null">Failure text. Free-form — do not match on it.</ResponseField>
+    <ResponseField name="url" type="string">Presigned link. Present only when `status` is `generated`.</ResponseField>
+    <ResponseField name="expires_in" type="integer">Present only alongside `url`.</ResponseField>
+  </Expandable>
+</ResponseField>
 
-| Field | Description |
-| --- | --- |
-| `reports[]` | The 50 most recent reports. |
-| `reports[].report_type` | `accounting_transactions` or `merchant_statement`. |
-| `reports[].status` | `pending`, `generated`, `failed`, or `no_data`. |
-| `reports[].period_from` / `period_to` | The report's date range. |
-| `reports[].currency` | The currency filter, or `null` for all currencies. |
-| `reports[].generated_at` | When generation completed, or `null`. |
-| `reports[].error` | Error message for `failed` or `no_data` reports, otherwise `null`. |
-| `reports[].url` / `expires_in` | Present only when `status` is `generated`: a presigned download link valid for `expires_in` seconds. |
-| `available_through` | The latest date reports can currently cover. |
+<ResponseField name="available_through" type="string" required>
+  The latest date a report may end on, as of now. Use it to build a valid `end_date`.
+</ResponseField>
+
+Reports are cached per store, type, date range and currency. Requesting the same combination twice returns the same record — there is no way to force regeneration other than changing a parameter.
+
+## Errors
+
+Pre-flight validation returns `422`, but the `error` value is inconsistent: one is prose, the other two are machine codes carrying an extra field.
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": "start_date must be on or before end_date"}` | Dates reversed. |
+| `422` | `{"error": "date_range_too_large", "max_days": 366}` | Range exceeds 366 days. |
+| `422` | `{"error": "date_range_unavailable", "available_through": "2026-05-11"}` | `end_date` is past the boundary. Retry with the returned date. |
+| `403` | `{"error": {"message": "Insufficient scope: balances:read required", "code": "insufficient_scope"}}` | Missing scope. |
+| `500` | `{"error": {"message": "Internal server error", "code": null}}` | `start_date` or `end_date` missing or unparseable. |
+
+<Note>
+Missing or malformed date parameters return `500`, not `422`. Validate the format on your side before calling.
+</Note>

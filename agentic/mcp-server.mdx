@@ -1,19 +1,25 @@
 ---
 title: "MCP server"
-description: "The hosted Southpay MCP server at mcp.southpay.io: connection, sessions, and the full tool reference."
+description: "Connect an MCP client to mcp.southpay.io: bearer keys, browser login, error handling, and the 19 tools with their parameters and defaults."
 ---
 
-Southpay runs a hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes the agentic API as tools any MCP client can call: Claude, Claude Code, or your own agent runtime.
+Southpay runs a hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes a merchant store as tools any MCP client can call.
 
-```
+```text
 https://mcp.southpay.io/mcp
 ```
 
-The server is a thin layer over the [agentic REST API](/api-reference/agentic); every tool call is authorized and gated exactly as the underlying endpoint. If your stack speaks HTTP more naturally than MCP, use the REST API directly - the capabilities are identical, plus mandates and x402 settlements which are REST-only.
+It speaks the Streamable HTTP transport at `/mcp`. Each session is backed by its own isolated state, which is where a key set through the `login` tool is held.
+
+The server is a thin proxy over the [agentic REST API](/api-reference/agentic) with no business logic of its own. It holds no secrets: the only credential is the merchant's `spa_` agent key, validated by Southpay on every call. Anything gated on the REST side is gated identically here, and session mandates and x402 settlements are not exposed as tools at all — those are [REST-only](/agentic/x402).
 
 ## Connecting
 
-Pass an [agent credential](/agentic/agent-credentials) as a bearer token:
+There are three ways to authenticate, resolved in this order per tool call: a key set with `login`, then the session's OAuth-minted key, then the `Authorization` bearer header.
+
+### Bearer key
+
+Send an [agent credential](/agentic/agent-credentials) as a bearer token. A raw `spa_` token skips the OAuth flow entirely.
 
 <CodeGroup>
 ```bash Claude Code
@@ -27,7 +33,7 @@ claude mcp add --transport http southpay https://mcp.southpay.io/mcp \
     "southpay": {
       "url": "https://mcp.southpay.io/mcp",
       "headers": {
-        "Authorization": "Bearer spa_test_..."
+        "Authorization": "Bearer spa_live_xxx"
       }
     }
   }
@@ -35,11 +41,25 @@ claude mcp add --transport http southpay https://mcp.southpay.io/mcp \
 ```
 </CodeGroup>
 
-If the client cannot send custom headers, the agent can authenticate in-session with the `login` tool instead. A key set via `login` is held for the session until `logout`; a bearer header, when present, is used per request.
+### Browser login (OAuth)
+
+Connect a client with no token and the server runs an OAuth flow instead. It serves its own metadata discovery, dynamic client registration and token endpoint — which clients like claude.ai require — then forwards you to the Southpay dashboard consent screen, where you pick the store and whether the session is live or test.
+
+On the way back it exchanges the code for an OAuth access token and calls [`POST /api/v2/oauth/agent_credentials`](/agentic/agent-credentials#minting-a-credential-from-an-oauth-token) to mint a scoped `spa_` credential. That credential stays server-side; the MCP client only ever sees tokens issued by the Southpay MCP server.
+
+<Warning>
+  One credential exists per application, user, store and mode. Logging in again **rotates that same credential**, which invalidates the key minted by any earlier login. If you have wired a previous login's key into something else, that thing stops working.
+</Warning>
+
+### The `login` tool
+
+If a client cannot send custom headers and cannot run OAuth, the agent can call `login` with the key pasted in. It is held for the session until `logout`.
+
+Prefer the bearer header for a live key. A key pasted into `login` passes through the model's context.
 
 ## Results and errors
 
-Every tool returns plain JSON as structured content, plus a short human-readable `message`. Failures never raise a protocol error; they come back as data so the agent can read and act on them:
+Every tool returns plain JSON as structured content, plus a short human-readable `message`. Failures never raise a protocol error — they come back as data under an `error` key so the agent can read the denial and respond to it:
 
 ```json
 {
@@ -47,69 +67,96 @@ Every tool returns plain JSON as structured content, plus a short human-readable
   "status": 403,
   "detail": {
     "error": {
-      "message": "Payout requires configured spend limits or an authorization mandate",
+      "message": "Agent payouts require a configured authorization provider or a spend limit on this asset",
       "code": "payout_controls_required"
     }
   }
 }
 ```
 
-`detail` carries the API's [error envelope](/agentic/authorization#error-codes) verbatim. Calling a tool without a credential returns `{"error": "not_connected"}`. Authorization denials (`mandate_required`, `payout_controls_required`, `authorization_denied`) are expected outcomes of the fail-closed design - agents should explain them, not retry them.
+`detail` carries the API's [error envelope](/agentic/authorization#error-codes) verbatim. Other error values you will see: `not_connected` when no key resolved, `invalid_key` when `login` is given something that does not start with `spa_live_` or `spa_test_`, `login_failed`, `tool_exception`, and `market_data_unreachable` from `research_token`.
 
-## Tool reference
+Authorization denials (`mandate_required`, `payout_controls_required`, `authorization_denied`) are expected outcomes of the fail-closed design. Explain them; do not retry them.
+
+## Tools
+
+Nineteen tools. Scopes are the agent credential scopes required; a credential limited to `payments:*` is rejected on the token and payout tools. Tools marked **gated** are refused server-side unless a spend limit or an authorization provider permits the action — see [agent authorization](/agentic/authorization).
 
 ### Session
 
 | Tool | Parameters | Returns |
 | --- | --- | --- |
-| `login` | `api_key` (must start with `spa_live_` or `spa_test_`) | `{logged_in, account}` |
-| `logout` | - | `{logged_out}` |
+| `login` | `api_key` | `{logged_in: true, account}`, or `{error: "invalid_key"}` if it does not start with `spa_live_` / `spa_test_` |
+| `logout` | none | `{logged_out}` — `true` if a pasted key existed |
 
-### Account and research
+### Account
 
-| Tool | Parameters | Returns |
-| --- | --- | --- |
-| `get_account` | - | Store id, name, KYC status, `mode`, `livemode`, the credential's `scopes` and expiry, whether mandate authorization is active, and the accepted-asset count |
-| `get_exchange_rate` | `asset_id?`, `currency?` | Southpay's own rate per accepted asset: `{currency, rates: [{asset_id, coin_symbol, chain_symbol, currency, rate, source}]}`. This is the rate applied when pricing a payment |
-| `research_token` | `symbol_or_id`, `vs_currency` (default `usd`) | Public market data for a token. Touches no Southpay funds and needs no credential |
+| Tool | Parameters | Scope | Returns |
+| --- | --- | --- | --- |
+| `get_account` | none | any | Store id, name and KYC status; `mode` and `livemode`; the credential's name, principal, token prefix, scopes, last use and expiry; the authorization provider in effect and whether mandates are required; the accepted-asset count |
+
+Call this first. `authorization.mandates` tells you whether the gated tools can succeed at all on this store.
 
 ### Payments
 
-| Tool | Parameters | Returns |
-| --- | --- | --- |
-| `create_payment` | `amount` (decimal string), `currency` (default `USD`), `order_id?` | `{id, status, reference, settlement_amount, settlement_currency, order_id, hosted_url, expires_at, deposit_addresses[]}`. Each deposit address includes the exact `crypto_amount` to send |
-| `get_payment` | `payment_id` | Same summarized payment shape |
-| `list_payments` | `page` (default 1), `per_page` (default 10), `reference?` | `{payments[], meta}` |
-| `wait_for_payment` | `payment` (id or reference), `timeout_seconds` (default 60, max 240), `poll_interval_seconds` (default 3, min 2) | `{done, status, polls, payment}` once terminal, or `{done: false, timed_out: true, ...}` |
-| `cancel_payment` | `payment_id` | The canceled payment. Only `pending` payments can be canceled |
-| `refund_payment` | `payment_id`, `amount?`, `asset_id?` | The created refunds. Gated: requires an authorization provider |
-| `list_refunds` | `payment_id` | Refunds for the payment |
+| Tool | Parameters | Scope | Returns |
+| --- | --- | --- | --- |
+| `create_payment` | `amount` (decimal string, ≤ 2 places), `currency` (default `"USD"`), `order_id?`, `metadata?` (≤ 50 keys, string values) | `payments:write` | `{id, status, reference, settlement_amount, settlement_currency, order_id, hosted_url, expires_at, deposit_addresses[]}` |
+| `get_payment` | `payment_id` | `payments:read` | Same summarized shape |
+| `list_payments` | `page` (default 1), `per_page` (default 10, max 100), `reference?` | `payments:read` | `{payments[], meta}` |
+| `wait_for_payment` | `payment` (id or reference), `timeout_seconds` (default 60, clamped 1–240), `poll_interval_seconds` (default 3, minimum 2) | `payments:read` | `{done: true, status, polls, payment}` or `{done: false, timed_out: true, status, polls, hint, payment}` |
+| `cancel_payment` | `payment_id` | `payments:write` | The canceled payment |
+| `refund_payment` | `payment_id`, `amount?`, `asset_id?` | `payments:write` | The created refunds. **Gated** |
+| `list_refunds` | `payment_id` | `payments:read` | Refunds for the payment, newest first |
 
-`wait_for_payment` polls server-side until the payment reaches a terminal state: `completed`, `expired`, `failed`, or `refunded`. On timeout it returns `timed_out: true` with a hint to call again or configure a [webhook](/webhooks); a timeout is not a failed payment.
+Each entry in `deposit_addresses[]` is `{address, crypto_amount, crypto_amount_atomic, coin_symbol, chain_symbol, asset_id, exchange_rate}`. `crypto_amount` is the tool's own human rendering of `crypto_amount_atomic` at the asset's decimals; it is not a field the REST API returns.
+
+`create_payment`, `refund_payment` and `create_payout` send an `Idempotency-Key` per call, generated by the server.
+
+`wait_for_payment` holds the request open, so keep the budget modest and call again rather than asking for the full 240 seconds. It accepts a reference as well as an id: on a 404 it retries the lookup as a reference filter. For durable notification across sessions, configure a [webhook](/webhooks) instead.
+
+Omit `amount` on `refund_payment` for a full refund; a decimal string gives a partial refund, and partial refunds apply to completed payments only. `asset_id` is only needed when a payment settled in more than one asset.
 
 ### Tokens and balances
 
-| Tool | Parameters | Returns |
-| --- | --- | --- |
-| `list_tokens` | - | `{accepted[], available[]}`, each entry `{asset_id, coin_symbol, chain_symbol, active}`. Test credentials see testnet assets |
-| `set_token` | `asset_id`, `active` (bool) | The applied change. Gated: requires an authorization provider |
-| `get_balance` | `asset_id?` | `{balances: [{asset_id, coin_symbol, chain_symbol, atomic_decimals, balance_atomic, balance}], settlement_balance: {currency, amount_cents, amount}}`. `settlement_balance` estimates stablecoin holdings in the store's settlement currency |
+| Tool | Parameters | Scope | Returns |
+| --- | --- | --- | --- |
+| `list_tokens` | none | `assets:read` | `{accepted[], available[]}`, each `{asset_id, coin_symbol, chain_symbol, active}` |
+| `get_balance` | `asset_id?` | `assets:read` | `{balances: [{asset_id, coin_symbol, chain_symbol, atomic_decimals, balance_atomic, balance}], settlement_balance: {currency, amount_cents, amount}}` |
+| `set_token` | `asset_id`, `active` (boolean) | `assets:write` | `{asset_id, active, provider}`. **Gated** |
+
+`balance` and `amount` are the tool's decimal renderings of `balance_atomic` and `amount_cents`. `settlement_balance` is the store-wide value of stablecoin holdings in the store's settlement currency, and stays store-wide even when `asset_id` narrows the balance list. `amount_cents` is `null` if the rate lookup fails.
+
+The accepted and available lists are filtered to the credential's mode, so a test credential sees testnet assets only.
 
 ### Payouts
 
-| Tool | Parameters | Returns |
-| --- | --- | --- |
-| `create_payout` | `asset_id`, `amount_atomic` (integer), `destination_address` | The created payout. Gated: fail-closed behind spend limits or a mandate |
-| `get_payout` | `payout_id` | Payout detail |
-| `list_payouts` | `page` (default 1), `per_page` (default 25) | Paginated payouts created by this credential |
-| `get_payout_limits` | `asset_id?` | Per-asset caps and headroom: `{limits: [{asset_id, per_tx_cap_atomic, daily_cap_atomic, daily_spent_atomic, daily_remaining_atomic, controls_configured, ...}], utc_day}` |
+| Tool | Parameters | Scope | Returns |
+| --- | --- | --- | --- |
+| `create_payout` | `asset_id`, `amount_atomic` (positive integer), `destination_address` | `payouts:write` | The created payout. **Gated** |
+| `get_payout` | `payout_id` | `payouts:read` | Payout detail |
+| `list_payouts` | `page` (default 1), `per_page` (default 25, max 100) | `payouts:read` | `{data[], pagination}` |
+| `get_payout_limits` | `asset_id?` | `assets:read` | `{limits[], utc_day}` |
 
-A well-behaved agent calls `get_payout_limits` before `create_payout` and stays inside `daily_remaining_atomic`, rather than discovering the cap through a `403`.
+Each row in `limits[]` carries `asset_id`, `coin_symbol`, `chain_symbol`, `atomic_decimals`, `per_tx_cap_atomic`, `daily_cap_atomic`, `daily_spent_atomic`, `daily_remaining_atomic` and `controls_configured`, plus decimal renderings as `per_tx_cap`, `daily_cap`, `daily_spent` and `daily_remaining`.
 
-<Note>
-  Session mandates and x402 settlements are not exposed as MCP tools; use the [REST endpoints](/api-reference/agentic#session-mandates) for those flows.
-</Note>
+Call `get_payout_limits` before `create_payout`. `controls_configured: false` on an asset means a payout in it will be denied with `payout_controls_required`, and staying inside `daily_remaining` avoids a `daily_cap_exceeded` denial. `amount_atomic` is base units — wei for ETH — so confirm the figure with a human before spending it.
 
-## Isolation and audit
+### Rates and market data
 
-Tools only ever see the store and mode encoded in the credential. Payments, payouts, and refunds are further scoped to the credential that created them: an agent cannot read or cancel another integration's payments. Every mutating call is attributed to the credential in the merchant's [activity feed](/agentic/agent-credentials#activity).
+| Tool | Parameters | Scope | Returns |
+| --- | --- | --- | --- |
+| `get_exchange_rate` | `asset_id?`, `currency?` | `assets:read` | `{currency, rates: [{asset_id, coin_symbol, chain_symbol, currency, rate, source}]}` |
+| `research_token` | `symbol_or_id`, `vs_currency` (default `"usd"`) | none | `{query, coin_id, vs_currency, price, market_cap, volume_24h, change_24h_pct, source}` |
+
+`get_exchange_rate` is Southpay's own rate, the one applied when pricing a payment. `currency` defaults to the store's settlement currency and must be one of the ten accepted payment currencies. Omit `asset_id` for every accepted asset.
+
+`research_token` is public CoinGecko data proxied through Southpay's cached [market data endpoint](/api-reference/agentic). It touches no store data and no funds, and needs no credential. Accepts a ticker such as `"ETH"` or a CoinGecko id such as `"ethereum"`. Use `get_exchange_rate`, not this, for the rate a customer will be charged.
+
+## Picking up tool changes
+
+Deploying the server updates it immediately, but MCP clients cache the tool list for the life of a session. The server advertises `listChanged`, and a fresh chat or re-added connector is the reliable way to see new tools.
+
+## Isolation
+
+Tools only ever see the store and mode encoded in the credential. Payments, payouts, refunds and settlements are further scoped to the credential that created them, so an agent cannot read or cancel another integration's payments on the same store. Agents cannot manage credentials, their own included.

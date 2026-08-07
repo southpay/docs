@@ -1,0 +1,227 @@
+---
+title: "Balance swaps"
+description: "Convert one asset in your Southpay balance into another, with a quote endpoint for expected output and slippage."
+sidebarTitle: "Balance swaps"
+---
+
+A balance swap converts part of your store balance from one asset into another without leaving Southpay. Use it to consolidate deposits into a single stablecoin before a [payout](/api-reference/payouts), or to move off a chain whose network fees you no longer want to pay.
+
+Swaps are executed by an external routing provider, so the amount you receive is not known in advance. Quote first, then create.
+
+Paths are relative to `https://api.southpay.io/api/v2`.
+
+## Authentication
+
+Any valid API key or OAuth token can call these endpoints — balance swaps are not scope-checked, so no specific scope is required. Publishable keys are still rejected.
+
+<Note>
+Creating a swap runs a step-up MFA check. That check is a no-op for API keys and OAuth tokens; it only gates dashboard sessions, which return `403` `mfa_required` without two-factor enabled.
+</Note>
+
+## Quote a swap
+
+**`POST /balance_swaps/quote`** — no idempotency key, creates nothing.
+
+<ParamField body="source_asset_id" type="string" required>
+  The asset to sell, for example `ETH_USDC`.
+</ParamField>
+
+<ParamField body="buy_asset_id" type="string" required>
+  The asset to receive. Must differ from `source_asset_id`.
+</ParamField>
+
+<ParamField body="sell_amount_atomic" type="string" required>
+  Amount to sell, in atomic units of `source_asset_id`. Must be positive.
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/balance_swaps/quote \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_asset_id": "ETH_USDC",
+    "buy_asset_id": "ETH_USDT",
+    "sell_amount_atomic": "250000000"
+  }'
+```
+
+```json Response 200
+{
+  "source_asset_id": "ETH_USDC",
+  "buy_asset_id": "ETH_USDT",
+  "sell_amount_atomic": "250000000",
+  "estimated_buy_amount_atomic": "249400000",
+  "min_received_atomic": "248652800",
+  "slippage_bps": 30,
+  "buy_atomic_decimals": 6
+}
+```
+</CodeGroup>
+
+<ResponseField name="estimated_buy_amount_atomic" type="string" required>
+  What the route currently expects to return, in atomic units of `buy_asset_id`.
+</ResponseField>
+
+<ResponseField name="min_received_atomic" type="string" required>
+  The floor after slippage: `estimated * (10000 - slippage_bps) / 10000`. Size your downstream payout against this, not against the estimate.
+</ResponseField>
+
+<ResponseField name="slippage_bps" type="integer" required>
+  Slippage tolerance in basis points.
+</ResponseField>
+
+<ResponseField name="buy_atomic_decimals" type="integer" required>
+  Divisor exponent for the two atomic amounts above.
+</ResponseField>
+
+A quote carries no expiry field and reserves nothing. Treat it as indicative and re-quote if more than a few seconds pass.
+
+## Create a swap
+
+**`POST /balance_swaps`** — `Idempotency-Key` is **required**.
+
+Same three parameters as the quote, sent at the top level.
+
+<ParamField body="source_asset_id" type="string" required>
+  The asset to sell.
+</ParamField>
+
+<ParamField body="buy_asset_id" type="string" required>
+  The asset to receive.
+</ParamField>
+
+<ParamField body="sell_amount_atomic" type="string" required>
+  Atomic units of `source_asset_id`. Must be positive and available in your balance.
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/balance_swaps \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: swap_2026_05_12_a" \
+  -d '{
+    "source_asset_id": "ETH_USDC",
+    "buy_asset_id": "ETH_USDT",
+    "sell_amount_atomic": "250000000"
+  }'
+```
+
+```json Response 201
+{
+  "id": "6f5e4d3c-2b1a-4098-8f7e-6d5c4b3a2918",
+  "status": "pending",
+  "source_asset_id": "ETH_USDC",
+  "buy_asset_id": "ETH_USDT",
+  "sell_amount_atomic": "250000000",
+  "expected_buy_amount_atomic": "249400000",
+  "actual_buy_amount_atomic": null,
+  "swap_provider": "swapkit",
+  "tx_hash": null,
+  "livemode": true,
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z"
+}
+```
+</CodeGroup>
+
+<Warning>
+Swaps are irreversible and execute at the market rate at the time of fill, which can differ from the quote. Replaying the same `Idempotency-Key` returns the original swap — still with status `201`, not `200`. A new key executes a second swap.
+</Warning>
+
+### Response fields
+
+<ResponseField name="id" type="string" required>
+  Bare UUID.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  `pending`, `submitted`, `completed` or `failed`.
+</ResponseField>
+
+<ResponseField name="sell_amount_atomic" type="string" required>
+  Amount debited from `source_asset_id`.
+</ResponseField>
+
+<ResponseField name="expected_buy_amount_atomic" type="string | null">
+  Estimate recorded at creation.
+</ResponseField>
+
+<ResponseField name="actual_buy_amount_atomic" type="string | null">
+  What actually arrived. Null until the swap completes. This is the number to reconcile against.
+</ResponseField>
+
+<ResponseField name="swap_provider" type="string | null">
+  Routing provider that executed the swap.
+</ResponseField>
+
+<ResponseField name="tx_hash" type="string | null">
+  On-chain hash, once broadcast.
+</ResponseField>
+
+<ResponseField name="livemode" type="boolean" required />
+
+## Retrieve a swap
+
+**`GET /balance_swaps/{id}`** — returns a bare swap object. Unknown id returns `404` `{"error": "Balance swap not found"}`.
+
+There are no swap webhooks. Poll this endpoint until `status` is `completed` or `failed`.
+
+## List swaps
+
+**`GET /balance_swaps`** — newest first.
+
+<ParamField query="status" type="string">
+  `pending`, `submitted`, `completed` or `failed`.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="25">
+  Between 1 and 100.
+</ParamField>
+
+```json Response 200
+{
+  "data": [ { "id": "6f5e4d3c-2b1a-4098-8f7e-6d5c4b3a2918", "status": "completed", "…": "…" } ],
+  "pagination": {
+    "page": 1,
+    "per_page": 25,
+    "total": 1,
+    "total_pages": 1
+  }
+}
+```
+
+Balance swaps use the `pagination` envelope, matching payouts. Payments and billing use `meta` instead.
+
+## Lifecycle
+
+| Status | Terminal | Meaning |
+| --- | --- | --- |
+| `pending` | No | Created, source funds reserved. |
+| `submitted` | No | Sent to the routing provider. |
+| `completed` | Yes | Filled. `actual_buy_amount_atomic` is set and the target balance has increased. |
+| `failed` | Yes | Not filled. The source reservation is released. |
+
+## Related: auto-swap
+
+Auto-swap is the automatic version of this, applied to incoming payments rather than to your standing balance. It is configured in the dashboard, not over the API, and its outcome surfaces as `auto_swap_status` and `auto_swap_detail` on a [payment intent](/api-reference/payments#detail-only-fields). Auto-swap targets are limited to `ETH_USDC` and `ETH_USDT`; manual swaps are not.
+
+## Errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": "Idempotency-Key header is required"}` | Header missing on create. |
+| `404` | `{"error": "Source asset not found"}` | Unknown or inactive `source_asset_id`. |
+| `404` | `{"error": "Target asset not found"}` | Unknown or inactive `buy_asset_id`. |
+| `422` | `{"error": "sell_amount_atomic must be positive"}` | Zero, negative or missing. |
+| `422` | `{"error": "Source and target assets must be different"}` | Both ids are the same. |
+| `422` | `{"error": "USDC cannot be swapped"}` | The source asset has no swap route configured. |
+| `422` | `{"error": "USDT cannot be received from a swap"}` | The target asset cannot be a swap output. |
+| `422` | `{"error": "Insufficient USDC balance for swap"}` | Balance is short. |
+| `422` | `{"error": "No swap route available for this pair", "code": "no_route"}` | Quote only. No route exists between the two assets. |
+| `503` | `{"error": "Could not fetch a swap quote, please try again", "code": "quote_unavailable"}` | Quote only. The routing provider is unreachable. Retry with backoff. |
+
+Only the last two carry a `code`. The rest use the flat `{"error": "<message>"}` envelope with no machine-readable identifier, so branch on the status code and the endpoint rather than on the message text.

@@ -1,127 +1,372 @@
 ---
 title: "Invoicing"
-description: "Customers and invoices for one-off billing."
+description: "Manage billing customers and one-off invoices: draft, finalize, send, void, mark uncollectible, and expose a hosted payment page."
 sidebarTitle: "Invoicing"
 ---
 
-<Note>
-  All endpoints require authentication; see [Authentication](/authentication).
-</Note>
+Invoicing covers customers and one-off invoices. An invoice starts as a `draft` you can edit freely, becomes `open` when you finalize it, and is then payable through a hosted page the customer opens with a public token.
 
-Base URL: `https://api.southpay.io/api/v2/billing`
+For recurring charges, see [Recurring](/api-reference/recurring). Subscriptions generate invoices through this same resource.
 
-An invoice bills a customer for a set of line items and generates a hosted crypto payment page, using the same checkout as a one-off [payment intent](/api-reference/payments). For recurring billing that issues invoices automatically each cycle, see [Recurring](/api-reference/recurring). Money amounts are in **cents** of the stated `currency`.
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-Subscribe to the [invoice webhook events](/webhooks#billing-events) (`invoice.finalized`, `invoice.paid`, `invoice.voided`) rather than polling.
+## Authentication and scope
 
----
+Reads require `billing:read`, writes require `billing:write`. Publishable keys are rejected. The two hosted-invoice endpoints are unauthenticated and identified by a public token instead.
+
+Idempotency keys are **not used** anywhere in billing. Retrying a create makes a second record.
 
 ## Customers
 
-A customer is the billed party, shared across invoices and subscriptions. Email is unique per store.
+### Create a customer
 
-```bash
-GET    /billing/customers        # list (q, page, per_page)
-POST   /billing/customers        # create
-GET    /billing/customers/:id    # read
-PATCH  /billing/customers/:id    # update
-DELETE /billing/customers/:id    # soft-delete
-```
+**`POST /billing/customers`** — scope `billing:write`. Fields go inside a required `customer` object.
+
+<ParamField body="customer.email" type="string" required>
+  Must be unique within the store.
+</ParamField>
+
+<ParamField body="customer.name" type="string" />
+<ParamField body="customer.phone" type="string" />
+
+<ParamField body="customer.billing_address" type="object">
+  Free-form address object stored as sent and rendered on invoices.
+</ParamField>
+
+<ParamField body="customer.metadata" type="object">
+  Arbitrary key-value pairs.
+</ParamField>
 
 <CodeGroup>
-```bash Create
-POST /billing/customers
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "customer": {
-    "email": "ada@example.com",
-    "name": "Ada Lovelace",
-    "phone": "+15551234567",
-    "billing_address": { "line1": "1 Analytical Way", "city": "London", "country": "GB" },
-    "metadata": { "crm_id": "c_123" }
-  }
-}
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/billing/customers \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customer": {
+      "email": "ana@example.com",
+      "name": "Ana Ferreira",
+      "billing_address": { "line1": "Rua Alpha 12", "city": "Lisboa", "country": "PT" }
+    }
+  }'
 ```
 
 ```json Response 201
 {
-  "id": "01J0...",
-  "email": "ada@example.com",
-  "name": "Ada Lovelace",
-  "phone": "+15551234567",
-  "billing_address": { "line1": "1 Analytical Way", "city": "London", "country": "GB" },
-  "metadata": { "crm_id": "c_123" },
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
+  "id": "3d4e5f60-7182-4930-a516-273849506172",
+  "email": "ana@example.com",
+  "name": "Ana Ferreira",
+  "phone": null,
+  "billing_address": { "line1": "Rua Alpha 12", "city": "Lisboa", "country": "PT" },
+  "metadata": {},
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z"
 }
 ```
 </CodeGroup>
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `customer[email]` | Yes | Unique per store. A duplicate returns `409`. |
-| `customer[name]` | No | Display name. |
-| `customer[phone]` | No | Contact phone. |
-| `customer[billing_address]` | No | Free-form address object. |
-| `customer[metadata]` | No | Arbitrary key-value pairs. |
+A duplicate email returns `409` `{"error": "A customer with this email already exists"}`.
 
-The list endpoint accepts `q` (matches email or name), `page`, and `per_page` (default 25, max 100).
+### List customers
 
----
+**`GET /billing/customers`** — scope `billing:read`. Active customers only, newest first.
+
+<ParamField query="q" type="string">
+  Case-insensitive substring match on email or name.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="25">
+  Between 1 and 100.
+</ParamField>
+
+```json Response 200
+{
+  "data": [ { "id": "3d4e5f60-…", "email": "ana@example.com", "name": "Ana Ferreira", "…": "…" } ],
+  "meta": { "total": 1, "page": 1, "per_page": 25, "total_pages": 1 }
+}
+```
+
+### Retrieve, update and delete
+
+**`GET /billing/customers/{id}`** — scope `billing:read`.
+
+**`PATCH /billing/customers/{id}`** — scope `billing:write`. Accepts the same fields as create. Returns `200`.
+
+**`DELETE /billing/customers/{id}`** — scope `billing:write`. Returns `204` with no body.
+
+<Note>
+Deleting a customer is a **soft delete**. The record stops appearing in the list and cannot be used on new invoices, but existing invoices keep their `customer_id` and still resolve the embedded `customer` object. Nothing is destroyed, and the email is not freed for reuse.
+</Note>
+
+An unknown id returns `404` `{"error": "Customer not found"}`.
 
 ## Invoices
 
-An invoice is a set of line items billed to a customer. Create it as a draft, add line items, then `finalize` to lock it and generate the hosted payment page (`public_token`). `void` cancels an unpaid invoice.
+### Create an invoice
 
-```bash
-GET   /billing/invoices             # list (status, customer_id, subscription_id, page, per_page)
-POST  /billing/invoices             # create draft
-GET   /billing/invoices/:id         # read (includes line_items, customer)
-PATCH /billing/invoices/:id         # update draft (incl. line_items)
-POST  /billing/invoices/:id/finalize
-POST  /billing/invoices/:id/void
-```
+**`POST /billing/invoices`** — scope `billing:write`. Creates a `draft`. Fields go inside a required `invoice` object.
+
+<ParamField body="invoice.customer_id" type="string" required>
+  Must be an active customer in this store.
+</ParamField>
+
+<ParamField body="invoice.currency" type="string" required>
+  Fiat currency for the whole invoice.
+</ParamField>
+
+<ParamField body="invoice.line_items" type="object[]">
+  <Expandable title="line item properties">
+    <ParamField body="description" type="string" required />
+    <ParamField body="quantity" type="integer" required />
+    <ParamField body="unit_amount_cents" type="integer" required>
+      Minor units of `currency`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="invoice.due_at" type="string">
+  ISO 8601 due date.
+</ParamField>
+
+<ParamField body="invoice.description" type="string" />
+
+<ParamField body="invoice.custom_number" type="string">
+  Override the auto-assigned invoice number. Must be unique in the store.
+</ParamField>
+
+<ParamField body="invoice.po_number" type="string">
+  The customer's purchase order reference.
+</ParamField>
+
+<ParamField body="invoice.discount_type" type="string">
+  `amount` or `percent`.
+</ParamField>
+
+<ParamField body="invoice.discount_value" type="integer">
+  Minor units when `discount_type` is `amount`; percentage points when it is `percent`.
+</ParamField>
+
+<ParamField body="invoice.tax_rate_bps" type="integer">
+  Tax rate in basis points. 2000 is 20%.
+</ParamField>
+
+<ParamField body="invoice.notes" type="string">
+  Shown on the invoice above the footer.
+</ParamField>
+
+<ParamField body="invoice.footer" type="string">
+  Shown at the bottom of the invoice.
+</ParamField>
+
+<ParamField body="invoice.metadata" type="object" />
 
 <CodeGroup>
-```bash Create draft
-POST /billing/invoices
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "invoice": {
-    "customer_id": "01J0...",
-    "currency": "USD",
-    "due_at": "2026-06-01T00:00:00Z",
-    "description": "May usage",
-    "metadata": {}
-  }
-}
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/billing/invoices \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "invoice": {
+      "customer_id": "3d4e5f60-7182-4930-a516-273849506172",
+      "currency": "EUR",
+      "due_at": "2026-06-11T00:00:00Z",
+      "po_number": "PO-4471",
+      "tax_rate_bps": 2300,
+      "line_items": [
+        { "description": "Consulting, May", "quantity": 12, "unit_amount_cents": 9000 }
+      ]
+    }
+  }'
 ```
 
 ```json Response 201
 {
-  "id": "01J1...",
-  "customer_id": "01J0...",
+  "id": "5f607182-9304-4a51-b627-384950617283",
+  "customer_id": "3d4e5f60-7182-4930-a516-273849506172",
   "subscription_id": null,
-  "number": null,
+  "period_key": null,
+  "number": 41,
+  "formatted_number": "INV-0041",
+  "custom_number": null,
+  "po_number": "PO-4471",
   "status": "draft",
-  "currency": "USD",
+  "currency": "EUR",
   "public_token": null,
-  "subtotal_cents": 0,
-  "total_cents": 0,
-  "due_at": "2026-06-01T00:00:00.000Z",
-  "description": "May usage",
+  "subtotal_cents": 108000,
+  "discount_type": null,
+  "discount_value": null,
+  "discount_cents": 0,
+  "tax_rate_bps": 2300,
+  "tax_cents": 24840,
+  "total_cents": 132840,
+  "amount_paid_cents": 0,
+  "due_at": "2026-06-11T00:00:00.000Z",
+  "description": null,
+  "notes": null,
+  "footer": null,
   "metadata": {},
   "finalized_at": null,
   "voided_at": null,
   "paid_at": null,
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z",
+  "customer": { "id": "3d4e5f60-…", "email": "ana@example.com", "name": "Ana Ferreira" },
+  "line_items": [
+    {
+      "id": "60718293-04a5-4b62-9738-495061728394",
+      "description": "Consulting, May",
+      "quantity": 12,
+      "unit_amount_cents": 9000,
+      "amount_cents": 108000,
+      "position": 0
+    }
+  ]
 }
 ```
 </CodeGroup>
 
-Line items are set on `PATCH` via `invoice[line_items][]` with `description`, `quantity`, and `unit_amount_cents`. After `finalize`, the response includes a `public_token`; the hosted payment page lives at `/api/v2/billing/invoice/:token`. Invoices generated by a subscription carry its `subscription_id` and can be listed with `GET /billing/invoices?subscription_id=...`.
+Totals always satisfy `total_cents = subtotal_cents - discount_cents + tax_cents`. Do not compute them yourself; read them back.
+
+### Response fields
+
+<ResponseField name="status" type="string" required>
+  `draft`, `open`, `paid`, `void` or `uncollectible`. See [lifecycle](#invoice-lifecycle).
+</ResponseField>
+
+<ResponseField name="number" type="integer" required>
+  Sequential per store.
+</ResponseField>
+
+<ResponseField name="formatted_number" type="string" required>
+  The display number. Reflects `custom_number` when one is set.
+</ResponseField>
+
+<ResponseField name="public_token" type="string | null">
+  The token in the hosted invoice URL. Null while the invoice is a draft.
+</ResponseField>
+
+<ResponseField name="subscription_id" type="string | null">
+  Set when the invoice was generated by a [subscription](/api-reference/recurring#subscriptions) cycle.
+</ResponseField>
+
+<ResponseField name="period_key" type="string | null">
+  Identifies which billing cycle produced the invoice. Deduplicates cycles.
+</ResponseField>
+
+<ResponseField name="amount_paid_cents" type="integer" required>
+  How much has been received against this invoice.
+</ResponseField>
+
+<ResponseField name="line_items" type="object[]">
+  Present on retrieve, create, update and the action endpoints. `amount_cents` is `quantity * unit_amount_cents`; `position` is the display order.
+</ResponseField>
+
+### List invoices
+
+**`GET /billing/invoices`** — scope `billing:read`. Newest first.
+
+<ParamField query="status" type="string">
+  `draft`, `open`, `paid`, `void` or `uncollectible`.
+</ParamField>
+
+<ParamField query="customer_id" type="string" />
+
+<ParamField query="subscription_id" type="string">
+  Only invoices generated by one subscription.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="25">
+  Between 1 and 100.
+</ParamField>
+
+Returns the `{data, meta}` envelope.
+
+### Retrieve and update
+
+**`GET /billing/invoices/{id}`** — scope `billing:read`. Includes `line_items`.
+
+**`PATCH /billing/invoices/{id}`** — scope `billing:write`. **Draft only.** Accepts `currency`, `due_at`, `description`, `metadata`, all the enhancement fields, and `line_items` — sending `line_items` replaces the whole set. Editing an `open` invoice returns `422` `{"error": "Only draft invoices can be edited"}`.
+
+### Finalize
+
+**`POST /billing/invoices/{id}/finalize`** — scope `billing:write`. No body.
+
+Moves `draft` to `open`, stamps `finalized_at`, assigns `public_token`, and emits `invoice.finalized`. Line items and totals are locked from here.
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": "Cannot finalize a open invoice"}` | Already finalized, or in a terminal state. |
+| `422` | `{"error": "Invoice has no payable amount"}` | `total_cents` is zero or negative. |
+
+### Send
+
+**`POST /billing/invoices/{id}/send`** — scope `billing:write`. No body.
+
+Emails the hosted invoice link to the customer. The invoice must be `open` and the customer must have an email.
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": "Only finalized invoices can be sent"}` | Still a draft, or terminal. |
+| `422` | `{"error": "Customer has no email"}` | Nothing to send to. |
+
+### Void
+
+**`POST /billing/invoices/{id}/void`** — scope `billing:write`. No body.
+
+Cancels a `draft` or `open` invoice, stamps `voided_at`, and emits `invoice.voided`. Voiding an already-void invoice is a `200` no-op. A `paid` invoice returns `422` `{"error": "Cannot void a paid invoice"}` — refund the underlying [payment](/api-reference/refunds) instead.
+
+### Mark uncollectible
+
+**`POST /billing/invoices/{id}/mark_uncollectible`** — scope `billing:write`. No body.
+
+Writes off an `open` invoice you have given up collecting. It stays on the books, unlike a void.
+
+<Warning>
+This endpoint never errors. Called on a `draft`, `paid` or `void` invoice it returns `200` with the invoice unchanged. A `200` is not confirmation that the status changed — read `status` on the response.
+</Warning>
+
+### Delete
+
+**`DELETE /billing/invoices/{id}`** — scope `billing:write`.
+
+**Draft only**, and a genuine hard delete: the row and its line items are removed. Returns `204` with no body. An `open` invoice returns `422` `{"error": "Only draft invoices can be deleted"}` — void it instead.
+
+## Invoice lifecycle
+
+| Status | Terminal | Meaning |
+| --- | --- | --- |
+| `draft` | No | Editable and deletable. Not visible to the customer. |
+| `open` | No | Finalized and payable. Locked. |
+| `paid` | Yes | Paid in full. |
+| `void` | Yes | Canceled. |
+| `uncollectible` | Yes | Written off. |
+
+Allowed transitions: `draft` to `open` or `void`; `open` to `paid`, `void` or `uncollectible`. Nothing leaves a terminal state.
+
+Three [webhook events](/api-reference/webhook-endpoints#event-catalogue) fire here: `invoice.finalized`, `invoice.paid` and `invoice.voided`. There is no event for a draft being created or for `uncollectible`. Billing events carry the full invoice object in `data.object`, unlike payment events, which carry a small envelope. Billing events also do **not** fan out to platform accounts.
+
+## Hosted invoice page
+
+Two unauthenticated endpoints back the page the customer opens. They are keyed on `public_token`, not on the invoice id, and require no credential — send the customer the URL, do not proxy these yourself.
+
+**`GET /billing/invoice/{token}`** returns the invoice as the customer sees it: `public_token`, `number`, `formatted_number`, `po_number`, `status`, `currency`, `subtotal_cents`, `discount_cents`, `tax_cents`, `total_cents`, `due_at`, `description`, `notes`, `footer`, `amount_paid_cents`, `merchant_name`, `customer{name, email}`, `line_items[]`, and `payment` — a checkout object, or null if no payment has been started.
+
+**`POST /billing/invoice/{token}/payment_intent`** creates the crypto [payment intent](/api-reference/payments) for the invoice and returns the same body with `payment` populated.
+
+A draft invoice returns `404` `{"error": "Invoice not found"}` on both, since drafts have no token. A non-payable invoice returns `422` on the second.
+
+## Errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `404` | `{"error": "Invoice not found"}` | Unknown id or token. |
+| `404` | `{"error": "Customer not found"}` | Unknown customer id on a customer route. |
+| `422` | `{"error": "Customer not found"}` | Unknown `customer_id` on invoice create. Note this is `422`, not `404`. |
+| `422` | `{"error": "Customer is not active"}` | The customer was soft-deleted. |
+| `422` | `{"error": "Invoice number is already taken"}` | Duplicate `custom_number`. |
+| `409` | `{"error": "A customer with this email already exists"}` | Duplicate email. |
+| `422` | `{"errors": ["Currency can't be blank"]}` | Model validation failure. Note the plural array envelope. |

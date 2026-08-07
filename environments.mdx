@@ -1,89 +1,102 @@
 ---
 title: "Environments"
-description: "Use test mode to develop and validate your integration before accepting real payments."
+description: "Test mode and live mode share one host and are selected by credential. What test mode can and cannot do, and what to check before going live."
 ---
 
-## Test mode vs. live mode
-
-Every Southpay resource exists in either **test mode** or **live mode**. The two environments are completely isolated - test payments, balances, and webhooks never appear in live mode, and vice versa.
+There is **one API host**, `https://api.southpay.io`, and no sandbox subdomain. Mode is carried on the credential you send.
 
 | | Test mode | Live mode |
 | --- | --- | --- |
-| API key prefix | `sp_test_...` | `sp_live_...` |
-| Real funds | No | Yes |
-| On-chain transactions | Synthetic (testnet) | Real blockchain |
-| Webhooks | Delivered normally | Delivered normally |
-| Dashboard toggle | Test | Live |
+| Secret key | `sp_sk_test_…` | `sp_sk_live_…` |
+| Publishable key | `sp_pk_test_…` | `sp_pk_live_…` |
+| Agent credential | `spa_test_…` | `spa_live_…` |
+| OAuth token | `spo_…` issued with `livemode=false` | `spo_…` issued with `livemode=true` |
+| Chain | Ethereum Sepolia | Real chains |
+| Funds | Testnet, worthless | Real |
 
----
+Every query is filtered by the mode on the credential, so the two datasets never mix. Test payments, balances, payouts, webhook endpoints and their signing secrets are all separate records. A test key cannot see a live payment and returns `404` if you ask for one by id.
 
-## Test API keys
+OAuth is not a test-only mechanism. A grant carries the mode chosen at authorize time, and live-mode OAuth tokens work exactly like live API keys. See [Authentication](/authentication#oauth-20).
 
-Create test keys from the dashboard under **Settings → API Keys → Create key → Test**.
+## Test mode has one asset
 
-Test keys work against all the same endpoints as live keys. Payments created with a test key will never settle real funds.
+This is the biggest limitation of test mode and the one that catches integrations at launch.
 
-```bash
-curl https://api.southpay.io/api/v2/payments \
-  -H "Authorization: Bearer sp_test_your_test_key"
-```
+<Warning>
+Test mode gives you **Ethereum Sepolia (`SETH`) and nothing else.** Sepolia USDT and USDC exist in the catalogue but are seeded inactive, so every test payment intent comes back with a single deposit address on Sepolia regardless of which assets your store has enabled in live mode.
 
----
+You cannot test multi-asset checkout, a Bitcoin or Solana deposit, a stablecoin payment, an ERC-20 token flow, or fiat off-ramp eligibility in test mode. Anything that depends on the asset mix has to be validated in live mode with a small real payment.
+</Warning>
 
-## Simulating payment flows
+What test mode does cover well: the intent lifecycle, expiry, webhook signing and delivery, idempotency, scopes and error handling. That is most of an integration.
 
-In test mode, the system uses testnet blockchain networks and simulates on-chain confirmations automatically. You do not need to send real crypto to test the full lifecycle.
+## Paying a test intent
 
-Use the **Test payments** panel in the dashboard to:
-- Trigger a simulated successful payment on any pending intent
-- Simulate an underpayment or overpayment
-- Force-expire an intent
+There is no merchant-facing simulator. Test payments are real transactions on a real testnet, and you complete one the same way a customer would: send Sepolia ETH to the deposit address on the intent.
 
-This lets you validate your webhook handler against every status transition without touching a real blockchain.
+1. Create a payment intent with a test key.
+2. Take `payment_addresses[0].address` and `payment_addresses[0].crypto_amount_atomic` from the response.
+3. Fund a Sepolia wallet from any public faucet.
+4. Send exactly `crypto_amount_atomic / 10 ** 18` ETH to that address.
 
----
+The intent moves `pending → processing → completed` as the transaction confirms, and your webhook endpoint receives each transition. Send less than the required amount to exercise your underpayment path, or leave the intent alone for an hour to exercise expiry.
 
-## Test webhook delivery
+<Note>
+Some support and staff tools can simulate deposits. Those are internal, not exposed to merchants, and not part of the API. If your integration needs a deterministic "make this payment succeed" hook, stub the Southpay client in your own test suite rather than waiting for one.
+</Note>
 
-Send a test event to any registered endpoint:
+## Testing webhooks
+
+Deliveries in test mode are real HTTP requests to a real URL. Your endpoint must be publicly reachable — outbound deliveries to private, loopback, link-local and unique-local addresses are blocked before the request is sent, and the block marks your endpoint `error`. Use a tunnel, not `localhost`.
+
+Fire a synthetic delivery without paying anything:
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/send_test \
-  -H "Authorization: Bearer sp_test_your_key"
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"event_type": "payment_intent.completed"}'
 ```
 
-The delivery is logged and visible in your dashboard. The event type is `payment_intent.completed` with a synthetic payload. Your endpoint should return `2xx`.
-
----
+`event_type` defaults to the first event on the endpoint's subscription list, falling back to `payment_intent.completed`. An unrecognised name returns `422`.
 
 ## Going live
 
-Before switching to live mode:
+Test and live are separate in every dimension, so nothing carries over. Work through this before you flip.
 
-1. **Verify your webhook endpoint** handles all event types and returns `2xx` reliably
-2. **Test idempotency** - retry the same request with the same `Idempotency-Key` and confirm you get the same response
-3. **Generate a live API key** from the dashboard
-4. **Configure a live webhook endpoint** (test and live endpoints are separate)
-5. **Set up a payout destination** - add a fiat or crypto payout detail and activate it
+<Check>
+Before switching to live mode, confirm:
+
+- [ ] A live secret key exists, created in the dashboard, stored in your secrets manager
+- [ ] A **live** webhook endpoint is registered — test endpoints do not receive live events
+- [ ] The live signing secret is deployed; it is a different value from the test one
+- [ ] Your handler verifies `Southpay-Signature` against the raw body with a timing-safe comparison
+- [ ] Your handler returns `2xx` for events it ignores, since [any non-2xx is retried ten times](/webhooks#delivery-and-retries)
+- [ ] Your handler deduplicates on the event `id`
+- [ ] `completed`, `failed`, `expired` and `refunded` all have a code path
+- [ ] Every money-moving `POST` sends an `Idempotency-Key`, and live keys cannot collide with test keys
+- [ ] A [payout destination](/payout-destinations) is configured and selected
+- [ ] The assets you expect are enabled on the store — test mode never showed you this
+</Check>
+
+That last idempotency item is worth spelling out.
 
 <Warning>
-  Live API keys and live webhook signing secrets are different from test ones. Update all environment variables before deploying.
+Reusing an idempotency key across modes fails in a confusing way. The uniqueness constraint on payment intents is per store, not per store and mode, so a key you used in test and then reuse in live returns `404` rather than either creating or replaying. Prefix your keys with the mode.
 </Warning>
 
----
+## Configuration
 
-## Environment variables
+Keep both credential sets in the environment, never in source.
 
-Structure your application to switch modes without code changes:
-
-```bash
-# .env.test
-SOUTHPAY_API_KEY=sp_test_...
-SOUTHPAY_WEBHOOK_SECRET=whsec_...
-
-# .env.production
-SOUTHPAY_API_KEY=sp_live_...
+```bash .env.test
+SOUTHPAY_API_KEY=sp_sk_test_...
 SOUTHPAY_WEBHOOK_SECRET=whsec_...
 ```
 
-Never commit secrets to version control. Use a secrets manager or your deployment platform's secret injection.
+```bash .env.production
+SOUTHPAY_API_KEY=sp_sk_live_...
+SOUTHPAY_WEBHOOK_SECRET=whsec_...
+```
+
+Because the host and paths are identical in both modes, switching environments is a credential swap. If your staging deploy is pointing at live data, the key is the only thing that told it to.

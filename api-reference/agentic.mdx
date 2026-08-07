@@ -1,387 +1,375 @@
 ---
-title: "Agentic"
-description: "The agent-facing API: account, payments, refunds, tokens, balances, payouts, limits, rates, mandates, and x402 settlements."
+title: "Agentic API"
+description: "REST reference for agent credentials: payments, refunds, payouts, mandates, x402 settlements, token control, balances and market data."
+sidebarTitle: "Agentic API"
 ---
 
-Base URL: `https://api.southpay.io/api/v2/agentic`
+The agentic API is a separate surface for autonomous agents acting on a store's behalf. It lives under `/api/v2/agentic`, accepts only `spa_` agent credentials, and returns records the calling credential created — an agent never sees another agent's payments or payouts.
 
-Every endpoint authenticates with an [agent credential](/agentic/agent-credentials) bearer token. Mode (live vs test) and store are implicit in the credential.
+For how credentials are issued and how authorization providers work, see [agent credentials](/agentic/agent-credentials) and [authorization](/agentic/authorization). This page is the endpoint reference.
 
+Paths are relative to `https://api.southpay.io/api/v2`.
+
+## Authentication
+
+```http
+Authorization: Bearer spa_live_…
 ```
-Authorization: Bearer spa_test_...
-```
 
-Headers used across this namespace:
+Only credentials matching `spa_live_` or `spa_test_` are accepted. API keys and OAuth tokens are rejected on every path here, and agent credentials are rejected everywhere else.
 
-| Header | Required on | Purpose |
+| Status | Body | Cause |
 | --- | --- | --- |
-| `Authorization` | All requests | `Bearer spa_live_...` or `Bearer spa_test_...` |
-| `Idempotency-Key` | `POST` payouts, refunds, x402 settlements (optional on payments) | Deduplicates retries; same key returns the original record |
-| `X-Mandate` | Gated actions when an authorization provider is enabled | Base64-encoded JSON mandate presentation, max 32 KB |
+| `401` | `{"error": {"message": "Agent credential required", "code": "agent_credential_required"}}` | Missing or non-`spa_` token. |
+| `401` | `{"error": {"message": "Invalid or revoked agent credential", "code": "invalid_agent_credential"}}` | Unknown, expired or revoked credential. |
+| `403` | `{"error": {"message": "Insufficient scope: payments:write required", "code": "insufficient_scope"}}` | Credential lacks the scope. |
 
-Errors use the envelope `{"error": {"message": "...", "code": "..."}}`. The full code table, including the authorization denials (`mandate_required`, `payout_controls_required`, `authorization_denied`, cap codes), is in [Agent authorization](/agentic/authorization#error-codes). Requests are rate limited to 120 per minute per credential (`429 rate_limited`).
+Every response on this surface uses the structured envelope `{"error": {"message": …, "code": …}}`. That is unlike the rest of the API, where the flat `{"error": "<string>"}` form is the common case.
 
-Payments, payouts, refunds, mandates, and settlements are scoped to the credential that created them: an agent only sees its own records.
+### Scopes
 
----
+Eight agent scopes exist: `payments:read`, `payments:write`, `payouts:read`, `payouts:write`, `assets:read`, `assets:write`, `x402:read`, `x402:write`.
 
-## Account
+### Rate limit
 
-### Get account
+120 requests per minute per credential across all agentic paths except market data. Over the limit you get `429` `{"error": {"message": "Too many requests", "code": "rate_limited"}}`. No `Retry-After` header is set — back off on your own schedule.
 
-Scope: any valid credential.
+## What the default authorization provider blocks
+
+Read this before you write any agent that moves money.
+
+`AuthorizationProvider` is chosen by the `agent_authorization` store feature flag, which only Southpay staff can set. With no flag — the default for every store — payments work and most other writes are **hard-blocked at `403`**.
+
+| Action | Default behaviour |
+| --- | --- |
+| `POST /agentic/payments` | Allowed. No mandate needed. |
+| `POST /agentic/payments/{id}/cancel` | Allowed. |
+| `POST /agentic/payments/{id}/refunds` | `403` `mandate_required` |
+| `PATCH /agentic/tokens/{asset_id}` | `403` `mandate_required` |
+| `POST /agentic/mandates` | `403` `mandate_required` |
+| `POST /agentic/x402/settlements` | `403` `mandate_required` |
+| `POST /agentic/payouts` | `403` `payout_controls_required`, unless a spend limit exists for that asset |
+
+<Warning>
+Mandates are not optional hardening. Four write paths cannot be used at all without a configured authorization provider, and there is no API to configure one. If your agent needs refunds, token control or x402 settlement, talk to support before you build against them. Payouts are the one exception: an agent spend limit set in the dashboard unblocks them without a provider.
+</Warning>
+
+## Read agent context
+
+**`GET /agentic/account`** — no scope required. Call this first: it tells you which store you are on, which mode, what you are allowed to do, and whether mandates are available.
 
 <CodeGroup>
 ```bash Request
-GET /agentic/account
-Authorization: Bearer spa_test_...
+curl https://api.southpay.io/api/v2/agentic/account \
+  -H "Authorization: Bearer spa_live_…"
 ```
 
 ```json Response 200
 {
   "store": {
-    "id": "01HW...",
-    "name": "Acme Store",
+    "id": "1a2b3c4d-5e6f-4708-9a1b-2c3d4e5f6071",
+    "name": "Blue Harbour Coffee",
     "kyc_confirmed": true
   },
-  "mode": "test",
-  "livemode": false,
+  "mode": "live",
+  "livemode": true,
   "agent": {
-    "name": "Support bot",
-    "principal": "claude@yourcompany.com",
-    "token_prefix": "spa_test_4f6a9c1e",
-    "scopes": ["payments:read", "payments:write"],
-    "last_used_at": "2026-07-12T11:58:00.000Z",
-    "expires_at": null
+    "name": "checkout-agent",
+    "principal": "ops@example.com",
+    "token_prefix": "spa_live_4a2c9f1b",
+    "scopes": ["payments:read", "payments:write", "assets:read"],
+    "last_used_at": "2026-05-12T08:59:12.000Z",
+    "expires_at": "2026-11-12T00:00:00.000Z"
   },
   "authorization": {
-    "provider": "<provider>",
-    "mandates": true
+    "provider": "NullAuthorizationProvider",
+    "mandates": false
   },
-  "accepted_assets_count": 3
+  "accepted_assets_count": 6
 }
 ```
 </CodeGroup>
 
-`authorization.mandates` tells the agent whether mandate-gated actions can succeed on this store.
+<ResponseField name="mode" type="string" required>
+  `"live"` or `"test"`, derived from the credential prefix. There is no separate sandbox host.
+</ResponseField>
 
----
+<ResponseField name="authorization" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="provider" type="string">
+      The provider class name. `"NullAuthorizationProvider"` means no provider is configured.
+    </ResponseField>
+    <ResponseField name="mandates" type="boolean">
+      False when the null provider is active. Treat false as "refunds, token changes, mandates and x402 will all return 403".
+    </ResponseField>
+  </Expandable>
+</ResponseField>
 
-## Payments
+## Create a payment
 
-Payment lifecycle: `pending`, then `processing`, then `completed`, with terminal alternatives `expired`, `failed`, `refunded`, and `overpaid`. The `terminal` field on each payment indicates whether the status is final.
+**`POST /agentic/payments`** — scope `payments:write`. `Idempotency-Key` optional.
 
-### Create a payment
+The same `payment_intent` envelope as [the public endpoint](/api-reference/payments#create-a-payment-intent), but a smaller field set and stricter amount validation. `title`, `description`, `image_url` and `line_items` are **not** accepted here.
 
-Scope: `payments:write`. Verified through the authorization provider when one is enabled; allowed by default otherwise.
+<ParamField body="payment_intent.amount" type="string" required>
+  Fiat major units. Must be finite, positive, at most 2 decimal places, and at most `100000000.00`.
+</ParamField>
+
+<ParamField body="payment_intent.currency" type="string" required>
+  One of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK`, `NOK`.
+</ParamField>
+
+<ParamField body="payment_intent.order_id" type="string" />
+<ParamField body="payment_intent.success_url" type="string" />
+<ParamField body="payment_intent.failed_url" type="string" />
+
+<ParamField body="payment_intent.metadata" type="object">
+  At most 50 keys. Every value must be a string.
+</ParamField>
 
 <CodeGroup>
 ```bash Request
-POST /agentic/payments
-Authorization: Bearer spa_test_...
-Idempotency-Key: order-1042
-Content-Type: application/json
-
-{
-  "payment_intent": {
-    "amount": "49.99",
-    "currency": "USD",
-    "order_id": "ORDER-1042",
-    "success_url": "https://yourapp.com/thanks",
-    "failed_url": "https://yourapp.com/failed",
-    "metadata": { "cart_id": "c_812" }
-  }
-}
+curl -X POST https://api.southpay.io/api/v2/agentic/payments \
+  -H "Authorization: Bearer spa_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payment_intent": {
+      "amount": "12.50",
+      "currency": "EUR",
+      "order_id": "agent_order_77",
+      "metadata": { "session": "sess_9f2a" }
+    }
+  }'
 ```
 
 ```json Response 201
 {
-  "id": "01HZ...",
-  "reference": "SPX7K2M9",
+  "id": "7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f",
+  "reference": "A1B2C3D4E5F6G7H8",
+  "hosted_url": "https://pay.southpay.io/A1B2C3D4E5F6G7H8",
   "status": "pending",
   "state_reason": null,
-  "settlement_amount": "49.99",
-  "settlement_currency": "USD",
-  "order_id": "ORDER-1042",
-  "title": null,
-  "description": null,
+  "settlement_currency": "EUR",
+  "settlement_amount": "12.50",
+  "settlement_status": null,
+  "auto_swap_status": null,
+  "reconciliation_status": null,
   "terminal": false,
-  "hosted_url": "https://pay.southpay.io/SPX7K2M9",
-  "success_url": "https://yourapp.com/thanks",
-  "failed_url": "https://yourapp.com/failed",
-  "expires_at": "2026-07-12T13:00:00.000Z",
-  "created_at": "2026-07-12T12:00:00.000Z",
+  "expires_at": "2026-05-12T10:00:00.000Z",
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "order_id": "agent_order_77",
   "payment_addresses": [
     {
-      "id": "01HZ...",
-      "address": "0x8f3C...",
+      "id": "2f9d8c7b-6a5e-4d3c-2b1a-0f9e8d7c6b5a",
+      "address": "0x9a3f…c2d1",
       "status": "pending",
-      "crypto_amount_atomic": "49990000",
-      "exchange_rate_snapshot": { "rate": "1.0", "source": "..." },
+      "crypto_amount_atomic": "12500000",
+      "exchange_rate_snapshot": "1.000000000000000000",
+      "created_at": "2026-05-12T09:00:00.000Z",
       "supported_asset": {
         "asset_id": "ETH_USDC",
         "coin_symbol": "USDC",
         "chain_symbol": "ETH",
         "atomic_decimals": 6
-      },
-      "created_at": "2026-07-12T12:00:00.000Z"
+      }
     }
   ]
 }
 ```
 </CodeGroup>
 
-| Field | Notes |
-| --- | --- |
-| `amount` | Required. Decimal string, positive, at most 2 decimal places, max 100,000,000.00 (`invalid_amount`, `amount_too_large`) |
-| `currency` | Required. Fiat pricing currency (`invalid_currency`, `unsupported_currency`) |
-| `order_id`, `success_url`, `failed_url` | Optional |
-| `metadata` | Optional. Max 50 keys, string values only (`invalid_metadata`) |
+<Warning>
+`exchange_rate_snapshot` is a plain decimal string, not an object. There is no `{rate, source}` shape on a payment address.
+</Warning>
 
-If the provider denies the action: `403` with `authorization_denied`.
+The intent expires 60 minutes after creation. Send the customer to `hosted_url` and pay the exact `crypto_amount_atomic` to `address`.
 
-### List payments
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `invalid_amount` | Missing, non-numeric, non-finite, non-positive, or more than 2 decimal places. |
+| `422` | `amount_too_large` | Above `100000000.00`. |
+| `422` | `invalid_currency` | `currency` blank. |
+| `422` | `unsupported_currency` | Not one of the ten payment currencies. |
+| `422` | `invalid_metadata` | Over 50 keys, or a non-string value. |
+| `403` | `authorization_denied` | The provider refused. Message is `Payment not authorized: <reason>`. |
 
-Scope: `payments:read`.
+## Retrieve a payment
 
-<CodeGroup>
-```bash Request
-GET /agentic/payments?page=1&per_page=10&reference=SPX7K2M9
-Authorization: Bearer spa_test_...
-```
+**`GET /agentic/payments/{id}`** — scope `payments:read`. Returns the detail view, identical in shape to [the public retrieve endpoint](/api-reference/payments#retrieve-a-payment-intent): `financials`, `transaction`, `overpayment`, `merchant`, `payment_events`, `timeline` and the rest.
+
+An id the credential did not create returns `404`.
+
+## List payments
+
+**`GET /agentic/payments`** — scope `payments:read`. Only this credential's payments, newest first.
+
+<ParamField query="reference" type="string">
+  Exact match on the 16-character reference. Upcased before matching.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="10">
+  Between 1 and 100.
+</ParamField>
 
 ```json Response 200
 {
-  "data": [
-    {
-      "id": "01HZ...",
-      "status": "completed",
-      "state_reason": null,
-      "settlement_amount": "49.99",
-      "settlement_currency": "USD",
-      "order_id": "ORDER-1042",
-      "terminal": true,
-      "settlement_status": "settled",
-      "created_at": "2026-07-12T12:00:00.000Z"
-    }
-  ],
+  "data": [ { "id": "7b1f0c2e-…", "reference": "A1B2C3D4E5F6G7H8", "status": "completed", "…": "…" } ],
   "meta": { "total": 1, "page": 1, "per_page": 10, "total_pages": 1 }
 }
 ```
-</CodeGroup>
 
-`per_page` max 100. `reference` filters by the customer-facing payment reference.
+Agentic payments use the `meta` envelope. Agentic payouts and x402 settlements use `pagination`, and refunds and mandates return `data` with no page information at all.
 
-### Get a payment
+## Cancel a payment
 
-Scope: `payments:read`.
+**`POST /agentic/payments/{id}/cancel`** — scope `payments:write`. No body.
 
-```bash
-GET /agentic/payments/{id}
+Only a `pending` intent can be canceled. The intent moves to `status: "expired"` with `state_reason: "canceled_by_agent"`, and `200` returns the full detail view.
+
+```json Response 200
+{
+  "id": "7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f",
+  "status": "expired",
+  "state_reason": "canceled_by_agent",
+  "terminal": true,
+  "…": "…"
+}
 ```
 
-Returns the payment with addresses plus detail fields (`line_items`, `fee`, `financials` once funds are received).
+| Status | Code | Body message |
+| --- | --- | --- |
+| `422` | `not_cancelable` | `Only pending payments can be canceled (status is 'completed')` |
 
-### Cancel a payment
+<Note>
+Cancellation emits `payment_intent.canceled`, but that event is not in the subscribable catalogue, so no [webhook endpoint](/api-reference/webhook-endpoints#event-catalogue) can receive it. To observe agent cancellations, poll for `status: "expired"` with `state_reason: "canceled_by_agent"`.
+</Note>
 
-Scope: `payments:write`. Only `pending` payments can be canceled; otherwise `422` with `not_cancelable`.
+## Refund a payment
 
-```bash
-POST /agentic/payments/{id}/cancel
-```
+**`POST /agentic/payments/{payment_intent_id}/refunds`** — scope `payments:write`. `Idempotency-Key` **required**.
 
-Returns the payment, now terminal.
+<ParamField body="refund.amount" type="string">
+  Decimal major units of the asset. Omit for a full refund.
+</ParamField>
 
----
+<ParamField body="refund.asset_id" type="string">
+  Required when the payment received more than one asset.
+</ParamField>
 
-## Refunds
+There is no `destination_address` here — an agent cannot redirect a refund. Funds go back to the paying address.
 
-### Create a refund
+Returns `201` with `{"data": [ … ]}`, an array of [refund objects](/api-reference/refunds#response-fields), one per asset. `GET` on the same path lists existing refunds in the same wrapper, unpaginated.
 
-Scope: `payments:write`. **Mandate-gated**: without an authorization provider this returns `403 mandate_required`; with one, the action is verified per request. `Idempotency-Key` required.
+Unlike the merchant refund endpoint, this one returns **machine-readable codes**:
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `idempotency_key_required` | Header missing. |
+| `403` | `mandate_required` | No authorization provider configured. Message: `Refunding a payment requires a configured authorization provider (mandate)`. |
+| `403` | `authorization_denied` | The provider refused. |
+| `422` | `not_refundable` | Status is not `completed`, `failed` or `expired`. |
+| `422` | `nothing_to_refund` | No confirmed funds remain. |
+| `422` | `invalid_amount` | Amount unparseable, or above the refundable balance, or sent for a non-`completed` intent. |
+| `404`/`422` | `asset_not_found` | `asset_id` does not match a confirmed deposit. |
+| `422` | `ambiguous_asset` | Multi-asset payment without `asset_id`. |
+| `422` | `invalid_destination` | The paying address is missing or fails validation. |
+| `422` | `insufficient_balance` | Store ledger balance is short. |
+
+## Create a payout
+
+**`POST /agentic/payouts`** — scope `payouts:write`. `Idempotency-Key` **required**.
+
+Crypto only, to a raw address. Agents cannot use saved payout destinations and cannot off-ramp to fiat. Parameters are top-level.
+
+<ParamField body="asset_id" type="string" required>
+  Active asset in the credential's mode.
+</ParamField>
+
+<ParamField body="amount_atomic" type="string" required>
+  Atomic units. Must be positive.
+</ParamField>
+
+<ParamField body="destination_address" type="string" required>
+  Where the funds go. Must be valid for the asset's chain.
+</ParamField>
 
 <CodeGroup>
 ```bash Request
-POST /agentic/payments/{payment_id}/refunds
-Authorization: Bearer spa_live_...
-Idempotency-Key: refund-order-1042
-X-Mandate: <base64 presentation>
-Content-Type: application/json
-
-{
-  "refund": {
-    "amount": "49.99",
-    "asset_id": "ETH_USDC"
-  }
-}
+curl -X POST https://api.southpay.io/api/v2/agentic/payouts \
+  -H "Authorization: Bearer spa_live_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: agent_payout_0041" \
+  -d '{
+    "asset_id": "ETH_USDC",
+    "amount_atomic": "5000000",
+    "destination_address": "0xabcd…"
+  }'
 ```
 
 ```json Response 201
 {
-  "data": [
-    {
-      "id": "01HZ...",
-      "status": "pending",
-      "amount_atomic": "49990000",
-      "asset_id": "ETH_USDC"
-    }
-  ]
-}
-```
-</CodeGroup>
-
-`amount` and `asset_id` are optional; omitting them refunds the full received amount.
-
-### List refunds
-
-Scope: `payments:read`.
-
-```bash
-GET /agentic/payments/{payment_id}/refunds
-```
-
----
-
-## Tokens
-
-### List tokens
-
-Scope: `assets:read`. Test credentials see testnet assets, live credentials mainnet.
-
-<CodeGroup>
-```bash Request
-GET /agentic/tokens
-Authorization: Bearer spa_test_...
-```
-
-```json Response 200
-{
-  "accepted": [
-    { "asset_id": "ETH_USDC", "coin_symbol": "USDC", "chain_symbol": "ETH", "active": true }
-  ],
-  "available": [
-    { "asset_id": "BTC", "coin_symbol": "BTC", "chain_symbol": "BTC", "active": false }
-  ]
-}
-```
-</CodeGroup>
-
-### Enable or disable a token
-
-Scope: `assets:write`. **Mandate-gated** (`mandate_required` without a provider, `authorization_denied` on denial).
-
-<CodeGroup>
-```bash Request
-PATCH /agentic/tokens/BTC
-Authorization: Bearer spa_live_...
-X-Mandate: <base64 presentation>
-Content-Type: application/json
-
-{ "active": true }
-```
-
-```json Response 200
-{ "asset_id": "BTC", "active": true, "provider": "<provider>" }
-```
-</CodeGroup>
-
----
-
-## Balances
-
-### List balances
-
-Scope: `assets:read`.
-
-<CodeGroup>
-```bash Request
-GET /agentic/balances?asset_id=ETH_USDC
-Authorization: Bearer spa_test_...
-```
-
-```json Response 200
-{
-  "balances": [
-    {
-      "asset_id": "ETH_USDC",
-      "coin_symbol": "USDC",
-      "chain_symbol": "ETH",
-      "atomic_decimals": 6,
-      "balance_atomic": "125000000"
-    }
-  ],
-  "settlement_balance": { "currency": "EUR", "amount_cents": 11530 }
-}
-```
-</CodeGroup>
-
-`settlement_balance` estimates the store's stablecoin holdings (USDC, USDT) in its settlement currency at current rates; `amount_cents` is `null` if rates are unavailable.
-
----
-
-## Payouts
-
-Payout statuses: `pending`, `submitted`, `confirmed`, `failed`, `retrying`, `requires_review` (see [Payouts](/api-reference/payouts#payout-lifecycle)).
-
-### Create a payout
-
-Scope: `payouts:write`. **Fail-closed**: denied unless a [spend limit](/agentic/agent-credentials#spend-limits) exists for the asset or an authorization provider approves the payout. `Idempotency-Key` required.
-
-<CodeGroup>
-```bash Request
-POST /agentic/payouts
-Authorization: Bearer spa_live_...
-Idempotency-Key: payout-2026-07-12-01
-Content-Type: application/json
-
-{
-  "asset_id": "ETH_USDC",
-  "amount_atomic": "25000000",
-  "destination_address": "0x9aB4..."
-}
-```
-
-```json Response 201
-{
-  "id": "01HZ...",
+  "id": "0a1b2c3d-4e5f-4061-8273-849506172839",
   "status": "pending",
   "payout_rail": "crypto",
-  "amount_atomic": "25000000",
-  "destination_address": "0x9aB4...",
+  "amount_atomic": "5000000",
+  "amount_decimal": "5",
+  "destination_address": "0xabcd…",
+  "tx_hash": null,
+  "state_transitions": [
+    { "from": null, "to": "pending", "at": "2026-05-12T09:00:00Z", "note": null }
+  ],
+  "failure_reason": null,
+  "failure_code": null,
   "livemode": true,
-  "asset": {
-    "asset_id": "ETH_USDC",
-    "coin_symbol": "USDC",
-    "chain_symbol": "ETH",
-    "atomic_decimals": 6
-  },
-  "created_at": "2026-07-12T12:00:00.000Z"
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z",
+  "asset": { "asset_id": "ETH_USDC", "coin_symbol": "USDC", "chain_symbol": "ETH", "atomic_decimals": 6 }
 }
 ```
 </CodeGroup>
 
-Error responses: `403 payout_controls_required` (no controls for this asset), `403 authorization_denied` (provider denial), `403 per_tx_cap_exceeded` / `daily_cap_exceeded` (over a spend cap), `422 payout_rejected` (insufficient balance or below minimum), `404 asset_not_found`, `422 invalid_amount` / `destination_required`.
+The response is the same [payout object](/api-reference/payouts#response-fields) merchants see.
 
-### List and get payouts
+Idempotency keys are namespaced per credential, so two agents can use the same key without colliding.
 
-Scope: `payouts:read`.
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `idempotency_key_required` | Header missing. |
+| `404` | `asset_not_found` | Unknown or inactive asset. |
+| `422` | `invalid_amount` | `amount_atomic` not positive. |
+| `422` | `destination_required` | `destination_address` blank. |
+| `403` | `payout_controls_required` | No provider **and** no spend limit for this asset. Message: `Agent payouts require a configured authorization provider or a spend limit on this asset`. |
+| `403` | `authorization_denied` | The provider refused. |
+| `403` | `per_tx_cap_exceeded` | Above the per-transaction limit. |
+| `403` | `daily_cap_exceeded` | Above the remaining daily limit. |
+| `422` | `payout_rejected` | Insufficient balance or below the network minimum. |
 
-```bash
-GET /agentic/payouts?page=1&per_page=25
-GET /agentic/payouts/{id}
+Check headroom before you call, with [payout limits](#read-payout-limits).
+
+## Retrieve and list payouts
+
+**`GET /agentic/payouts/{id}`** — scope `payouts:read`. Bare payout object. Unknown id returns `404` `not_found`.
+
+**`GET /agentic/payouts`** — scope `payouts:read`. Accepts `page` (default 1) and `per_page` (default 25, max 100).
+
+```json Response 200
+{
+  "data": [ { "id": "0a1b2c3d-…", "status": "confirmed", "…": "…" } ],
+  "pagination": { "page": 1, "per_page": 25, "total": 1, "total_pages": 1 }
+}
 ```
 
-The list response wraps records in `data` with a `pagination` object (`page`, `per_page`, `total`, `total_pages`). `per_page` max 100.
+## Read payout limits
 
-### Payout limits
+**`GET /agentic/payout_limits`** — scope `assets:read`.
 
-Scope: `assets:read`. Returns the credential's spend caps and live headroom for the current UTC day. Call this before creating payouts.
+Spend caps and remaining headroom for the current UTC day. Call this before a payout rather than discovering a cap through a `403`.
 
-<CodeGroup>
-```bash Request
-GET /agentic/payout_limits?asset_id=ETH_USDC
-Authorization: Bearer spa_live_...
-```
+<ParamField query="asset_id" type="string">
+  Limit the response to one asset.
+</ParamField>
 
 ```json Response 200
 {
@@ -391,33 +379,65 @@ Authorization: Bearer spa_live_...
       "coin_symbol": "USDC",
       "chain_symbol": "ETH",
       "atomic_decimals": 6,
-      "per_tx_cap_atomic": "50000000",
-      "daily_cap_atomic": "200000000",
-      "daily_spent_atomic": "25000000",
-      "daily_remaining_atomic": "175000000",
+      "per_tx_cap_atomic": "10000000",
+      "daily_cap_atomic": "50000000",
+      "daily_spent_atomic": "12000000",
+      "daily_remaining_atomic": "38000000",
       "controls_configured": true
     }
   ],
-  "utc_day": "2026-07-12"
+  "utc_day": "2026-05-12"
 }
 ```
-</CodeGroup>
 
-An asset with no configured limit does not appear; absence means payouts for it will fail with `payout_controls_required` unless an authorization provider approves them.
+<ResponseField name="controls_configured" type="boolean" required>
+  False when neither cap is set. With the default authorization provider, false here means `POST /agentic/payouts` will return `403` `payout_controls_required` for this asset.
+</ResponseField>
 
----
+<ResponseField name="daily_remaining_atomic" type="string | null">
+  Null when there is no daily cap, meaning unlimited rather than zero.
+</ResponseField>
 
-## Exchange rates
+Counters reset at 00:00 UTC. `utc_day` tells you which day the figures belong to.
 
-### List exchange rates
+## Read balances
 
-Scope: `assets:read`. Returns Southpay's own rates, the ones applied when pricing a payment. Defaults to the store's settlement currency and all accepted assets.
+**`GET /agentic/balances`** — scope `assets:read`.
 
-<CodeGroup>
-```bash Request
-GET /agentic/exchange_rates?currency=EUR&asset_id=ETH_USDC
-Authorization: Bearer spa_test_...
+<ParamField query="asset_id" type="string">
+  Filter the `balances` array. `settlement_balance` is always computed across all assets regardless.
+</ParamField>
+
+```json Response 200
+{
+  "balances": [
+    {
+      "asset_id": "ETH_USDC",
+      "coin_symbol": "USDC",
+      "chain_symbol": "ETH",
+      "atomic_decimals": 6,
+      "balance_atomic": "1499870000"
+    }
+  ],
+  "settlement_balance": { "currency": "EUR", "amount_cents": 137940 }
+}
 ```
+
+This differs from the merchant [balances endpoint](/api-reference/balances): there is no `stablecoin_summary`, and an `asset_id` filter is available. `amount_cents` is null when a rate could not be resolved.
+
+## Read exchange rates
+
+**`GET /agentic/exchange_rates`** — scope `assets:read`.
+
+Southpay's own rates — the ones applied when pricing a payment. For public market data, use [market data](#market-data) instead.
+
+<ParamField query="currency" type="string">
+  Fiat currency to quote against. Defaults to the store's settlement currency.
+</ParamField>
+
+<ParamField query="asset_id" type="string">
+  Quote a single asset instead of all accepted assets.
+</ParamField>
 
 ```json Response 200
 {
@@ -428,36 +448,234 @@ Authorization: Bearer spa_test_...
       "coin_symbol": "USDC",
       "chain_symbol": "ETH",
       "currency": "EUR",
-      "rate": "0.9229",
-      "source": "<rate source>"
+      "rate": "0.9176",
+      "source": "coingecko"
     }
   ]
 }
 ```
-</CodeGroup>
 
----
+`rate` is a string. Assets whose rate cannot be resolved are omitted from the array rather than returned with a null rate — so a shorter list than you expected is a lookup failure, not an empty balance.
 
-## Session mandates
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `unsupported_currency` | Not one of the ten payment currencies. |
+| `404` | `asset_not_found` | Unknown or inactive `asset_id`. |
 
-Capped spending envelopes for x402 flows. Scope: `x402:read` / `x402:write`. Issuance is mandate-gated; see [x402 and session mandates](/agentic/x402) for the full flow and field reference.
+## Manage accepted tokens
 
-```bash
-POST /agentic/mandates
-GET  /agentic/mandates
-GET  /agentic/mandates/{id}
+**`GET /agentic/tokens`** — scope `assets:read`.
+
+```json Response 200
+{
+  "accepted": [
+    { "asset_id": "ETH_USDC", "coin_symbol": "USDC", "chain_symbol": "ETH", "active": true }
+  ],
+  "available": [
+    { "asset_id": "TRON_USDT", "coin_symbol": "USDT", "chain_symbol": "TRON", "active": false }
+  ]
+}
 ```
 
-Create parameters: `asset_id`, `mandate_ref`, `total_cap_atomic` (all required), `per_call_cap_atomic`, `expires_in_seconds` (default 3600), `scope` (default `x402`). Mandate statuses: `active`, `revoked`, `expired`, `exhausted`. The list endpoint returns the credential's 100 most recent mandates in `data`.
+`accepted` is what customers can currently pay with. `available` is everything else active in this mode. The two arrays never overlap, and `active` mirrors which array the entry is in.
+
+**`PATCH /agentic/tokens/{asset_id}`** — scope `assets:write`.
+
+<ParamField body="active" type="boolean" required>
+  True to accept the asset, false to stop accepting it.
+</ParamField>
+
+```json Response 200
+{
+  "asset_id": "TRON_USDT",
+  "active": true,
+  "provider": "HumanosAuthorizationProvider"
+}
+```
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `invalid_active` | `active` is not a boolean. |
+| `404` | `asset_not_found` | Unknown asset. |
+| `403` | `mandate_required` | No authorization provider. Message: `Managing accepted tokens requires a configured authorization provider (mandate)`. |
+| `403` | `authorization_denied` | The provider refused. |
+| `422` | `asset_change_rejected` | The store rejected the change, for example the last accepted asset cannot be removed. |
+
+## Mandates
+
+A mandate is a signed spending envelope an agent draws down against, used by x402 settlements. Concepts are covered in the [authorization guide](/agentic/authorization).
+
+**`POST /agentic/mandates`** — scope `x402:write`. Parameters are top-level.
+
+<ParamField body="asset_id" type="string" required>
+  Asset the cap is denominated in.
+</ParamField>
+
+<ParamField body="total_cap_atomic" type="string" required>
+  Total the mandate may spend, in atomic units. Must be positive.
+</ParamField>
+
+<ParamField body="mandate_ref" type="string" required>
+  Your reference for this mandate. Settlements name it to draw against the envelope.
+</ParamField>
+
+<ParamField body="per_call_cap_atomic" type="string">
+  Ceiling for any single settlement.
+</ParamField>
+
+<ParamField body="scope" type="string" default="x402">
+  What the mandate authorizes.
+</ParamField>
+
+<ParamField body="expires_in_seconds" type="integer" default="3600">
+  Lifetime from creation.
+</ParamField>
+
+```json Response 201
+{
+  "id": "f0a1b2c3-d4e5-4f60-8172-839405162738",
+  "scope": "x402",
+  "mandate_ref": "session-9f2a",
+  "status": "active",
+  "asset_id": "ETH_USDC",
+  "total_cap_atomic": "50000000",
+  "per_call_cap_atomic": "1000000",
+  "spent_atomic": "0",
+  "remaining_atomic": "50000000",
+  "authorization_provider": "HumanosAuthorizationProvider",
+  "expires_at": "2026-05-12T10:00:00.000Z",
+  "revoked_at": null,
+  "livemode": true,
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z"
+}
+```
+
+`status` is `active`, `revoked`, `expired` or `exhausted`. `remaining_atomic` is the figure to check before settling.
+
+**`GET /agentic/mandates`** — scope `x402:read`. Returns `{"data": [ … ]}`, capped at 100 and **not paginated** — there are no page parameters and no total.
+
+**`GET /agentic/mandates/{id}`** — scope `x402:read`. Bare mandate object. Unknown id returns `404` `not_found`.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `404` | `asset_not_found` | Unknown asset. |
+| `422` | `invalid_cap` | `total_cap_atomic` not positive. |
+| `422` | `mandate_ref_required` | `mandate_ref` blank. |
+| `403` | `mandate_required` | No authorization provider. Message: `Session mandates require a configured authorization provider`. |
+| `403` | `authorization_denied` | The provider refused. |
 
 ## x402 settlements
 
-Per-call draws against a session mandate. Scope: `x402:read` / `x402:write`. `Idempotency-Key` required on create.
+**`POST /agentic/x402/settlements`** — scope `x402:write`. `Idempotency-Key` **required**. Parameters are top-level.
 
-```bash
-POST /agentic/x402/settlements
-GET  /agentic/x402/settlements?page=1&per_page=25
-GET  /agentic/x402/settlements/{id}
+<ParamField body="asset_id" type="string" required />
+
+<ParamField body="amount_atomic" type="string" required>
+  Atomic units. **Zero is accepted** — the check rejects negatives only.
+</ParamField>
+
+<ParamField body="mandate_ref" type="string" required>
+  The mandate to draw against. Must be active, unexpired and have headroom.
+</ParamField>
+
+<ParamField body="nonce" type="string">
+  Replay guard. Generated for you if omitted.
+</ParamField>
+
+<ParamField body="pay_to" type="string">
+  Recipient identifier from the x402 challenge.
+</ParamField>
+
+<ParamField body="payer" type="string">
+  Payer identifier.
+</ParamField>
+
+<ParamField body="requirements" type="object">
+  The raw requirements object from the x402 challenge, stored alongside the settlement.
+</ParamField>
+
+```json Response 201
+{
+  "id": "a1b2c3d4-e5f6-4071-8283-940516273849",
+  "status": "pending",
+  "asset_id": "ETH_USDC",
+  "amount_atomic": "250000",
+  "mandate_ref": "session-9f2a",
+  "nonce": "3f2a91c8b7d64e05",
+  "pay_to": "0xabcd…",
+  "payer": "0x1234…",
+  "tx_ref": null,
+  "failure_reason": null,
+  "livemode": true,
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z"
+}
 ```
 
-Create parameters: `asset_id`, `mandate_ref`, `amount_atomic` (required, non-negative), `nonce`, `pay_to`, `payer`, `requirements` (optional). Errors: `403 mandate_required`, `403 spend_cap_exceeded`, `422 insufficient_balance`. Settlements are created with status `submitted`; see [settlement status](/agentic/x402#settlement-status) for what that does and does not mean.
+<Warning>
+Settlements are ledger-only by default. On-chain dispatch is behind the `x402_onchain_dispatch` store feature flag, which is off unless staff enable it. A `confirmed` settlement without the flag means the internal ledger moved, not that a transaction was broadcast — `tx_ref` stays null.
+</Warning>
+
+`status` is `pending`, `submitted`, `confirmed` or `failed`.
+
+**`GET /agentic/x402/settlements`** — scope `x402:read`. Accepts `page` and `per_page` (default 25, max 100), and returns the `pagination` envelope.
+
+**`GET /agentic/x402/settlements/{id}`** — scope `x402:read`. Unknown id returns `404` `not_found`.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `idempotency_key_required` | Header missing. |
+| `404` | `asset_not_found` | Unknown asset. |
+| `422` | `invalid_amount` | Negative amount. Message: `amount_atomic must be zero or positive`. |
+| `422` | `mandate_ref_required` | `mandate_ref` blank. |
+| `403` | `mandate_required` | No usable mandate. Either `An active session mandate is required to settle x402 charges` or `The session mandate is expired, revoked, or exhausted`. |
+| `403` | `spend_cap_exceeded` | Over the per-call cap, or over the mandate's remaining envelope. |
+| `422` | `insufficient_balance` | Store balance is short. |
+
+## Market data
+
+**`GET /agentic/market_data`** — **unauthenticated**. No credential, no scope.
+
+Public reference prices from CoinGecko. It touches no Southpay funds and reads no store data, which is why it needs no credential.
+
+<ParamField query="symbol_or_id" type="string" required>
+  Ticker or CoinGecko id, for example `btc` or `bitcoin`.
+</ParamField>
+
+<ParamField query="vs_currency" type="string" default="usd">
+  Currency to quote in.
+</ParamField>
+
+```json Response 200
+{
+  "query": "btc",
+  "coin_id": "bitcoin",
+  "vs_currency": "usd",
+  "price": 64211.42,
+  "market_cap": 1264800000000,
+  "volume_24h": 28410000000,
+  "change_24h_pct": -1.24,
+  "source": "coingecko"
+}
+```
+
+Rate limited to 30 requests per minute **per IP**, separately from the 120-per-credential agentic limit.
+
+| Status | Code | Cause |
+| --- | --- | --- |
+| `422` | `missing_parameter` | `symbol_or_id` blank. |
+| `404` | `token_not_found` | Unknown identifier, or no data for it. |
+| `429` | `rate_limited` | Over 30 requests per minute from your IP. |
+| `429` | `upstream_rate_limited` | The upstream provider throttled us. Retry with backoff. |
+| `502` | `market_data_error` | Upstream unavailable. |
+
+<Note>
+These are public market prices, not the rates Southpay applies. For the rate used to price a payment intent, use [exchange rates](#read-exchange-rates).
+</Note>
+
+## Payment statuses
+
+Agentic payments use the same six statuses as merchant payments: `pending`, `processing`, `completed`, `expired`, `failed`, `refunded`. There is no `overpaid` status — an overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the excess is in the `overpayment` object on the detail view.
+
+`state_reason` has ten values, including `canceled_by_agent`, which only this API produces. See [payment lifecycle](/payment-lifecycle#state-reasons).

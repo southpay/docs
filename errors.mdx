@@ -1,165 +1,245 @@
 ---
 title: "Errors"
-description: "Structured error responses with HTTP status codes and machine-readable messages."
+description: "The three error body shapes the Southpay API returns, the status codes in use, and the error codes that exist."
 ---
 
-## Error response format
+The API returns errors in **three different JSON shapes**. Which one you get depends on the endpoint and on how the failure was raised, not on the status code. Write one parser that handles all three before you write anything else.
 
-All errors return a consistent JSON body:
+## The three error bodies
 
-```json
+<CodeGroup>
+```json Plain string
+{ "error": "amount must be positive" }
+```
+
+```json Structured
 {
   "error": {
-    "message": "settlement_currency USD is not compatible with asset ETH_ETH_ERC20",
-    "code": "currency_mismatch"
+    "message": "Agent has no spend limit for this asset",
+    "code": "payout_controls_required"
   }
 }
 ```
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `error.message` | string | Human-readable description of the error |
-| `error.code` | string \| null | Machine-readable error code when available |
+```json Validation list
+{
+  "errors": [
+    "Url is not a valid URL",
+    "Subscribed events can't be blank"
+  ]
+}
+```
+</CodeGroup>
 
----
+| Shape | Where you get it |
+| --- | --- |
+| `{"error": "<string>"}` | The majority of endpoints. Hand-written guard clauses in controllers. |
+| `{"error": {"message", "code"}}` | Framework-level rescues (404, 422, 502, 500), every `/agentic/*` endpoint, platform endpoints, and some payout and balance-swap paths. |
+| `{"errors": ["…", "…"]}` | ActiveRecord validation failures: webhook endpoints, payout schedules, billing creates and updates, custom domains, OAuth apps. |
 
-## HTTP status codes
+Two things follow from this that surprise people:
 
-| Status | Meaning |
+- **`error` is sometimes a string and sometimes an object.** `error.message` throws on most 4xx responses. Check the type first.
+- **`code` is frequently `null`.** Every framework-rescued exception renders `{"error": {"message": "…", "code": null}}`. Only hand-written failures set a code. Never key your control flow on `code` alone.
+
+### Normalizing all three
+
+```typescript southpay/errors.ts
+export type SouthpayError = { message: string; code: string | null };
+
+export function readError(body: unknown): SouthpayError {
+  const b = body as Record<string, unknown> | null;
+
+  if (typeof b?.error === "string") {
+    return { message: b.error, code: null };
+  }
+
+  if (b?.error && typeof b.error === "object") {
+    const e = b.error as { message?: string; code?: string | null };
+    return { message: e.message ?? "Unknown error", code: e.code ?? null };
+  }
+
+  if (Array.isArray(b?.errors)) {
+    return { message: (b.errors as string[]).join("; "), code: null };
+  }
+
+  return { message: "Unknown error", code: null };
+}
+```
+
+<Warning>
+The OAuth endpoints (`/oauth/authorize`, `/oauth/token`, `/oauth/revoke`) use the RFC 6749 shape, which looks identical to the plain-string shape but means something different: `{"error": "invalid_request", "error_description": "code_challenge is required"}`. There, the `error` string **is** the machine code and the human text is in `error_description`. Branch on the endpoint, not on the body.
+</Warning>
+
+## Status codes
+
+| Status | When |
 | --- | --- |
 | `200 OK` | Request succeeded |
-| `201 Created` | Resource created successfully |
-| `400 Bad Request` | Malformed request (missing required params, invalid JSON) |
-| `401 Unauthorized` | Missing or invalid authentication token |
-| `404 Not Found` | Resource does not exist or does not belong to your store |
-| `409 Conflict` | Duplicate idempotency key with different parameters |
-| `422 Unprocessable Entity` | Request is valid but cannot be processed (validation error, business rule violation) |
-| `502 Bad Gateway` | Upstream service error. Safe to retry. |
-| `500 Internal Server Error` | Unexpected server error. Safe to retry. |
+| `201 Created` | Resource created |
+| `202 Accepted` | A report is still generating. Poll `GET /reports` for the URL. |
+| `204 No Content` | Delete succeeded (webhook endpoints, payout schedules). Empty body. |
+| `400 Bad Request` | OAuth protocol errors, or a missing `X-Store-Id` on a dashboard session. Rare on the rest of the API. |
+| `401 Unauthorized` | Missing, malformed, revoked or expired credential |
+| `403 Forbidden` | **The most common failure in this API.** Missing scope, ungated feature, missing mandate, exceeded spend cap, or a platform guardrail. |
+| `404 Not Found` | The record does not exist inside your store and mode |
+| `409 Conflict` | Duplicate customer email, duplicate payout address, a retry already running, verification already pending |
+| `410 Gone` | An onboarding link that has expired or been used |
+| `422 Unprocessable Entity` | Validation failure or a business rule refusal. The default failure code. |
+| `429 Too Many Requests` | Rate limited. See [Rate limits](#rate-limits). |
+| `500 Internal Server Error` | Unhandled exception. Safe to retry. |
+| `502 Bad Gateway` | A payment or payout provider failed. Safe to retry. |
+| `503 Service Unavailable` | A swap quote is unavailable, or the identity provider is down during a step-up check. |
 
----
+There is no `409` for idempotency. Southpay does not detect "same key, different body" — see [Idempotency](/idempotency).
 
-## Common errors
+## 403 is not an authentication problem
 
-### Authentication errors
+A `403` means your credential is valid and the request was refused. Six distinct causes produce one status code, and only the `code` tells them apart. This is the single most useful thing to log.
 
-**`401 Unauthorized`**
-
-```json
-{ "error": { "message": "Invalid or expired token" } }
-```
-
-Causes:
-- API key revoked or invalid
-- JWT expired
-- OAuth token expired (re-authorize the user)
-- Missing `Authorization` header
-
----
-
-### Validation errors (422)
-
-**Invalid amount:**
-
-```json
-{
-  "error": {
-    "message": "Amount must be a positive decimal value"
-  }
-}
-```
-
-**Unsupported currency:**
-
-```json
-{
-  "error": {
-    "message": "USD is not a supported settlement currency for this store",
-    "code": "unsupported_currency"
-  }
-}
-```
-
-**Currency/asset mismatch:**
-
-```json
-{
-  "error": {
-    "message": "Asset ETH_ETH does not settle in EUR",
-    "code": "currency_mismatch"
-  }
-}
-```
-
-**Record not found:**
-
-```json
-{
-  "error": {
-    "message": "Record not found"
-  }
-}
-```
-Returns `404`. The resource does not exist within your store and mode scope.
-
----
-
-### Upstream errors (502)
-
-```json
-{
-  "error": {
-    "message": "Upstream provider returned an error. Please retry."
-  }
-}
-```
-
-`502` errors indicate a transient failure in an external dependency. They are safe to retry with the same `Idempotency-Key`. Use exponential backoff.
-
----
-
-## Retry strategy
-
-| Status | Retry? | Notes |
+| Code | Cause | Fix |
 | --- | --- | --- |
-| `4xx` (except 409, 429) | No | Fix the request before retrying |
-| `409` | No | Idempotency key conflict - check your parameters |
-| `429` | Yes | Rate limited - respect `Retry-After` header |
-| `502` | Yes | Use same `Idempotency-Key` with backoff |
-| `500` | Yes | Use same `Idempotency-Key` with backoff |
-| Network timeout | Yes | Use same `Idempotency-Key` |
+| `insufficient_scope` | The credential lacks the scope for this resource and verb | Reissue the key with the scope. See [Authentication](/authentication#scopes). |
+| `publishable_key_forbidden` | A `sp_pk_` key called anything other than `POST /payments` | Use a secret key server-side |
+| `not_a_platform` | Platform endpoints, or `X-Southpay-Account`, on a store without the platform flag | Southpay staff must enable it. See [Platform accounts](/platform-accounts). |
+| `account_not_found` | `X-Southpay-Account` names a store that is not your sub-merchant | Check the account id |
+| `platform_cannot_issue_credentials` | A platform tried to manage a sub-merchant's API keys or agent credentials while acting as them | Not permitted, by design |
+| `platform_cannot_change_payout_destination` | A platform tried to change a sub-merchant's payout destination | Only the merchant can, through an onboarding link |
+| `mandate_required` | An agentic refund, token toggle, mandate issuance or x402 settlement with no usable mandate | See [Agent authorization](/agentic/authorization) |
+| `payout_controls_required` | An agentic payout with no spend limit configured for that asset | Configure a spend limit on the agent credential |
+| `authorization_denied` | The store's authorization provider refused the agentic action | Inspect the mandate |
+| `per_tx_cap_exceeded` / `daily_cap_exceeded` | The agent credential's spend limit was hit | Raise the cap or wait for the UTC day to roll |
+| `spend_cap_exceeded` | An x402 mandate's per-call cap or remaining envelope was exhausted | Issue a new mandate |
 
-```typescript
-async function apiRequest(url: string, options: RequestInit, idempotencyKey?: string) {
+`mfa_required`, `otp_required`, `otp_invalid`, `mfa_check_unavailable` and `otp_check_unavailable` also return `403` (or `503`), but only for logged-in dashboard sessions. API keys, OAuth tokens and agent credentials never trigger the step-up check, so an integration will not see them.
+
+## Error codes by status
+
+Every code below appears in the API source. If you see a code that is not here, treat it as `null`.
+
+### 401
+
+| Code | Meaning |
+| --- | --- |
+| `invalid_api_key` | The `sp_` key is unknown, revoked, or in the wrong mode |
+| `invalid_token` | The `spo_` OAuth token is unknown, revoked, or expired |
+| `agent_credential_required` | An `/agentic/*` call arrived without a `spa_` credential |
+| `invalid_agent_credential` | The `spa_` credential is unknown, revoked, or expired |
+
+### 404 and 410
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `not_found` | 404 | Agentic mandate, payout or settlement lookup missed |
+| `asset_not_found` | 404 | The `asset_id` is not one Southpay supports |
+| `token_not_found` | 404 | Market data has no such token |
+| `account_not_found` | 404 | A platform account id in the path does not resolve |
+| `onboarding_link_unusable` | 404 / 410 | Onboarding token is unknown, consumed, or expired |
+
+Most 404s carry no code at all — `ActiveRecord::RecordNotFound` renders `{"error": {"message": "Couldn't find …", "code": null}}`.
+
+### 409
+
+| Code | Meaning |
+| --- | --- |
+| `retry_in_progress` | A payout retry is already running |
+| `verification_already_pending` | A verification request is already under review |
+| `duplicate_address` | The payout address is already registered on this account |
+| `store_has_active_funds` | A store delete was blocked. The body adds a `blockers` array. |
+
+Duplicate billing customers return `409` with the plain-string body `{"error": "A customer with this email already exists"}` and no code.
+
+### 422
+
+| Code | Meaning |
+| --- | --- |
+| `idempotency_key_required` | The endpoint requires an `Idempotency-Key` header. See [Idempotency](/idempotency). |
+| `invalid_amount` | Amount is zero, negative, non-finite, or has more than two decimal places |
+| `amount_too_large` | Agentic payment above 100,000,000.00 |
+| `invalid_currency` / `unsupported_currency` | Not one of the [supported fiat currencies](/currencies) |
+| `invalid_metadata` | More than 50 keys, or a non-string value |
+| `not_cancelable` | The intent is not `pending`, so it cannot be canceled |
+| `destination_required` | A payout has neither a payout detail id nor a `destination_address` |
+| `payout_rejected` | Insufficient balance or below the asset minimum |
+| `insufficient_balance` | An x402 settlement exceeds the store balance |
+| `not_retryable` | The payout is not in a retryable state |
+| `no_route` | No swap route exists between the two assets |
+| `invalid_cap` / `mandate_ref_required` | Mandate issuance is missing a positive cap or a `mandate_ref` |
+| `asset_change_rejected` | The agent's token toggle was refused |
+| `invalid_account` / `invalid_onboarding_link` | Platform account or onboarding link payload is invalid |
+| `invalid_verification` / `invalid_payout_destination` | Onboarding submission is invalid |
+| `missing_parameter` | Market data called without `symbol_or_id` |
+| `store_required` | The OAuth-to-agent-credential exchange had no store on the grant |
+
+Most 422s carry no code — they are plain strings such as `"amount is required and must be positive"` or `"metadata values must be strings"`, or a `{"errors": [...]}` list from a model validation.
+
+The report endpoints are a special case: they return `422` with a bare string in `error` plus a sibling field. `{"error": "date_range_too_large", "max_days": 366}` and `{"error": "date_range_unavailable", "available_through": "2026-08-05"}`.
+
+### 429, 502 and 503
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `rate_limited` | 429 | Agentic API or market data throttle |
+| `upstream_rate_limited` | 429 | The market data provider throttled us |
+| `market_data_error` | 502 | The market data provider failed |
+| `quote_unavailable` | 503 | No swap quote could be obtained |
+
+`502` from a payment or payout provider is always `{"error": {"message": "Payment provider error", "code": null}}`. The real cause is logged on our side; open a support ticket with the request timestamp rather than parsing the message.
+
+## Rate limits
+
+Only these paths are throttled. There is **no general rate limit** on the rest of the API.
+
+| Path | Limit | Keyed on |
+| --- | --- | --- |
+| `POST /api/v2/payments` | 120 / min | Credential, falling back to IP |
+| `GET /api/v2/checkout/*` | 600 / min | IP |
+| `POST /api/v2/oauth/token`, `POST /api/v2/oauth/revoke` | 60 / min | IP |
+| `GET`/`POST /api/v2/oauth/authorize` | 30 / min | IP |
+| All of `/api/v2/agentic/*` except market data | 120 / min | Agent credential |
+| `GET /api/v2/agentic/market_data` | 30 / min | IP |
+
+<Warning>
+**No `Retry-After` header is set on any `429`.** Do not read one. Back off on your own schedule — a fixed 60-second wait clears every throttle above, since all of them are per-minute windows.
+</Warning>
+
+The general throttle returns the plain-string body `{"error": "Too many requests. Please try again later."}`. The agentic throttle returns the structured body with `code: "rate_limited"`.
+
+## What to retry
+
+| Status | Retry | Notes |
+| --- | --- | --- |
+| `429` | Yes | Wait out the minute window. No `Retry-After` to read. |
+| `500` | Yes | Exponential backoff, same `Idempotency-Key` |
+| `502` | Yes | Provider hiccup. Exponential backoff, same `Idempotency-Key`. |
+| `503` | Yes | Quote or identity check unavailable. Backoff. |
+| Network timeout | Yes | Same `Idempotency-Key`. The request may already have landed. |
+| `4xx` other than `429` | No | Fix the request. Retrying returns the same error. |
+
+Reusing the `Idempotency-Key` is what makes a retry safe — a replay returns the record that the first attempt created rather than creating a second one. See [Idempotency](/idempotency) for what that does and does not guarantee.
+
+```typescript southpay/request.ts
+import { readError } from "./errors";
+
+const RETRYABLE = new Set([429, 500, 502, 503]);
+
+export async function request(path: string, init: RequestInit, idempotencyKey?: string) {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${process.env.SOUTHPAY_API_KEY}`,
     "Content-Type": "application/json",
     ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
   };
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const res = await fetch(url, { ...options, headers });
-    if (res.ok || res.status < 500) return res;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const res = await fetch(`https://api.southpay.io${path}`, { ...init, headers });
+    if (res.ok) return res.json();
+
+    if (!RETRYABLE.has(res.status) || attempt === 3) {
+      const err = readError(await res.json().catch(() => null));
+      throw Object.assign(new Error(err.message), { status: res.status, code: err.code });
+    }
+
     await new Promise(r => setTimeout(r, 1000 * 2 ** attempt));
   }
-
-  throw new Error("Request failed after retries");
 }
 ```
-
----
-
-## Idempotency key conflicts
-
-If you send the same `Idempotency-Key` with **different request parameters**, you get a `409 Conflict`:
-
-```json
-{
-  "error": {
-    "message": "An idempotency key conflict was detected. The key 'order_123' was used with different parameters.",
-    "code": "idempotency_conflict"
-  }
-}
-```
-
-This means you previously made a successful request with that key. Either use the original response or generate a new key for a new attempt.

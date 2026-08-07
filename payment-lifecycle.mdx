@@ -1,0 +1,115 @@
+---
+title: "Payment lifecycle"
+description: "The six payment intent statuses, the transitions between them, the ten state reasons, and the 60-minute expiry window."
+---
+
+This is the canonical reference for payment intent state. Every other page links here rather than restating it.
+
+## The six statuses
+
+A payment intent has exactly six statuses. There is no `created`, no `confirming` and no `overpaid`.
+
+| Status | `terminal` | Meaning |
+| --- | --- | --- |
+| `pending` | `false` | Created. Deposit addresses issued, waiting for the customer to send funds. |
+| `processing` | `false` | At least one transaction for a deposit address is confirming or confirmed on-chain. |
+| `completed` | `true` | Enough confirmed funds received. Credited to your balance. |
+| `expired` | `true` | The window closed without a usable payment, or an agent canceled the intent. |
+| `failed` | `true` | Funds arrived but the intent could not complete under your store's rules. |
+| `refunded` | `true` | A refund confirmed on-chain. |
+
+<Warning>
+`terminal: true` means "this outcome is settled", not "this record will never change again". Any of the four terminal statuses can still move to `refunded` later. Treat `refunded` as an update to an order you already fulfilled, not as an impossible transition.
+</Warning>
+
+## Transitions
+
+```mermaid
+stateDiagram-v2
+  direction LR
+
+  [*] --> pending : created
+
+  pending --> processing : on-chain tx detected
+  pending --> expired : window closed, or agent canceled
+  pending --> failed
+
+  processing --> completed : confirmations reached
+  processing --> failed : amount rules not met
+  processing --> expired
+
+  pending --> refunded
+  processing --> refunded
+  completed --> refunded
+  expired --> refunded
+  failed --> refunded
+```
+
+| From | Allowed to |
+| --- | --- |
+| `pending` | `processing`, `expired`, `failed`, `refunded` |
+| `processing` | `completed`, `failed`, `expired`, `refunded` |
+| `completed` | `refunded` |
+| `expired` | `refunded` |
+| `failed` | `refunded` |
+
+Status never moves backwards. `completed` never returns to `processing`.
+
+## Expiry is 60 minutes and is not configurable
+
+Every payment intent expires 60 minutes after it is created. The exact moment is on the intent as `expires_at`; read that field rather than adding an hour yourself.
+
+There is no parameter to lengthen or shorten the window, and no endpoint to extend a live intent. If a customer needs longer, create a second intent with a new [idempotency key](/idempotency).
+
+Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `expired` the next time it is loaded — including when the customer opens the hosted checkout page — so a stale `pending` in your database may already be dead. Trust `expires_at` over `status`.
+
+## State reasons
+
+`state_reason` is the machine-readable "why" behind the current status. It has ten values.
+
+| `state_reason` | Status | Meaning |
+| --- | --- | --- |
+| `pending_confirmations` | `processing` | Transaction seen, waiting for the chain's required confirmations |
+| `processing_underpaid` | `processing` | Confirmed funds received, still short of the required amount |
+| `completed_exact` | `completed` | The required amount arrived |
+| `completed_overpaid` | `completed` | More than required arrived, and your store accepts overpayments |
+| `completed_underpaid` | `completed` | Less than required arrived, and your store accepts underpayments |
+| `failed_underpaid` | `failed` | Underpaid, and your store does not accept underpayments |
+| `failed_overpaid` | `failed` | Overpaid, and your store does not accept overpayments |
+| `expired_timeout` | `expired` | The 60-minute window closed with no usable payment |
+| `canceled_by_agent` | `expired` | An [agent](/agentic/index) canceled a `pending` intent |
+| `refund_completed` | `refunded` | A refund confirmed on-chain |
+
+**Overpayment is not a status.** An accepted overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the `:detail` view of the intent carries an `overpayment` object with the excess. If you branch on `status === "completed"` and ignore `state_reason`, you will fulfil overpaid and underpaid orders identically — which may or may not be what you want.
+
+**`canceled_by_agent` lands in `expired`, not in a cancel status.** There is no `canceled` status. An agentic cancel is modelled as an early expiry.
+
+## Related status fields
+
+A payment intent carries four other status-shaped fields. None of them are the payment status.
+
+| Field | Values | What it tracks |
+| --- | --- | --- |
+| `settlement_status` | `pending`, `processing`, `completed`, `failed`, `null` | Movement of the received funds into your settlement balance. Never `settled`. |
+| `auto_swap_status` | `completed`, `pending`, `failed`, `skipped`, `null` | An automatic swap of the received asset into your target stablecoin |
+| `reconciliation_status` | `final`, `under_investigation`, `disputed`, `closed`, `null` | The reconciliation snapshot for the intent |
+| `payment_addresses[].status` | `pending`, `confirmed` | Whether that specific deposit address received funds |
+
+Transactions have their own statuses (`pending`, `confirming`, `confirmed`, `submitted`, `failed`) exposed under `transaction` on the intent detail view. `confirming` is a **transaction** status. It is not a payment intent status.
+
+<Note>
+`GET /api/v2/payments?status=confirming` is accepted by the list filter but always returns zero rows, because no payment intent ever holds that value. It is a dead filter value.
+</Note>
+
+## Matching statuses to webhook events
+
+| Transition | Event |
+| --- | --- |
+| → `pending` | `payment_intent.created` |
+| → `processing` | `payment_intent.processing` |
+| → `completed` | `payment_intent.completed` |
+| → `expired` | `payment_intent.expired` |
+| → `failed` | `payment_intent.failed` |
+| → `refunded` | `payment_intent.refunded` |
+
+The agentic cancel path emits `payment_intent.canceled`, which **cannot be subscribed to** — see [Webhooks](/webhooks#events-you-cannot-receive). Watch for `payment_intent.expired` with `state_reason: "canceled_by_agent"` instead.

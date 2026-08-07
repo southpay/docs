@@ -1,233 +1,358 @@
 ---
-title: "Webhook Endpoints"
-description: "Configure the URLs where Southpay sends signed event notifications for payment status changes and other activity."
-sidebarTitle: "Webhook Endpoints"
+title: "Webhook endpoints"
+description: "Register HTTPS destinations for Southpay events, manage subscriptions, rotate signing secrets, and inspect recent deliveries."
+sidebarTitle: "Webhook endpoints"
 ---
 
-<Warning>
-  All endpoints require authentication. See [Authentication](/authentication) for details.
-</Warning>
+A webhook endpoint is a URL Southpay posts events to, plus the list of events it wants and the secret used to sign them. This page covers managing those endpoints. For the payload shape, signature verification and retry behaviour, see the [webhooks guide](/webhooks).
 
-Base URL: `https://api.southpay.io/api/v2`
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-For handling and verifying incoming webhook events, see the [Webhooks guide](/webhooks).
+## Authentication and scope
 
----
+Reads require `webhooks:read`, writes require `webhooks:write`. Publishable keys are rejected.
 
-## List webhook endpoints
+## Identifiers
+
+Endpoint and delivery ids are **bare UUIDs**. There is no `we_` or `del_` prefix — no resource in this API uses prefixed ids.
+
+## List endpoints
+
+**`GET /webhook_endpoints`** — scope `webhooks:read`.
+
+Returns a **bare array**, newest first. No envelope, no pagination. Soft-deleted endpoints are excluded.
+
+<ParamField query="status" type="string">
+  Filter by `active`, `disabled` or `error`.
+</ParamField>
 
 <CodeGroup>
 ```bash Request
-GET /webhook_endpoints?status=active
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/webhook_endpoints \
+  -H "Authorization: Bearer sp_sk_live_…"
 ```
 
-```json Response
+```json Response 200
 [
   {
-    "id": "we_abc123",
-    "url": "https://yourapp.com/webhooks/southpay",
-    "description": "Production handler",
+    "id": "e1d2c3b4-a596-4877-9081-a2b3c4d5e6f7",
+    "url": "https://example.com/hooks/southpay",
+    "description": "Order fulfilment",
     "status": "active",
-    "subscribed_events": ["payment_intent.completed", "payment_intent.failed"],
-    "delivery_success_rate": 97.5,
-    "created_at": "2026-04-01T00:00:00.000Z"
+    "platform": null,
+    "platform_store_url": null,
+    "platform_integration": false,
+    "api_version": "2026-04-14",
+    "subscribed_events": [
+      "payment_intent.completed",
+      "payment_intent.failed",
+      "payment_intent.expired"
+    ],
+    "signing_secret_preview": "whsec_1a2b3...",
+    "delivery_success_rate": 99.4,
+    "verified_at": null,
+    "created_at": "2026-03-01T09:00:00.000Z",
+    "updated_at": "2026-05-11T14:22:00.000Z"
   }
 ]
 ```
 </CodeGroup>
 
-**Query parameters**
+`delivery_success_rate` is a percentage to one decimal over non-test deliveries, or `null` when there have been none. It appears on this view only.
 
-| Parameter | Description |
-| --- | --- |
-| `status` | `active` or `disabled` |
+## Create an endpoint
 
----
+**`POST /webhook_endpoints`** — scope `webhooks:write`. Idempotency keys are not used here.
 
-## Get a webhook endpoint
+All fields go inside a required `webhook_endpoint` object.
 
-Returns the endpoint with its recent delivery history and available event types.
+<ParamField body="webhook_endpoint.url" type="string" required>
+  Where deliveries are posted. Must resolve to a public address — Southpay rejects private, loopback and link-local hosts at delivery time.
+</ParamField>
+
+<ParamField body="webhook_endpoint.subscribed_events" type="string[]" required>
+  Event names to receive. Must be a subset of the [event catalogue](#event-catalogue). Omitting it on a non-platform endpoint yields an empty array, which fails validation.
+</ParamField>
+
+<ParamField body="webhook_endpoint.description" type="string">
+  Free text for your own reference.
+</ParamField>
+
+<ParamField body="webhook_endpoint.platform" type="string">
+  Marks this as an e-commerce plugin integration: `woocommerce`, `prestashop`, `shopify`, `magento` or `custom`. Changes create behaviour — see [platform integrations](#platform-integrations). Cannot be changed after create.
+</ParamField>
+
+<ParamField body="webhook_endpoint.platform_store_url" type="string">
+  The storefront URL the plugin is installed on. Cannot be changed by `PATCH`.
+</ParamField>
+
+<ParamField body="webhook_endpoint.metadata" type="object">
+  Arbitrary key-value pairs stored on the endpoint. Not sent in deliveries.
+</ParamField>
+
+<Warning>
+Wildcards are not supported. `"*"` and `"payment_intent.*"` both fail validation — subscription matching is literal array containment. To receive everything you must enumerate all 23 event names.
+</Warning>
 
 <CodeGroup>
 ```bash Request
-GET /webhook_endpoints/:id
-Authorization: Bearer <API_KEY>
-```
-
-```json Response
-{
-  "id": "we_abc123",
-  "url": "https://yourapp.com/webhooks/southpay",
-  "description": "Production handler",
-  "status": "active",
-  "subscribed_events": ["payment_intent.completed"],
-  "delivery_success_rate": 97.5,
-  "created_at": "2026-04-01T00:00:00.000Z",
-  "available_events": ["payment_intent.completed", "payment_intent.failed", "payment_intent.expired"],
-  "recent_deliveries": [
-    {
-      "id": "del_xyz",
-      "event_type": "payment_intent.completed",
-      "status": "delivered",
-      "attempts": 1,
-      "response_status": 200,
-      "delivered_at": "2026-04-10T12:01:00.000Z",
-      "created_at": "2026-04-10T12:00:00.000Z"
+curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "webhook_endpoint": {
+      "url": "https://example.com/hooks/southpay",
+      "description": "Order fulfilment",
+      "subscribed_events": [
+        "payment_intent.completed",
+        "payment_intent.failed",
+        "payment_intent.expired"
+      ]
     }
-  ]
-}
-```
-</CodeGroup>
-
----
-
-## Create a webhook endpoint
-
-The signing secret is only returned on creation - store it securely.
-
-<CodeGroup>
-```bash Request
-POST /webhook_endpoints
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "webhook_endpoint": {
-    "url": "https://yourapp.com/webhooks/southpay",
-    "description": "Production handler",
-    "subscribed_events": ["payment_intent.completed", "payment_intent.failed"]
-  }
-}
+  }'
 ```
 
 ```json Response 201
 {
-  "id": "we_abc123",
-  "url": "https://yourapp.com/webhooks/southpay",
+  "id": "e1d2c3b4-a596-4877-9081-a2b3c4d5e6f7",
+  "url": "https://example.com/hooks/southpay",
+  "description": "Order fulfilment",
   "status": "active",
-  "subscribed_events": ["payment_intent.completed", "payment_intent.failed"],
-  "signing_secret": "whsec_abc123...",
-  ...
+  "platform": null,
+  "platform_store_url": null,
+  "platform_integration": false,
+  "api_version": "2026-04-14",
+  "subscribed_events": [
+    "payment_intent.completed",
+    "payment_intent.failed",
+    "payment_intent.expired"
+  ],
+  "signing_secret": "whsec_1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d5e6f7081",
+  "signing_secret_preview": "whsec_1a2b3...",
+  "delivery_success_rate": null,
+  "verified_at": null,
+  "created_at": "2026-03-01T09:00:00.000Z",
+  "updated_at": "2026-03-01T09:00:00.000Z"
 }
 ```
 </CodeGroup>
 
-**Request fields**
+<Danger>
+`signing_secret` is returned in full **only** by create and rotate. Store it now. Every other response gives you `signing_secret_preview`, the first 12 characters, which cannot verify a signature. Losing the secret means rotating it, which breaks in-flight deliveries.
+</Danger>
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `webhook_endpoint[url]` | Yes | HTTPS URL to receive events |
-| `webhook_endpoint[description]` | No | Internal label |
-| `webhook_endpoint[subscribed_events][]` | No | Event types to receive. Must be values from the [available events](/webhooks#event-types) list. If omitted, no events are subscribed and you should set them with a follow-up `PATCH`. |
-| `webhook_endpoint[metadata]` | No | Arbitrary key-value pairs |
+## Response fields
+
+<ResponseField name="id" type="string" required>
+  Bare UUID.
+</ResponseField>
+
+<ResponseField name="url" type="string" required>
+  Delivery destination.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  `active`, `disabled` (you turned it off) or `error` (Southpay turned it off after 10 failed attempts on a delivery).
+</ResponseField>
+
+<ResponseField name="subscribed_events" type="string[]" required>
+  Exactly the events this endpoint receives.
+</ResponseField>
+
+<ResponseField name="signing_secret" type="string">
+  Full plaintext secret, `whsec_` plus 64 hex characters. Present on create and rotate only.
+</ResponseField>
+
+<ResponseField name="signing_secret_preview" type="string" required>
+  First 12 characters plus `...`, for identifying which secret is in use.
+</ResponseField>
+
+<ResponseField name="platform" type="string | null">
+  The plugin platform, or null for a hand-registered endpoint.
+</ResponseField>
+
+<ResponseField name="platform_integration" type="boolean" required>
+  True when `platform` is set. Platform integrations are limited to one per store per mode.
+</ResponseField>
+
+<ResponseField name="api_version" type="string" required>
+  Stored as `"2026-04-14"`. It is informational — no payload builder reads it, so changing endpoints does not change payload shape.
+</ResponseField>
+
+<ResponseField name="verified_at" type="string | null">
+  When the endpoint last confirmed a delivery.
+</ResponseField>
+
+<ResponseField name="delivery_success_rate" type="number | null">
+  Percentage to one decimal. Present on the list view only.
+</ResponseField>
+
+## Retrieve an endpoint
+
+**`GET /webhook_endpoints/{id}`** — scope `webhooks:read`.
+
+Adds the last 25 deliveries and the full event catalogue. Note this view does **not** include `delivery_success_rate`.
+
+```json Response 200
+{
+  "id": "e1d2c3b4-a596-4877-9081-a2b3c4d5e6f7",
+  "url": "https://example.com/hooks/southpay",
+  "status": "active",
+  "subscribed_events": ["payment_intent.completed"],
+  "signing_secret_preview": "whsec_1a2b3...",
+  "recent_deliveries": [
+    {
+      "id": "aa11bb22-cc33-4d44-8e55-ff6677889900",
+      "event_type": "payment_intent.completed",
+      "status": "delivered",
+      "attempts": 1,
+      "response_status": 200,
+      "delivered_at": "2026-05-11T14:22:00.000Z",
+      "created_at": "2026-05-11T14:21:58.000Z"
+    }
+  ],
+  "available_events": ["payment_intent.created", "…"]
+}
+```
+
+<ResponseField name="recent_deliveries" type="object[]">
+  Last 25 in the current mode, newest first.
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">Delivery UUID. Also sent as the `Southpay-Delivery-Id` header.</ResponseField>
+    <ResponseField name="event_type" type="string">Public event name.</ResponseField>
+    <ResponseField name="status" type="string">`pending`, `attempting`, `delivered`, `failed` or `ignored`.</ResponseField>
+    <ResponseField name="attempts" type="integer">Attempts made. Maximum 10.</ResponseField>
+    <ResponseField name="response_status" type="integer | null">HTTP status your server returned.</ResponseField>
+    <ResponseField name="delivered_at" type="string | null">Null unless `status` is `delivered`.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="available_events" type="string[]">
+  Every subscribable event name, as a convenience for building a settings UI.
+</ResponseField>
+
+## Update an endpoint
+
+**`PATCH /webhook_endpoints/{id}`** — scope `webhooks:write`.
+
+Accepts `url`, `description`, `subscribed_events` and `metadata` only. `platform` and `platform_store_url` are fixed at create time and are silently ignored here. Returns `200` with the endpoint, without a `signing_secret`.
+
+## Enable and disable
+
+**`PATCH /webhook_endpoints/{id}/enable`** sets `status` to `active` and clears the disabled timestamp.
+
+**`PATCH /webhook_endpoints/{id}/disable`** stops deliveries.
+
+Both take no body and return `200` with the endpoint.
 
 <Warning>
-  Save the `signing_secret` - it is only returned once. Use it to verify incoming requests. See the [Webhooks guide](/webhooks).
+Deliveries queued while an endpoint is not `active` are dropped without being rescheduled. Re-enabling does not replay them — use [redelivery](#redeliver-an-event) or the [payment events endpoint](/api-reference/payments#list-payment-events) to backfill.
 </Warning>
 
----
+## Delete an endpoint
 
-## Update a webhook endpoint
+**`DELETE /webhook_endpoints/{id}`** — scope `webhooks:write`. Soft delete. Returns `204` with no body. The endpoint stops receiving deliveries and disappears from the list.
 
-<CodeGroup>
-```bash Request
-PATCH /webhook_endpoints/:id
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
+## Rotate the signing secret
 
+**`POST /webhook_endpoints/{id}/rotate_secret`** — scope `webhooks:write`. No body. Returns `200` with the endpoint including the new full `signing_secret`.
+
+<Danger>
+Rotation is an immediate hard cutover. There is no overlap window and no second valid secret. Deliveries already signed with the old secret will fail verification at your end. Deploy the new secret before you rotate, or accept the retries.
+</Danger>
+
+## Send a test delivery
+
+**`POST /webhook_endpoints/{id}/send_test`** — scope `webhooks:write`.
+
+<ParamField body="event_type" type="string">
+  Event to simulate. Defaults to the endpoint's first subscribed event, falling back to `payment_intent.completed`. Must be a valid event name.
+</ParamField>
+
+```json Response 200
 {
-  "webhook_endpoint": {
-    "url": "https://yourapp.com/webhooks/southpay-v2",
-    "subscribed_events": ["payment_intent.completed"]
-  }
-}
-```
-
-```json Response
-{ "id": "we_abc123", "url": "https://yourapp.com/webhooks/southpay-v2", ... }
-```
-</CodeGroup>
-
----
-
-## Delete a webhook endpoint
-
-Soft-deletes the endpoint. Returns `204 No Content`.
-
-```bash
-DELETE /webhook_endpoints/:id
-Authorization: Bearer <API_KEY>
-```
-
----
-
-## Enable / Disable
-
-```bash
-PATCH /webhook_endpoints/:id/enable
-PATCH /webhook_endpoints/:id/disable
-Authorization: Bearer <API_KEY>
-```
-
-Both return the updated endpoint object.
-
----
-
-## Rotate signing secret
-
-Issues a new signing secret. Update your server immediately - the old secret stops working.
-
-<CodeGroup>
-```bash Request
-POST /webhook_endpoints/:id/rotate_secret
-Authorization: Bearer <API_KEY>
-```
-
-```json Response
-{
-  "id": "we_abc123",
-  "signing_secret": "whsec_newvalue...",
-  ...
-}
-```
-</CodeGroup>
-
----
-
-## Send a test event
-
-Sends a test delivery to verify your endpoint is reachable. The optional `event_type` query parameter must be one of the [available events](/webhooks#event-types); an unknown value returns `422`. If omitted, the endpoint's first subscribed event is used, falling back to `payment_intent.completed`.
-
-<CodeGroup>
-```bash Request
-POST /webhook_endpoints/:id/send_test?event_type=payment_intent.completed
-Authorization: Bearer <API_KEY>
-```
-
-```json Response
-{
-  "delivery_id": "del_test123",
+  "delivery_id": "aa11bb22-cc33-4d44-8e55-ff6677889900",
   "event_type": "payment_intent.completed",
   "message": "Test delivery queued"
 }
 ```
-</CodeGroup>
 
----
+The response confirms queueing, not delivery. Poll `GET /webhook_endpoints/{id}` and look for the `delivery_id` in `recent_deliveries`. Test deliveries are excluded from `delivery_success_rate`.
 
-## Redeliver a failed delivery
+An unknown `event_type` returns `422` `{"error": "Unknown event type"}`.
 
-<CodeGroup>
-```bash Request
-POST /webhook_endpoints/:id/redeliver
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
+## Redeliver an event
 
-{ "delivery_id": "del_xyz" }
-```
+**`POST /webhook_endpoints/{id}/redeliver`** — scope `webhooks:write`.
 
-```json Response
-{ "message": "Redelivery queued" }
-```
-</CodeGroup>
+<ParamField body="delivery_id" type="string" required>
+  The delivery to send again. Accepted in the JSON body or as a query parameter.
+</ParamField>
+
+Returns `200` `{"message": "Redelivery queued"}`. A delivery that is not retryable returns `422` `{"error": "Delivery is not retryable"}`.
+
+<Warning>
+This endpoint is currently broken: it does not load the endpoint before looking up the delivery, so every call returns `500` `{"error": {"message": "Internal server error", "code": null}}`. Until it is fixed, recover missed events with the [payment events endpoint](/api-reference/payments#list-payment-events).
+</Warning>
+
+## Platform integrations
+
+Sending `platform` on create changes the semantics. Only one platform integration can exist per store per mode, so re-running a plugin's connect flow does not fail — it **adopts the existing endpoint**:
+
+- The response is `200`, not `201` and not `409`.
+- Any of `url`, `description`, `platform_store_url`, `metadata` and `subscribed_events` you re-sent are applied. Omitted fields keep their current values, and empty `subscribed_events` falls back to the platform's default set.
+- The endpoint is re-enabled if it was disabled.
+- **The signing secret is always rotated.** The new secret is in the response; the old one stops verifying immediately.
+
+Plan for this in a plugin: treat a `200` from create exactly like a `201`, and always persist the returned `signing_secret`.
+
+A `409` `{"error": "An active woocommerce integration already exists for this store"}` is still reachable if two registrations race the database index.
+
+## Event catalogue
+
+23 events are subscribable.
+
+| Event | Emitted |
+| --- | --- |
+| `payment_intent.created` | Yes |
+| `payment_intent.processing` | Yes |
+| `payment_intent.completed` | Yes |
+| `payment_intent.expired` | Yes |
+| `payment_intent.failed` | Yes |
+| `payment_intent.refunded` | Yes |
+| `transaction.confirming` | Yes |
+| `transaction.confirmed` | Yes |
+| `transaction.failed` | Yes |
+| `invoice.finalized` | Yes |
+| `invoice.paid` | Yes |
+| `invoice.voided` | Yes |
+| `subscription.created` | Yes |
+| `subscription.updated` | Yes |
+| `subscription.past_due` | Yes |
+| `subscription.canceled` | Yes |
+| `store.verification.approved` | Yes |
+| `store.verification.rejected` | Yes |
+| `payout.created` | **Never** |
+| `payout.confirmed` | **Never** |
+| `payout.failed` | **Never** |
+| `fee_sweep.confirmed` | **Never** |
+| `fee_sweep.failed` | **Never** |
+
+<Warning>
+The last five pass validation and can be subscribed to, but no code path ever emits them. If you are waiting on `payout.confirmed`, you are waiting forever — poll [`GET /payouts`](/api-reference/payouts#list-payouts) instead. They remain listed here so existing subscribers can recognize why nothing arrives.
+</Warning>
+
+`payment_intent.canceled` is the opposite case: it is emitted when an agent cancels an intent, but it is not in the catalogue, so no endpoint can subscribe to it and it is dropped. Detect agent cancellations by polling for `status: "expired"` with `state_reason: "canceled_by_agent"`.
+
+## Errors
+
+Three envelopes appear on these endpoints.
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"errors": ["Url is invalid", "Subscribed events contains unknown events: payment.done"]}` | Validation failure on create or update. Array envelope. |
+| `409` | `{"error": "An active shopify integration already exists for this store"}` | Racing platform registration. |
+| `422` | `{"error": "Unknown event type"}` | Bad `event_type` on `send_test`. |
+| `422` | `{"error": "Delivery is not retryable"}` | Bad `delivery_id` state on `redeliver`. |
+| `404` | `{"error": "Endpoint not found"}` | Unknown or deleted id. Flat envelope, unlike most 404s. |
+| `403` | `{"error": {"message": "Insufficient scope: webhooks:write required", "code": "insufficient_scope"}}` | Missing scope. Structured envelope. |

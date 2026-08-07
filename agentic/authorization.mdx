@@ -1,33 +1,72 @@
 ---
 title: "Agent authorization"
-description: "The fail-closed safety model for agent-driven money movement: scopes, spend limits, and mandates."
+description: "What an agent can and cannot do on a default store: payments work, refunds, token changes, mandates and uncontrolled payouts return 403."
 ---
 
-Agents are useful precisely because they act without a human in the loop, so every Southpay action that moves money or changes store configuration passes through controls a human set up in advance. The model has three independent layers; an action must clear all the layers that apply to it.
+Read this before you write any agent code, because the default is more restrictive than most integrations expect.
 
-## The three layers
+On a store with no extra configuration, an agent credential can read everything in its scopes, create payments, and cancel them. It **cannot** refund a payment, change which tokens the store accepts, issue a session mandate, or pay out. Those four write paths return `403` and keep returning `403` until a human configures a control. There is no request you can send, and no header you can add, that changes this from the agent side.
 
-### 1. Credential scopes
+The denials are the system working as designed. Treat them as a configuration state to report, not an error to retry.
 
-The coarsest control. A credential without `payouts:write` can never create a payout, regardless of any other configuration. See [agent credentials](/agentic/agent-credentials#scopes).
+## What happens by default
 
-### 2. Spend limits
+Southpay resolves an authorization provider per store from the `agent_authorization` feature flag. With no flag, every store gets `NullAuthorizationProvider`, which approves every verification it is asked for — and then each endpoint checks whether the approval came from a real provider, and refuses if it did not.
 
-Per-credential, per-asset payout caps with a daily counter, configured by the merchant. They both **unlock** payouts (no limit configured means payouts are denied) and **cap** them (per-transaction and per-UTC-day). See [spend limits](/agentic/agent-credentials#spend-limits).
+| Agent action | Default behavior |
+| --- | --- |
+| `GET` account, payments, payouts, balances, tokens, payout limits, exchange rates, mandates, settlements | Allowed, subject to scope |
+| `POST /agentic/payments` | Allowed |
+| `POST /agentic/payments/:id/cancel` | Allowed |
+| `POST /agentic/payments/:id/refunds` | **403 `mandate_required`** |
+| `PATCH /agentic/tokens/:asset_id` | **403 `mandate_required`** |
+| `POST /agentic/mandates` | **403 `mandate_required`** |
+| `POST /agentic/x402/settlements` | **403 `mandate_required`** — needs a usable mandate, which cannot be issued |
+| `POST /agentic/payouts` | **403 `payout_controls_required`**, unless a spend limit exists for that asset |
 
-### 3. Mandates (authorization provider)
+Payment creation is the deliberate exception. Charging a customer creates a receivable rather than an outflow, so it needs no mandate.
 
-The finest control: per-action cryptographic authorization. When a store enables an authorization provider, gated actions require the agent to present a verifiable mandate: a credential issued to the agent by its principal that encodes what the agent is allowed to do. Southpay forwards the presentation and the action's parameters (action type, amount, currency, asset) to the provider, which returns an allow or deny decision. The decision and receipt are stored in the audit trail alongside the resulting payment, payout, or mandate.
+Check which provider you are on with `GET /api/v2/agentic/account` (the `get_account` MCP tool). `authorization.provider` is the Ruby class name of the resolved provider and `authorization.mandates` is a boolean:
 
-Authorization providers are enabled per store. Contact support to enable one for your store.
+```json Response 200
+{
+  "authorization": {
+    "provider": "NullAuthorizationProvider",
+    "mandates": false
+  }
+}
+```
+
+`"mandates": false` means you are on the defaults described above.
+
+## Unblocking payouts with spend limits
+
+Spend limits are per-credential, per-asset payout caps. They are the only control a merchant can configure without Southpay staff involvement, and they are what makes agent payouts possible at all.
+
+A spend limit does two things:
+
+1. **It unlocks the asset.** With the default provider, a payout in an asset that has no spend limit is refused with `payout_controls_required` before any balance check happens.
+2. **It caps the payout.** Every payout is checked against a per-transaction cap and against a daily counter that resets at midnight UTC. Breaching either returns `403` with `per_tx_cap_exceeded` or `daily_cap_exceeded`.
+
+Limits are set on the credential in the dashboard, under **Agents**. Both caps are optional individually — a limit row with only a daily cap still unlocks the asset.
+
+An agent reads its own headroom with `GET /api/v2/agentic/payout_limits` (or `get_payout_limits` over MCP), which returns `per_tx_cap_atomic`, `daily_cap_atomic`, `daily_spent_atomic`, `daily_remaining_atomic` and `controls_configured` per asset, plus the `utc_day` the counter belongs to. `controls_configured: false` on an asset is a reliable predictor that a payout in it will be denied. Size the payout from this endpoint rather than discovering the cap through a `403`.
+
+## Unblocking refunds, token changes and mandates
+
+Refunds, token toggles and mandate issuance need a real authorization provider. Spend limits do not help here; the check is specifically "is this store's provider something other than the default".
+
+Enabling one sets the `agent_authorization` store feature flag with a `provider` setting. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle — Southpay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
 
 <Note>
-  Verification is fail-closed: if the provider cannot be reached or is misconfigured, gated actions are denied (`authorization_denied` with reason `verification_unavailable`), never silently allowed.
+  If you are building an agent for merchants generally, assume the provider is absent. Discover it at runtime from `GET /agentic/account` and gate your own tool exposure on `authorization.mandates`, rather than offering the agent a refund capability that will always fail.
 </Note>
 
-## Presenting a mandate
+## With a provider enabled
 
-Over REST, the agent sends the mandate presentation on gated requests as a base64-encoded JSON header:
+Once a provider is configured, the model changes in both directions. The three blocked actions become available, and **payment creation stops being unconditional** — it is verified per call like everything else, and can now be denied with `authorization_denied`.
+
+The agent presents a mandate on gated requests in the `X-Mandate` header, base64-encoded JSON:
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/agentic/payments/{id}/refunds \
@@ -38,31 +77,18 @@ curl -X POST https://api.southpay.io/api/v2/agentic/payments/{id}/refunds \
   -d '{"refund": {}}'
 ```
 
-The `X-Mandate` value must decode to valid JSON and is limited to 32 KB; anything malformed or oversized is treated as no mandate, which on a gated action results in a denial.
+Southpay forwards the presentation and the action's parameters — action type, amount, currency, asset, destination — to the provider, which returns allow or deny. The decision and receipt are stored with the resulting payment, payout or mandate.
 
-## What is gated, and how
+Two details worth planning for:
 
-| Action | No provider enabled | Provider enabled |
-| --- | --- | --- |
-| Reads (account, balances, payments, rates, limits) | Allowed | Allowed |
-| Create / cancel payment | Allowed | Verified per action |
-| Wait for payment | Allowed | Allowed |
-| Refund payment | Denied: `mandate_required` | Verified: allow or `authorization_denied` |
-| Enable / disable token | Denied: `mandate_required` | Verified: allow or `authorization_denied` |
-| Create payout | Denied unless a [spend limit](/agentic/agent-credentials#spend-limits) exists for the asset: `payout_controls_required` | Verified per payout; spend limit caps still apply |
-| Issue x402 session mandate | Denied: `mandate_required` | Verified once at issuance |
-| x402 settlement | Requires a usable session mandate: `mandate_required` | Same; caps enforced locally per call |
-
-Two things to note:
-
-- **Payment creation is the deliberate exception.** Charging a customer creates a receivable, not an outflow, so it works without a provider. With a provider enabled, even payment creation is verified.
-- **Spend limits and mandates compose.** With an authorization provider enabled, a payout must pass mandate verification *and* stay inside any configured spend caps.
+- The header is capped at 32768 bytes, and a value that is missing, oversized or not valid base64 JSON is treated as **no mandate at all**. On a gated action that produces a denial rather than a parse error, so a malformed header and an absent one look identical from the outside.
+- Spend limits still apply. A payout must pass provider verification *and* stay inside any configured per-transaction and daily caps.
 
 ## Error codes
 
-All agentic errors use the standard envelope:
+Every agentic endpoint uses the structured envelope, with `code` populated:
 
-```json
+```json Response 403
 {
   "error": {
     "message": "Refunding a payment requires a configured authorization provider (mandate)",
@@ -74,21 +100,21 @@ All agentic errors use the standard envelope:
 | Code | Status | Meaning | What to do |
 | --- | --- | --- | --- |
 | `agent_credential_required` | 401 | Missing or malformed bearer token | Send `Authorization: Bearer spa_...` |
-| `invalid_agent_credential` | 401 | Token does not match an active credential | Check for revocation or expiry |
-| `insufficient_scope` | 403 | Credential lacks the required scope | Merchant creates a credential with the scope |
-| `mandate_required` | 403 | Action needs an authorization provider or a usable session mandate | Merchant enables a provider; agent presents `X-Mandate` |
-| `authorization_denied` | 403 | Provider evaluated the action and denied it (message carries the reason) | Surface the reason to the principal; do not retry blindly |
-| `payout_controls_required` | 403 | Payout attempted with no provider and no spend limit for the asset | Merchant sets a spend limit or enables a provider |
-| `per_tx_cap_exceeded` | 403 | Payout exceeds the per-transaction cap | Reduce the amount or raise the cap |
-| `daily_cap_exceeded` | 403 | Payout would exceed the daily cap for the current UTC day | Wait for the UTC day to roll over or raise the cap |
-| `spend_cap_exceeded` | 403 | x402 settlement exceeds the mandate's per-call cap or remaining envelope | Issue a new mandate or reduce the charge |
-| `idempotency_key_required` | 422 | Payout, refund, or settlement sent without `Idempotency-Key` | Send a unique key per logical operation |
-| `rate_limited` | 429 | Over 120 requests per minute on this credential | Back off and retry |
+| `invalid_agent_credential` | 401 | Token matches no active credential | Check for revocation or expiry |
+| `insufficient_scope` | 403 | Credential lacks the scope for this endpoint | The merchant issues a credential with the scope |
+| `mandate_required` | 403 | Refund, token change, mandate issuance or settlement on a store with no authorization provider | Report it; the merchant contacts support to enable a provider |
+| `authorization_denied` | 403 | A provider evaluated the action and denied it; the message carries the reason | Surface the reason to the principal, do not retry |
+| `payout_controls_required` | 403 | Payout with no provider and no spend limit for the asset | The merchant sets a spend limit on that asset |
+| `per_tx_cap_exceeded` | 403 | Payout above the per-transaction cap | Reduce the amount |
+| `daily_cap_exceeded` | 403 | Payout would pass the cap for the current UTC day | Wait for the day to roll over, or reduce the amount |
+| `spend_cap_exceeded` | 403 | x402 settlement above the mandate's per-call cap, or the envelope is exhausted | Issue a new mandate or reduce the charge |
+| `idempotency_key_required` | 422 | Payout, refund or settlement sent without `Idempotency-Key` | Send a unique key per logical operation |
+| `rate_limited` | 429 | Over 120 requests per minute on this credential | Back off; no `Retry-After` header is set |
 
 <Warning>
-  If you are building an agent: these denials are the system working as designed. Read the `error.code`, explain it to the user or principal, and stop. Retrying the identical request will produce the identical denial.
+  Retrying an identical gated request produces an identical denial and burns rate-limit budget. Read `error.code`, explain it, and stop.
 </Warning>
 
 ## Audit trail
 
-Every gated decision is recorded. Payments, payouts, and mandates store the provider's decision and receipt with the record; every agent action (created, denied, cap exceeded) is emitted as telemetry with the credential id; and the per-credential [activity feed](/agentic/agent-credentials#activity) shows the merchant exactly what each agent did.
+Each gated decision is recorded. Payments, payouts and mandates persist the provider's decision and receipt on the record itself. Every agent action — created, denied, cap exceeded — is emitted as telemetry keyed by credential id. Merchants see the resulting payments, payouts and settlements per credential in the dashboard under **Agents**.

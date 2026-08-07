@@ -1,27 +1,26 @@
 ---
-title: "SouthPay for n8n"
-description: "Automate payments, invoices, and payouts in n8n. Connect with OAuth in one click and react to payment events without setting up webhooks by hand."
+title: "Southpay for n8n"
+description: "Automate payments, invoices and payouts in n8n. Connect with OAuth, and let the trigger node register and verify its own webhook endpoint."
 sidebarTitle: "n8n"
 ---
 
-The SouthPay node for [n8n](https://n8n.io) lets you create and read payments, manage billing,
-trigger payouts, and start workflows from payment events. You connect once with OAuth (no API
-keys to paste), and the trigger registers its own webhook automatically.
+The Southpay node for [n8n](https://n8n.io) creates and reads payments, manages billing, triggers payouts, and starts workflows from payment events. You connect once with OAuth, and the trigger node registers its own webhook endpoint rather than making you copy a URL and a secret.
 
-The package is published on npm as [`n8n-nodes-southpay`](https://www.npmjs.com/package/n8n-nodes-southpay).
+The package is published on npm as [`n8n-nodes-southpay`](https://www.npmjs.com/package/n8n-nodes-southpay). It is a community node, versioned and released independently of the API, so treat the operation list below as indicative and the node's own release notes as authoritative for a given version.
 
 ## Install the node
 
-Install it from the GUI like any other
-[n8n community node](https://docs.n8n.io/integrations/community-nodes/installation/gui-install/).
+Install it from the GUI like any other [n8n community node](https://docs.n8n.io/integrations/community-nodes/installation/gui-install/).
 
 <Steps>
   <Step title="Open community nodes">
     In n8n, go to **Settings → Community Nodes** and click **Install**.
   </Step>
   <Step title="Install the package">
-    Enter `n8n-nodes-southpay`, tick **I understand the risks of installing unverified code from a
-    public source**, then click **Install**.
+    Enter `n8n-nodes-southpay`, tick **I understand the risks of installing unverified code from a public source**, then click **Install**.
+  </Step>
+  <Step title="Add a credential">
+    Add a **Southpay** node to a workflow and create a new Southpay OAuth2 credential.
   </Step>
 </Steps>
 
@@ -29,40 +28,44 @@ On n8n Cloud, once the node is verified it appears in the nodes panel with no in
 
 ## Connect your account
 
-The node authenticates with OAuth 2.0 (Authorization Code + PKCE). SouthPay's first-party app is
-pre-filled, so there is nothing to paste.
+The node authenticates with OAuth 2.0, authorization code plus PKCE. Southpay requires PKCE with `S256` on every authorization request, so a client that cannot do PKCE cannot connect at all.
 
-<Steps>
-  <Step title="Add a SouthPay node">
-    Add a **SouthPay** node to a workflow and create a new **SouthPay OAuth2 API** credential.
-  </Step>
-  <Step title="Click Connect">
-    Click **Connect my account** and approve the consent screen. The token is bound to your store,
-    so you do not pass a store id.
-  </Step>
-</Steps>
+Click **Connect my account** and approve the consent screen. The resulting access token is bound to one store and one mode, so you never pass a store id and never set a mode header — the grant carries both. Live mode works: the mode is chosen when you authorize, not fixed to test.
 
-<Note>
-  You can also connect from the dashboard: **Integrations → n8n** shows your connection status and
-  lets you disconnect.
-</Note>
+An access token issued alongside a refresh token lives for **1 hour**, so the credential relies on the refresh token to stay connected; a connection that stops working after an hour is a refresh problem, not a scope problem. You can revoke the connection from either side — n8n's credential screen, or the connected apps list in the Southpay dashboard.
+
+If you would rather use your own OAuth client than the first-party one, [register an OAuth app](/oauth-apps) and set its client id on the n8n credential.
 
 ## React to payment events
 
-Add a **SouthPay Trigger** node and pick the events you care about. When you activate the
-workflow, the trigger **registers its own webhook endpoint** with SouthPay, stores the signing
-secret, and verifies the `Southpay-Signature` on every delivery. Deactivating the workflow removes
-the endpoint. There is no webhook URL or secret to copy.
+Add a **Southpay Trigger** node and pick the events you want. Activating the workflow registers a webhook endpoint on your store, stores the signing secret, and verifies the `Southpay-Signature` header on every delivery. Deactivating removes the endpoint.
 
-Available events include `payment_intent.created`, `payment_intent.processing`,
-`payment_intent.completed`, `payment_intent.failed`, `payment_intent.expired`, and
-`payment_intent.refunded`.
+These payment events are emitted and can be subscribed to:
+
+- `payment_intent.created`
+- `payment_intent.processing`
+- `payment_intent.completed`
+- `payment_intent.expired`
+- `payment_intent.failed`
+- `payment_intent.refunded`
+
+<Warning>
+  Southpay retries a delivery on **any** non-2xx response, including 400, 401 and 404, up to 10 attempts. An n8n workflow that errors on a malformed payload will be re-sent the same payload nine more times. Return 2xx as soon as you have accepted the event, and do the work afterwards.
+</Warning>
+
+Deliveries are not deduplicated for you. The envelope's top-level `id` stays the same across every retry of one delivery, so deduplicate on it if a repeated run would double-charge, double-ship or double-notify.
+
+Payout events are not available. `payout.created`, `payout.confirmed` and `payout.failed` pass subscription validation but no code path emits them, so a workflow waiting on one waits forever. Poll the payout instead.
+
+See [webhooks](/webhooks) for the full envelope, the signature scheme and the retry schedule.
 
 ### Wait for a payment
 
-The **Wait for a Payment** operation polls until a payment reaches a terminal status
-(`completed`, `overpaid`, `failed`, `expired`, `refunded`) or a timeout, so a single node can block
-a workflow until the customer pays. For production, prefer the trigger over polling.
+The **Wait for a Payment** operation polls until the payment reaches a terminal status or the timeout elapses, so a single node can block a workflow until the customer pays. The terminal statuses are `completed`, `expired`, `failed` and `refunded`.
+
+There is no `overpaid` status. An overpayment arrives as `completed` with `state_reason: "completed_overpaid"`, so a check for `status === "completed"` catches it — read `state_reason` if you need to treat it differently.
+
+Intents expire 60 minutes after creation and that window is not configurable, so a timeout longer than an hour buys you nothing. For production, prefer the trigger over polling.
 
 ## Operations
 
@@ -77,13 +80,21 @@ a workflow until the customer pays. For production, prefer the trigger over poll
 | Payout | Create, Get, List, Quote |
 | Balance | Get balances |
 
+## When an operation fails
+
+Every operation is limited by the scopes granted at consent. A call outside them returns `403 insufficient_scope`, and the fix is to reconnect the credential with the scope included — n8n cannot widen a token in place.
+
+Two other refusals catch people out:
+
+- **Fiat payouts need a verified store.** `403` until KYC is confirmed on the store, and only `USDT` and `USDC` are eligible for the fiat rail.
+- **Payouts and refunds require an `Idempotency-Key`.** The node sends one; if you are calling the API directly alongside the node, omitting it returns `422`.
+
+Southpay does not use one error shape. Most endpoints return `{"error": "<string>"}`, some return `{"error": {"message": "...", "code": "..."}}`, and validation failures return `{"errors": ["...", "..."]}`. If you parse an error message inside a Function node, handle all three — see [errors](/errors).
+
 <Note>
-  Money movement (payouts, refunds) stays gated server-side and can return `mfa_required` or
-  `authorization_denied` depending on your store's controls, regardless of OAuth scope.
+  The mandate and spend-limit controls described under [agent authorization](/agentic/authorization) apply to `spa_` agent credentials only. They do not apply to an OAuth connection, and neither does step-up MFA, which is raised for dashboard sessions and never for a bearer token.
 </Note>
 
 ## Self-hosting n8n
 
-The connection works out of the box on a public domain. If you prefer your own OAuth client,
-[register an OAuth app](/oauth-apps), then set its client id in the n8n credential's **Client ID**
-field.
+The connection works out of the box on a public domain, because the redirect must be reachable by the browser completing the consent flow. On a private or `localhost` instance, expose n8n on a public URL first, or register your own OAuth app with a redirect URI your instance can actually serve.

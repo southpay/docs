@@ -1,64 +1,48 @@
 ---
 title: "Refunds"
-description: "Return crypto to the customer for a completed, failed, or expired payment intent, in full or in part."
+description: "Return crypto to a customer for a completed, failed or expired payment intent, in full or in part, with an optional destination override."
 sidebarTitle: "Refunds"
 ---
 
-<Warning>
-  All endpoints require authentication. See [Authentication](/authentication).
-</Warning>
+A refund sends crypto back on-chain, by default to the address the customer paid from. Refunds always belong to a payment intent. One request can produce several refund records — one per asset the intent received — so both endpoints return an array.
 
-Base URL: `https://api.southpay.io/api/v2`
+Amounts you send are decimal major units of the crypto asset. Amounts you read back are atomic-unit strings: `decimal = atomic / 10^atomic_decimals`.
 
-A refund returns funds on-chain to the address the customer paid from. Refunds are scoped to a payment intent. A single refund request can produce more than one refund record when the original payment arrived across multiple assets or addresses, so both endpoints return an array.
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-Amounts are expressed in **atomic units** of the asset. Convert with `decimal = atomic / 10^atomic_decimals`.
+## Authentication and scope
 
-A refund can be created in two ways:
+`GET` requires `refunds:read`, `POST` requires `refunds:write`. Note that this is a different resource from `payments`, even though the path is nested under a payment intent — a key holding only `payments:write` cannot refund.
 
-- **Automatic.** When a payment is rejected (overpaid on a store that does not accept overpayments, or underpaid past expiration on a store that does not accept underpayments), Southpay initiates a full refund of the confirmed funds. These carry a `reason` of `failed_overpaid` or `failed_underpaid`.
-- **Requested.** You call the create endpoint below. These carry a `reason` of `merchant_requested`.
+Agents use a separate endpoint with different error semantics. See [Agentic API](/api-reference/agentic#refund-a-payment).
 
----
+## Where refunds come from
 
-## Refund lifecycle
+**Automatic.** When a payment is rejected — overpaid on a store that does not accept overpayments, or underpaid past expiry on a store that does not accept underpayments — Southpay refunds the confirmed funds itself. These carry `reason` `failed_overpaid` or `failed_underpaid`.
 
-| Status | Terminal | Description |
-| --- | --- | --- |
-| `pending` | No | Refund created, queued for execution. |
-| `submitted` | No | Broadcast to the network, awaiting confirmation. |
-| `confirmed` | Yes | On-chain confirmations met. |
-| `failed` | Yes | The refund could not be completed. |
+**Requested.** You call `POST /payments/{id}/refunds`. These carry `reason` `merchant_requested`.
 
-When a refund reaches `confirmed`, its payment intent transitions to `refunded` with `state_reason: refund_completed`.
+## List refunds for a payment intent
 
-### `reason`
+**`GET /payments/{payment_intent_id}/refunds`** — scope `refunds:read`.
 
-| Reason | Set when |
-| --- | --- |
-| `merchant_requested` | You requested the refund through the API. |
-| `failed_underpaid` | Automatic refund of an underpaid payment the store does not accept. |
-| `failed_overpaid` | Automatic refund of an overpaid payment the store does not accept. |
-
----
-
-## List refunds for an intent
+Returns a **bare array**, newest first. No envelope, no pagination.
 
 <CodeGroup>
 ```bash Request
-GET /payments/:payment_intent_id/refunds
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f/refunds \
+  -H "Authorization: Bearer sp_sk_test_…"
 ```
 
-```json Response
+```json Response 200
 [
   {
-    "id": "01HZ...",
+    "id": "9e7d6c5b-4a39-4281-b7c6-d5e4f3a2b109",
     "status": "confirmed",
     "reason": "merchant_requested",
-    "destination_address": "0xabc...",
+    "destination_address": "0x1234…",
     "amount_atomic": "49990000",
-    "tx_hash": "0xdef...",
+    "tx_hash": "0xdef0…",
     "attempts": 1,
     "asset_id": "ETH_USDC",
     "coin_symbol": "USDC",
@@ -71,48 +55,46 @@ Authorization: Bearer <API_KEY>
 ```
 </CodeGroup>
 
----
-
 ## Request a refund
 
-Requires an `Idempotency-Key` header. Retrying with the same key returns the original refund instead of creating a duplicate.
+**`POST /payments/{payment_intent_id}/refunds`** — scope `refunds:write`. `Idempotency-Key` is **required**.
 
-An intent is refundable through this endpoint while its status is `completed`, `failed`, or `expired` and it still has confirmed funds that have not already been refunded.
+An intent is refundable while its status is `completed`, `failed` or `expired` and it still holds confirmed funds that have not already been refunded.
 
-Omit `amount` to refund the full remaining amount. Provide `amount` (decimal) to refund a partial amount. Provide `asset_id` when the intent received more than one asset and you want to refund a specific one.
+All fields go inside an optional `refund` object. Sending them at the top level also works.
 
-By default the refund is sent to the address the customer paid from. Provide `destination_address` to send it somewhere else, typically when the customer paid from an exchange or custodial wallet and has supplied a wallet address they control. The override must be a valid address for the asset's chain and must not be a Southpay deposit address. If an automatic refund has already `failed`, requesting a refund with a `destination_address` creates a fresh attempt to the new address; while a refund is `pending` or `submitted`, requests return the existing refund instead of creating a second one.
+<ParamField body="refund.amount" type="string">
+  Decimal amount in major units of the asset. Omit to refund the full remaining balance. Only valid for `completed` intents.
+</ParamField>
 
-<Note>
-  Partial refunds (`amount`) and `asset_id` selection apply only to `completed` intents. For `failed` or `expired` intents the endpoint always refunds the full confirmed balance across every asset; sending `amount` on those returns `422`.
-</Note>
+<ParamField body="refund.asset_id" type="string">
+  Restrict the refund to one asset when the intent received several. Required alongside `amount` or `destination_address` in that case.
+</ParamField>
+
+<ParamField body="refund.destination_address" type="string">
+  Send the refund somewhere other than the address the customer paid from. Must be valid for the asset's chain and must not be a Southpay deposit address.
+</ParamField>
 
 <Warning>
-  On-chain transfers are irreversible. Double-check a `destination_address` before sending: funds sent to a wrong address cannot be recovered.
+On-chain transfers are irreversible. A `destination_address` typo sends real funds to an address nobody controls. Verify it before you send.
 </Warning>
 
 <CodeGroup>
 ```bash Request
-POST /payments/:payment_intent_id/refunds
-Authorization: Bearer <API_KEY>
-Idempotency-Key: refund_order_123
-Content-Type: application/json
-
-{
-  "refund": {
-    "amount": "10.00",
-    "asset_id": "ETH_USDC"
-  }
-}
+curl -X POST https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f/refunds \
+  -H "Authorization: Bearer sp_sk_test_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: refund_order_1043" \
+  -d '{ "refund": { "amount": "10.00", "asset_id": "ETH_USDC" } }'
 ```
 
 ```json Response 201
 [
   {
-    "id": "01HZ...",
+    "id": "9e7d6c5b-4a39-4281-b7c6-d5e4f3a2b109",
     "status": "pending",
     "reason": "merchant_requested",
-    "destination_address": "0xabc...",
+    "destination_address": "0x1234…",
     "amount_atomic": "10000000",
     "tx_hash": null,
     "attempts": 0,
@@ -127,33 +109,90 @@ Content-Type: application/json
 ```
 </CodeGroup>
 
-**Request fields**
+<Note>
+`amount` and `asset_id` selection apply only to `completed` intents. For `failed` or `expired` intents the endpoint refunds the full confirmed balance across every asset, and sending `amount` returns `422`.
+</Note>
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `refund[amount]` | string | No | Decimal amount to refund. Defaults to the full received amount. |
-| `refund[asset_id]` | string | No | Restrict the refund to one asset when the intent received several. |
-| `refund[destination_address]` | string | No | Send the refund to this address instead of the address the customer paid from. Must be valid for the asset's chain. |
-| `Idempotency-Key` | header | Yes | Missing key returns `422`. |
+### Idempotency behaviour
 
-**Common errors**
+Your `Idempotency-Key` is not used verbatim. Southpay derives a per-asset key from it, so a payment that received two assets produces two refund records under one key you sent. Replaying the same key returns the existing refunds — still with status `201`, not `200`.
 
-All error responses use status `422` with an `{ "error": "..." }` body.
+For `failed` and `expired` intents the response contains **every** refund on the intent, not only the ones this call created.
 
-| Condition | Notes |
+If an earlier refund already `failed`, sending a new `destination_address` starts a fresh attempt to that address. While a refund is `pending` or `submitted`, the existing record is returned instead of a second one being created.
+
+### Response fields
+
+<ResponseField name="id" type="string" required>
+  Bare UUID.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  `pending`, `submitted`, `confirmed` or `failed`.
+</ResponseField>
+
+<ResponseField name="reason" type="string" required>
+  `merchant_requested`, `failed_underpaid` or `failed_overpaid`.
+</ResponseField>
+
+<ResponseField name="destination_address" type="string">
+  Where the funds are being sent.
+</ResponseField>
+
+<ResponseField name="amount_atomic" type="string" required>
+  Atomic units of `asset_id`.
+</ResponseField>
+
+<ResponseField name="tx_hash" type="string | null">
+  Null until the refund is broadcast.
+</ResponseField>
+
+<ResponseField name="attempts" type="integer" required>
+  Broadcast attempts made so far.
+</ResponseField>
+
+<ResponseField name="asset_id" type="string" required />
+<ResponseField name="coin_symbol" type="string" required />
+<ResponseField name="chain_symbol" type="string" required />
+<ResponseField name="atomic_decimals" type="integer" required>
+  Divisor exponent for converting `amount_atomic` to a decimal.
+</ResponseField>
+
+## Refund lifecycle
+
+| Status | Terminal | Meaning |
+| --- | --- | --- |
+| `pending` | No | Created, queued for broadcast. |
+| `submitted` | No | Broadcast, awaiting confirmations. |
+| `confirmed` | Yes | Confirmed on-chain. |
+| `failed` | Yes | Could not be completed. Ledger entries are reversed. |
+
+When a refund reaches `confirmed`, its payment intent moves to `refunded` with `state_reason: "refund_completed"` and fires `payment_intent.refunded`. Subscribe to that [webhook](/webhooks) rather than polling.
+
+## Errors
+
+Every failure on this endpoint returns `422` with the flat envelope `{"error": "<message>"}`. The value is the human-readable sentence below — **not** a machine code and **not** a Ruby class name.
+
+| Message | Cause |
 | --- | --- |
-| Missing `Idempotency-Key` header | Header is required. |
-| Intent status is not `completed`, `failed`, or `expired` | `NotRefundableError`. |
-| No confirmed funds available to refund | `NothingToRefundError`. |
-| `amount` sent for a `failed` or `expired` intent | Partial refunds are only supported for completed payments. |
-| `amount` is not a valid number, or is not positive and within the refundable balance | `InvalidAmountError`. |
-| `asset_id` does not match any confirmed payment on the intent | `AssetNotFoundError`. |
-| Partial refund requested without `asset_id` when the intent has confirmed funds in multiple assets | `AmbiguousAssetError`. |
-| `destination_address` sent without `asset_id` when the intent has confirmed funds in multiple assets | `AmbiguousAssetError`. |
-| The source address on the confirmed transaction is missing or fails format validation | `InvalidDestinationError`. |
-| `destination_address` fails format validation for the asset's chain, or is a Southpay deposit address | `InvalidDestinationError`. |
-| Refund exceeds the merchant's available ledger balance for the asset | `InsufficientBalanceError`. |
+| `Idempotency-Key header is required` | Header missing. |
+| `Payment in status 'pending' is not refundable` | Status is not `completed`, `failed` or `expired`. |
+| `No confirmed funds available to refund` | Nothing confirmed, or everything already refunded. |
+| `Partial refunds are only supported for completed payments` | `amount` sent for a `failed` or `expired` intent. |
+| `Refund amount '10.x' is not a valid number` | `amount` is not parseable. |
+| `Refund amount 10.0 is invalid; 5.0 refundable for asset 'ETH_USDC'` | `amount` exceeds the remaining refundable balance. |
+| `No confirmed payment found for asset 'ETH_USDT'` | `asset_id` does not match any confirmed deposit. |
+| `Payment has confirmed funds in multiple assets; specify asset_id` | Partial refund on a multi-asset intent without `asset_id`. |
+| `Payment has confirmed funds in multiple assets; specify asset_id when overriding the destination` | `destination_address` on a multi-asset intent without `asset_id`. |
+| `Payment has confirmed funds in multiple assets; a single destination override cannot apply to all of them` | Destination override cannot be resolved to one asset. |
+| `Destination override matches a Southpay deposit address` | The override is one of ours. |
+| `Refund destination resolves to own deposit address` | The customer's source address is a Southpay address. |
+| `Refund destination address failed format validation for ETH` | Malformed address for that chain. |
+| `No source address on confirmed transaction` | No sender recorded and no override supplied. |
+| `Refund exceeds merchant ledger balance for intent …` | Your ledger balance for the asset is short. |
 
-<Tip>
-  Subscribe to the `payment_intent.refunded` [webhook event](/webhooks) instead of polling for refund status.
-</Tip>
+A `404` for an unknown payment intent comes from the global handler and uses the *structured* envelope instead: `{"error": {"message": "…", "code": null}}`. Handle both shapes.
+
+<Note>
+Only the agentic refund endpoint returns machine-readable codes — `not_refundable`, `nothing_to_refund`, `invalid_amount`, `asset_not_found`, `ambiguous_asset`, `invalid_destination`, `insufficient_balance`. This endpoint returns the message text only, so match on status code and endpoint, never on the string.
+</Note>

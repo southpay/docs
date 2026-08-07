@@ -1,119 +1,295 @@
 ---
-title: "Payout Schedules"
-description: "Automatically disburse your accumulated crypto balance on a recurring schedule to a fiat bank account or external crypto address."
-sidebarTitle: "Payout Schedules"
+title: "Payout schedules"
+description: "Automatically disburse one asset's balance on a daily, weekly or monthly cadence to a bank account or external wallet."
+sidebarTitle: "Payout schedules"
 ---
 
-<Warning>
-  All endpoints require authentication. See [Authentication](/authentication).
-</Warning>
+A payout schedule answers two questions for a single asset: how often the accumulated balance leaves Southpay, and where it goes. When `next_payout_at` passes and the balance clears `minimum_fiat_cents`, a [payout](/api-reference/payouts) is created for you.
 
-Base URL: `https://api.southpay.io/api/v2`
+One schedule exists per store, asset and mode. Creating a second for the same asset is rejected — edit the existing one instead.
 
-A payout schedule defines, for one asset, **how often** the store's accumulated balance is paid out and **where** the proceeds go. The destination is either:
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-- A **fiat payout detail** - funds are off-ramped and arrive as fiat in your bank account.
-- A **crypto payout detail** - funds are sent on-chain to an external wallet you control.
+## Before you can create one
 
-Schedules are evaluated continuously. If a schedule's `next_payout_at` has passed and the accrued balance meets `minimum_fiat_cents`, a payout is created automatically.
+A schedule needs a **payout destination**: a saved bank account (`fiat_payout_detail_id`) or a saved wallet (`crypto_payout_detail_id`). Neither can be created over the public API — both are configured in the dashboard. See [payout destinations](/payout-destinations). A fiat destination must be verified, and the store must have confirmed KYC.
 
----
+## Authentication and scope
+
+Reads require `payouts:read`, writes require `payouts:write`. Publishable keys are rejected.
 
 ## List schedules
 
+**`GET /payout_schedules`** — scope `payouts:read`.
+
+Returns a **bare array** with no envelope and no pagination, oldest first. Only active schedules are returned; deleting one hides it from this list permanently.
+
 <CodeGroup>
 ```bash Request
-GET /payout_schedules
-Authorization: Bearer <API_KEY>
+curl https://api.southpay.io/api/v2/payout_schedules \
+  -H "Authorization: Bearer sp_sk_live_…"
 ```
 
-```json Response
+```json Response 200
 [
   {
-    "id": "01HX...",
+    "id": "b4c5d6e7-f809-4a1b-8c2d-3e4f50617283",
     "frequency": "weekly",
     "minimum_fiat_cents": 50000,
-    "minimum_fiat_currency": "USD",
-    "destination_address": "GB29NWBK60161331926819",
+    "minimum_fiat_currency": "EUR",
+    "destination_address": null,
     "destination_type": "fiat",
-    "next_payout_at": "2026-05-19T23:59:59.000Z",
+    "payout_rail": "fiat_manual",
+    "next_payout_at": "2026-05-18T02:00:00.000Z",
+    "last_payout_at": "2026-05-11T02:00:00.000Z",
+    "last_skip_reason": null,
     "active": true,
     "livemode": true,
-    "fiat_payout_detail_id": "01HX...",
+    "fiat_payout_detail_id": "5e4d3c2b-1a09-4f8e-9d6c-b5a493827160",
     "crypto_payout_detail_id": null,
+    "created_at": "2026-03-02T10:00:00.000Z",
+    "updated_at": "2026-05-11T02:00:04.000Z",
     "asset": {
-      "asset_id": "ETH_USDC",
-      "coin_symbol": "USDC",
+      "asset_id": "ETH_USDT",
+      "coin_symbol": "USDT",
       "chain_symbol": "ETH"
-    },
-    "created_at": "2026-04-01T00:00:00.000Z",
-    "updated_at": "2026-04-01T00:00:00.000Z"
+    }
   }
 ]
 ```
 </CodeGroup>
 
----
-
-## Get a schedule
-
-Returns the schedule with all payouts it has produced.
-
-```bash
-GET /payout_schedules/:id
-```
-
----
-
 ## Create a schedule
+
+**`POST /payout_schedules`** — scope `payouts:write`. `Idempotency-Key` is not used here.
+
+All fields go inside a required `payout_schedule` object.
+
+<ParamField body="payout_schedule.asset_id" type="string" required>
+  The asset whose balance this schedule drains. Cannot be changed later.
+</ParamField>
+
+<ParamField body="payout_schedule.frequency" type="string" required>
+  `daily`, `weekly` or `monthly`.
+</ParamField>
+
+<ParamField body="payout_schedule.fiat_payout_detail_id" type="string">
+  Off-ramp to this saved bank account. Must be verified, and the store must have confirmed KYC.
+</ParamField>
+
+<ParamField body="payout_schedule.crypto_payout_detail_id" type="string">
+  Send on-chain to this saved wallet.
+</ParamField>
+
+<ParamField body="payout_schedule.minimum_fiat_cents" type="integer">
+  Skip the run when the accrued balance is worth less than this. Minor units of `minimum_fiat_currency`.
+</ParamField>
+
+<ParamField body="payout_schedule.minimum_fiat_currency" type="string">
+  One of `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`. Falls back to `USD`.
+</ParamField>
+
+<ParamField body="payout_schedule.next_payout_at" type="string">
+  ISO 8601. When the first run is due.
+</ParamField>
+
+<ParamField body="payout_schedule.swap_target_asset_id" type="string">
+  Swap the balance into this asset before paying out, producing a `fiat_autoswap` payout. Write-only — it does not appear in the response.
+</ParamField>
+
+<ParamField body="payout_schedule.active" type="boolean" default="true">
+  Set false to pause the schedule without deleting it.
+</ParamField>
+
+<ParamField body="payout_schedule.destination_address" type="string">
+  Legacy raw address. Prefer `crypto_payout_detail_id`.
+</ParamField>
+
+<Warning>
+`minimum_fiat_currency` accepts six currencies. A payment intent accepts ten — `DKK`, `CHF`, `SEK` and `NOK` are valid there but **not** here. Sending one of the extra four on a schedule silently falls back to `USD`, so a threshold you meant as 500 DKK becomes 500 USD.
+</Warning>
 
 <CodeGroup>
 ```bash Request
-POST /payout_schedules
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
+curl -X POST https://api.southpay.io/api/v2/payout_schedules \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payout_schedule": {
+      "asset_id": "ETH_USDT",
+      "frequency": "weekly",
+      "minimum_fiat_cents": 50000,
+      "minimum_fiat_currency": "EUR",
+      "fiat_payout_detail_id": "5e4d3c2b-1a09-4f8e-9d6c-b5a493827160",
+      "next_payout_at": "2026-05-18T02:00:00Z"
+    }
+  }'
+```
 
+```json Response 201
 {
-  "payout_schedule": {
-    "asset_id": "ETH_USDC",
-    "frequency": "weekly",
-    "minimum_fiat_cents": 50000,
-    "minimum_fiat_currency": "USD",
-    "fiat_payout_detail_id": "01HX..."
-  }
+  "id": "b4c5d6e7-f809-4a1b-8c2d-3e4f50617283",
+  "frequency": "weekly",
+  "minimum_fiat_cents": 50000,
+  "minimum_fiat_currency": "EUR",
+  "destination_address": null,
+  "destination_type": "fiat",
+  "payout_rail": "fiat_manual",
+  "next_payout_at": "2026-05-18T02:00:00.000Z",
+  "last_payout_at": null,
+  "last_skip_reason": null,
+  "active": true,
+  "livemode": true,
+  "fiat_payout_detail_id": "5e4d3c2b-1a09-4f8e-9d6c-b5a493827160",
+  "crypto_payout_detail_id": null,
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z",
+  "asset": { "asset_id": "ETH_USDT", "coin_symbol": "USDT", "chain_symbol": "ETH" }
 }
 ```
 </CodeGroup>
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `asset_id` | string | Yes | Asset whose balance this schedule drains (e.g. `ETH_USDC`). |
-| `frequency` | string | Yes | `daily`, `weekly`, `monthly`. |
-| `minimum_fiat_cents` | integer | Yes | Minimum balance in fiat cents required to trigger a payout. |
-| `minimum_fiat_currency` | string | No | ISO 4217 fiat code for the minimum threshold. Defaults to `USD`. |
-| `fiat_payout_detail_id` | string | One of | Send proceeds as fiat to this bank account. |
-| `crypto_payout_detail_id` | string | One of | Send proceeds on-chain to this address. |
-| `swap_target_asset_id` | string | No | For crypto destinations: auto-swap the source asset into this target before payout. |
-| `next_payout_at` | ISO 8601 | No | First scheduled run. Defaults to end of the current day. |
+## Response fields
 
-Exactly one of `fiat_payout_detail_id` or `crypto_payout_detail_id` must be set.
+<ResponseField name="id" type="string" required>
+  Bare UUID.
+</ResponseField>
 
----
+<ResponseField name="frequency" type="string" required>
+  `daily`, `weekly` or `monthly`.
+</ResponseField>
+
+<ResponseField name="destination_type" type="string" required>
+  `fiat`, `crypto`, or `legacy` for a schedule created against a raw `destination_address` before saved destinations existed.
+</ResponseField>
+
+<ResponseField name="payout_rail" type="string" required>
+  `fiat_manual` for fiat destinations, `crypto` otherwise — including `legacy`. This is the rail the produced payouts will carry.
+</ResponseField>
+
+<ResponseField name="next_payout_at" type="string | null">
+  When the next run is due.
+</ResponseField>
+
+<ResponseField name="last_payout_at" type="string | null">
+  When this schedule last produced a payout. Null if it never has.
+</ResponseField>
+
+<ResponseField name="last_skip_reason" type="string | null">
+  Why the last run produced nothing: `no_balance`, `below_minimum` or `below_network_minimum`. Check this first when a schedule looks stuck — a non-null value means the schedule ran and declined, not that it failed.
+</ResponseField>
+
+<ResponseField name="minimum_fiat_cents" type="integer | null">
+  Threshold in minor units of `minimum_fiat_currency`.
+</ResponseField>
+
+<ResponseField name="active" type="boolean" required>
+  False once the schedule is paused or deleted.
+</ResponseField>
+
+<ResponseField name="fiat_payout_detail_id" type="string | null" />
+<ResponseField name="crypto_payout_detail_id" type="string | null" />
+
+<ResponseField name="asset" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="asset_id" type="string" />
+    <ResponseField name="coin_symbol" type="string" />
+    <ResponseField name="chain_symbol" type="string" />
+  </Expandable>
+  Unlike the payout object's `asset`, this one carries no `atomic_decimals`.
+</ResponseField>
+
+<Note>
+`swap_target_asset_id` can be written but is never returned. To confirm it took effect, look at the `payout_rail` of the payouts the schedule produces — an auto-swap schedule yields `fiat_autoswap`.
+</Note>
+
+## Retrieve a schedule
+
+**`GET /payout_schedules/{id}`** — scope `payouts:read`.
+
+Returns the schedule plus a `payouts` array of every [payout](/api-reference/payouts) it has produced, in full payout shape.
+
+```json Response 200
+{
+  "id": "b4c5d6e7-f809-4a1b-8c2d-3e4f50617283",
+  "frequency": "weekly",
+  "…": "…",
+  "payouts": [
+    {
+      "id": "0a1b2c3d-4e5f-4061-8273-849506172839",
+      "status": "confirmed",
+      "payout_rail": "fiat_manual",
+      "amount_atomic": "250000000",
+      "amount_decimal": "250",
+      "paid_fiat_amount_cents": 22940,
+      "paid_external_reference": "SP-2026-05-11-0042",
+      "…": "…"
+    }
+  ]
+}
+```
 
 ## Update a schedule
 
-```bash
-PATCH /payout_schedules/:id
-```
+**`PATCH /payout_schedules/{id}`** — scope `payouts:write`.
 
-Same fields as create, except `asset_id` cannot be changed. Pass `active: false` to pause without deleting.
-
----
+Accepts the same `payout_schedule` fields as create, except `asset_id`, which is ignored. Null values are dropped rather than clearing a field, so you cannot unset a destination this way — switch it to the other destination type instead. Returns `200` with the updated schedule.
 
 ## Delete a schedule
 
-```bash
-DELETE /payout_schedules/:id
+**`DELETE /payout_schedules/{id}`** — scope `payouts:write`.
+
+A soft delete: the schedule is set `active: false` and stops running. Returns `204` with no body. It disappears from the list endpoint and cannot be reactivated through the API — create a new schedule instead.
+
+## Run a schedule now
+
+**`POST /payout_schedules/{id}/run`** — scope `payouts:write`. No body.
+
+Evaluates the schedule immediately, ignoring `next_payout_at`. The minimum-balance rule still applies, so a run can legitimately produce nothing.
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/payout_schedules/b4c5d6e7-f809-4a1b-8c2d-3e4f50617283/run \
+  -H "Authorization: Bearer sp_sk_live_…"
 ```
 
-Marks the schedule inactive. History (existing payouts) is preserved.
+```json Response 200 (payout created)
+{
+  "triggered": true,
+  "payout": {
+    "id": "0a1b2c3d-4e5f-4061-8273-849506172839",
+    "status": "pending",
+    "payout_rail": "fiat_manual",
+    "amount_atomic": "250000000",
+    "…": "…"
+  }
+}
+```
+
+```json Response 200 (skipped)
+{
+  "triggered": false,
+  "skip_reason": "below_minimum"
+}
+```
+</CodeGroup>
+
+Both outcomes are `200`. Branch on `triggered`, not on the status code. `skip_reason` is `no_balance`, `below_minimum` or `below_network_minimum`.
+
+This endpoint runs a step-up MFA check. For API keys and OAuth tokens it is a no-op; dashboard sessions without two-factor get `403` `{"error": "Enable two-factor authentication to run a payout", "code": "mfa_required"}`.
+
+## Errors
+
+Validation failures on create and update use the **array** envelope `{"errors": ["…"]}`, which is a third shape distinct from the flat string and the structured object used elsewhere.
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"errors": ["You already have a payout schedule for this balance. Edit it instead."]}` | A schedule already exists for that asset and mode. |
+| `422` | `{"errors": ["Must specify exactly one destination type"]}` | Both or neither destination id supplied. |
+| `422` | `{"errors": ["Must reference an explicit fiat or crypto payout destination"]}` | Create with no saved destination. |
+| `422` | `{"errors": ["Fiat payout detail must be verified before use in a payout schedule"]}` | Bank account not yet verified. |
+| `422` | `{"errors": ["Store KYC must be confirmed before creating a fiat payout schedule"]}` | KYC outstanding. |
+| `404` | `{"errors": ["Asset not found"]}` | Unknown `asset_id` on create. |
+| `404` | `{"error": "Payout schedule not found"}` | Unknown id. Note the singular key here. |
+
+Service-level failures on `run` surface through the global handler as `{"error": {"message": "…", "code": null}}` at `422`.

@@ -1,59 +1,75 @@
 ---
 title: "Agentic commerce"
-description: "Let AI agents charge customers, check balances, and move funds on your store - with scoped credentials, spend limits, and human authorization."
+description: "Run a Southpay store from an AI agent using scoped spa_ credentials, over a hosted MCP server or the /api/v2/agentic REST API."
 sidebarTitle: "Overview"
 ---
 
-Southpay lets an AI agent operate a merchant store directly: create payments, watch them complete, issue refunds, manage accepted tokens, and disburse payouts. Agents connect through a hosted [MCP server](/agentic/mcp-server) or call the [agentic REST API](/api-reference/agentic) with a scoped agent credential.
+Southpay lets an AI agent operate a merchant store: create payments, watch them settle, read balances and rates, and — once a human has configured the controls — issue refunds and disburse payouts. Agents authenticate with an agent credential (`spa_live_…` / `spa_test_…`), which is a distinct credential type from an API key or an OAuth token.
 
-The design assumption is that agents make mistakes. Every capability an agent has is bounded by an explicit control a human configured first, and money movement **fails closed**: if no control is configured, the action is denied.
+There are two ways in, and they reach the same endpoints:
 
-## What an agent can do
+- The hosted **[MCP server](/agentic/mcp-server)** at `https://mcp.southpay.io/mcp`, exposing 19 tools to any Model Context Protocol client.
+- The **[agentic REST API](/api-reference/agentic)** at `/api/v2/agentic/*`, with `Authorization: Bearer spa_…`.
 
-| Capability | Gating |
+The MCP server is a thin proxy over the REST API with no logic of its own, so anything gated in one is gated identically in the other. Session mandates and x402 settlements are REST-only.
+
+## What works out of the box
+
+Money movement fails closed. On a store with no extra configuration:
+
+| Capability | Default |
 | --- | --- |
-| Read account, balances, payments, payouts, rates | Credential scope only |
-| Create and cancel payments | Scope + authorization provider (if enabled) |
-| Wait for a payment to complete | Scope only |
-| Issue refunds | Scope + mandate required |
-| Enable or disable accepted tokens | Scope + mandate required |
-| Create payouts | Scope + spend limits or mandate, fail-closed |
-| Issue x402 session mandates and settle per-call charges | Scope + mandate, capped envelope |
-| Research token prices (public market data) | None - public data, no credential needed |
+| Read account, payments, payouts, balances, tokens, payout limits, exchange rates | Allowed, subject to credential scope |
+| Create a payment, cancel a pending payment | Allowed |
+| Refund a payment | Blocked — `403 mandate_required` |
+| Enable or disable an accepted token | Blocked — `403 mandate_required` |
+| Create a payout | Blocked — `403 payout_controls_required` until a spend limit exists for the asset |
+| Issue a session mandate, settle an x402 charge | Blocked — `403 mandate_required` |
+| Read public token market data | Allowed, no credential required |
 
-## How it fits together
+Spend limits are configured by the merchant in the dashboard. The rest need an authorization provider, which Southpay support enables per store. [Agent authorization](/agentic/authorization) covers exactly what unblocks what.
+
+## How the pieces fit
 
 ```mermaid
 flowchart LR
-  Agent[AI agent<br/>Claude, GPT, custom] -->|MCP| MCP[southpay-mcp<br/>mcp.southpay.io]
+  Agent[AI agent] -->|MCP over HTTP| MCP[mcp.southpay.io/mcp]
   Agent -->|REST| API[api.southpay.io<br/>/api/v2/agentic/*]
   MCP -->|Bearer spa_...| API
-  API --> Controls[Scopes, spend limits,<br/>mandates]
-  Controls --> Store[Your store<br/>payments, balances, payouts]
+  API --> Controls[Credential scopes<br/>Spend limits<br/>Authorization provider]
+  Controls --> Store[Store payments,<br/>balances, payouts]
 ```
 
-- **[Agent credentials](/agentic/agent-credentials)** - bearer tokens with the prefix `spa_live_` or `spa_test_`, created by the merchant in the dashboard. Each carries a set of scopes and an optional expiry.
-- **[MCP server](/agentic/mcp-server)** - a hosted Model Context Protocol server at `https://mcp.southpay.io/mcp` exposing 19 tools. Works with Claude, Claude Code, and any MCP-capable client.
-- **[Authorization](/agentic/authorization)** - three independent safety layers: credential scopes, per-asset spend limits with daily counters, and cryptographic mandates verified through an authorization provider.
-- **[x402 and session mandates](/agentic/x402)** - capped spending envelopes for machine-to-machine, pay-per-call commerce.
+- **[Agent credentials](/agentic/agent-credentials)** — bearer tokens carrying up to eight scopes and an optional expiry, created by the merchant in the dashboard or minted through the OAuth exchange.
+- **[Authorization](/agentic/authorization)** — three controls that compose: credential scopes, per-asset spend limits with a daily counter, and mandates verified by an authorization provider.
+- **[MCP server](/agentic/mcp-server)** — connection, sessions, browser login, and the full tool reference.
+- **[x402 and session mandates](/agentic/x402)** — capped envelopes for pay-per-call machine-to-machine commerce. Ledger-only unless on-chain dispatch is enabled.
 
-## Test mode first
+## Isolation
 
-Agent credentials are mode-specific. A `spa_test_` credential only sees testnet assets and test-mode data; a `spa_live_` credential only sees live data. Start every integration with a test credential - the API surface is identical.
+An agent sees only its own records. Every agentic query is filtered by the calling credential, so payments, payouts, refunds and settlements created by one credential are invisible to another on the same store. An agent also cannot manage credentials — not its own, and not any other.
+
+Credentials are mode-locked by their prefix. A `spa_test_` credential sees only test-mode data, where the single usable asset is `SETH` on Ethereum Sepolia. A `spa_live_` credential sees only live data. There is no mode header on the agentic API.
+
+## Rate limits
+
+Agentic endpoints allow **120 requests per minute per credential**, returning `429` with code `rate_limited` when exceeded. No `Retry-After` header is set, so back off on your own schedule.
+
+`GET /api/v2/agentic/market_data` is the exception: it is deliberately unauthenticated and limited to 30 requests per minute per IP.
 
 ## Get started
 
-<CardGroup cols={2}>
+<Columns cols={2}>
   <Card title="Quickstart" icon="rocket" href="/agentic/quickstart">
-    Create a credential and take your first agent-driven payment in minutes.
+    Create a credential, connect a client, and take an agent-driven payment.
   </Card>
   <Card title="MCP server" icon="plug" href="/agentic/mcp-server">
-    Connect Claude or any MCP client and browse the full tool reference.
+    Connection, browser login, and all 19 tools with their parameters.
   </Card>
   <Card title="Authorization" icon="shield" href="/agentic/authorization">
-    Understand scopes, spend limits, mandates, and the fail-closed rules.
+    What is blocked by default and what unblocks it.
   </Card>
   <Card title="API reference" icon="code" href="/api-reference/agentic">
     Every `/api/v2/agentic/*` endpoint with request and response shapes.
   </Card>
-</CardGroup>
+</Columns>

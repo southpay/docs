@@ -1,0 +1,150 @@
+---
+title: "Payout destinations"
+description: "Bank accounts and wallet addresses money can be paid out to. What they are, where you configure them, and how payouts reference them."
+---
+
+Before you can move a balance out of Southpay you need somewhere to send it. That "somewhere" is a **payout destination**, and it comes in two kinds:
+
+- A **crypto payout detail** — a wallet address on a specific network.
+- A **fiat payout detail** — a bank account, IBAN or SWIFT.
+
+Every payout and every payout schedule references one by id. If you have looked at `POST /api/v2/payouts` and wondered where `crypto_payout_detail_id` and `fiat_payout_detail_id` come from, this is the page.
+
+<Info>
+**Payout destinations are configured in the dashboard, not through the public API.** The `/api/v2/crypto_payout_details` and `/api/v2/fiat_payout_details` endpoints accept a logged-in dashboard session only; an API key or OAuth token gets `401`. Add destinations at [app.southpay.io](https://app.southpay.io) under **Settings → Payouts**, then read the ids from the payout screen or from a payout schedule you create.
+
+This is deliberate. A credential that can create payouts cannot also redirect where they go.
+</Info>
+
+## Using one in a payout
+
+`POST /api/v2/payouts` takes `asset_id`, `amount_atomic`, and exactly one destination. The three forms are mutually exclusive.
+
+<CodeGroup>
+```bash To a saved wallet
+curl -X POST https://api.southpay.io/api/v2/payouts \
+  -H "Authorization: Bearer sp_sk_live_YOUR_KEY" \
+  -H "Idempotency-Key: 0f7c2e91-payout-2026-08-07" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_id": "ETH_USDC",
+    "amount_atomic": "250000000",
+    "crypto_payout_detail_id": "5a91c3e7-88b2-4f06-9d13-6e4a0b72f8c5"
+  }'
+```
+
+```bash To a bank account
+curl -X POST https://api.southpay.io/api/v2/payouts \
+  -H "Authorization: Bearer sp_sk_live_YOUR_KEY" \
+  -H "Idempotency-Key: 0f7c2e91-payout-2026-08-07" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_id": "ETH_USDC",
+    "amount_atomic": "250000000",
+    "fiat_payout_detail_id": "c2b74f10-3e6d-4a89-b501-97fd2c8e6413"
+  }'
+```
+
+```bash To a raw address
+curl -X POST https://api.southpay.io/api/v2/payouts \
+  -H "Authorization: Bearer sp_sk_live_YOUR_KEY" \
+  -H "Idempotency-Key: 0f7c2e91-payout-2026-08-07" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_id": "ETH_USDC",
+    "amount_atomic": "250000000",
+    "destination_address": "0xabcdef1234567890abcdef1234567890abcdef12"
+  }'
+```
+</CodeGroup>
+
+The body is **not** nested under a key, unlike payment intents. `Idempotency-Key` is required; without it you get `422`. See [Idempotency](/idempotency) — payout keys are not scoped to your store, so make them globally unique.
+
+Sending none of the three returns `422` `destination_required`.
+
+<Note>
+`destination_address` skips the saved-destination system entirely and pays a raw address you supply per request. It is convenient and it is unaudited: nothing validates that the address belongs to you, and nothing records who chose it. Prefer a saved `crypto_payout_detail_id` for anything recurring.
+</Note>
+
+Payout schedules take the same two id fields, under the required `payout_schedule` key.
+
+## Crypto payout details
+
+A saved wallet address, pinned to one network.
+
+| Property | Value |
+| --- | --- |
+| Networks | `ethereum`, `bitcoin`, `solana`, `tron`, `litecoin`, `polygon`, `base`, `arbitrum`, `optimism`, `avalanche`, `bsc` |
+| Active addresses per store | 5 |
+| Selected addresses | One per network |
+| Address format | Validated per network before the record is saved |
+
+<Warning>
+**Payout networks are not the same list as deposit chains.** You can be paid out on Polygon, Base, Arbitrum, Optimism and BNB Smart Chain, but customers cannot pay you on any of them — those five are payout-only. Going the other way, Ethereum Classic, TON, SUI and Stellar accept deposits but are not payout networks.
+
+See [Supported currencies and assets](/currencies) for the deposit side.
+</Warning>
+
+The network on the destination must match the network of the asset you are paying out. Paying `ETH_USDC` to a `polygon` address returns `422` with a message naming both networks. Southpay does not bridge between chains during a payout.
+
+Two constraints will surprise you eventually:
+
+- **Address and network are immutable once the detail has processed a payout.** Editing either returns a validation error. Archive it and create a new one instead.
+- **A detail referenced by an active payout schedule cannot be archived.** Deactivate or repoint the schedule first.
+
+## Fiat payout details
+
+A bank account. Southpay converts a stablecoin balance to fiat and sends it by transfer.
+
+| Property | Value |
+| --- | --- |
+| Account types | `iban`, `swift` |
+| Currencies | `USD`, `EUR`, `GBP`, `HKD`, `SGD`, `JPY`, `DKK`, `CHF`, `SEK`, `NOK` |
+| Required for IBAN accounts | `iban`, `bic_swift`, `account_holder_name` |
+| Required for SWIFT accounts | `account_number`, plus a BIC or a routing number |
+| Selected accounts | One per currency |
+
+IBANs are checksum-validated, and the currency must be plausible for the IBAN's country — a `DE` IBAN accepts `EUR` only, a `GB` IBAN accepts `GBP` or `EUR`, a `US` account accepts `USD`. US routing numbers are checksum-validated too. Getting any of this wrong returns `422` with a `{"errors": [...]}` list.
+
+As with crypto details, core fields freeze once the account has processed a payout, and the currently selected account cannot be archived until you deselect it.
+
+### What a fiat payout requires
+
+Three conditions, each with its own failure:
+
+1. **Your store must be KYC verified.** Otherwise `403` `{"error": "Store KYC verification required"}`.
+2. **The asset must be USDT or USDC.** Nothing else is eligible for the fiat off-ramp. Anything else returns `422`.
+3. **The amount must clear the minimum**: 10 USDT (`amount_atomic` ≥ `10000000`) or 0.1 USDC (`amount_atomic` ≥ `100000`). Below it, `422` naming the minimum.
+
+Quote before you commit, with `POST /api/v2/payouts/quote`. It returns `estimated_fiat_cents`, `estimated_fee_cents`, `exchange_rate`, `minimum_atomic`, `meets_minimum` and an `expires_at`. Checking `meets_minimum` is cheaper than handling the rejection.
+
+<Note>
+The ten fiat currencies above are the ones a bank account can be denominated in, and the same ten you can price a payment intent in. A **payout schedule's** `minimum_fiat_currency` is narrower — only `USD`, `EUR`, `GBP`, `HKD`, `SGD` and `JPY`. Anything else falls back to `USD`.
+</Note>
+
+## Selected destinations
+
+Both kinds carry a "selected" flag: one selected crypto address per network, one selected fiat account per currency. Selecting a new one deselects the previous one for that network or currency.
+
+Selection is what the dashboard and automatic payouts use as the default target. It has no effect on an API payout that names an id explicitly — if you pass `crypto_payout_detail_id`, that is where the money goes, selected or not.
+
+## Platforms and sub-merchants
+
+A sub-merchant's payout destinations belong to the merchant, not to the platform.
+
+<Warning>
+A platform **cannot** add, select, or remove a sub-merchant's payout destination, even while acting on that account with `X-Southpay-Account`. Every attempt returns `403` `platform_cannot_change_payout_destination`.
+
+The merchant sets their own, through an onboarding link. Mint one scoped to that single step:
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/platform/accounts/{account_id}/onboarding_links \
+  -H "Authorization: Bearer sp_sk_live_PLATFORM_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"onboarding_link": {"purpose": "payout_destination"}}'
+```
+
+The response carries a `url`. Send the merchant there. See [Platform accounts](/platform-accounts).
+</Warning>
+
+This is the reason the whole feature sits outside the public API: it means a leaked API key cannot redirect settlements, and a disputed payout has a record of who chose the destination.

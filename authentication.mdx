@@ -1,297 +1,289 @@
 ---
 title: "Authentication"
-description: "API keys for server-side integrations. OAuth 2.0 with PKCE for third-party applications."
+description: "API keys, OAuth 2.0 with PKCE, and agent credentials: the four credential types, their scopes, and their real token lifetimes."
 ---
 
-## Overview
+Every request carries `Authorization: Bearer <token>`. The prefix on the token decides which credential type Southpay authenticates it as, and which store and mode the request runs in.
 
-Southpay supports four authentication methods:
-
-| Method | Format | Use case |
+| Credential | Prefix | For |
 | --- | --- | --- |
-| **Secret API key** | `sp_sk_live_...` / `sp_sk_test_...` | Server-side integrations you control |
-| **Publishable API key** | `sp_pk_live_...` / `sp_pk_test_...` | Browser and client-side code (checkout creation only) |
-| **OAuth 2.0** | `spo_...` | Third-party applications acting on behalf of a merchant |
-| **Agent credential** | `spa_live_...` / `spa_test_...` | AI agents operating your store via MCP or the agentic API - see [Agent credentials](/agentic/agent-credentials) |
+| Secret API key | `sp_sk_live_` / `sp_sk_test_` | Your own server-side integration |
+| Publishable API key | `sp_pk_live_` / `sp_pk_test_` | Browser code. Can only create payments. |
+| OAuth access token | `spo_` | An application acting for a merchant who authorized it |
+| Agent credential | `spa_live_` / `spa_test_` | An AI agent on the [agentic API](/agentic/index) |
 
-All requests must include an `Authorization: Bearer <token>` header. HTTPS is required on all endpoints.
+There is no separate sandbox host. **Test and live mode are carried on the credential**, so `sp_sk_test_…` reads and writes test data and `sp_sk_live_…` reads and writes live data, on the same base URL. See [Environments](/environments).
 
----
+You never send `X-Store-Id` or `X-Livemode` with an API key, OAuth token or agent credential. Both are implied by the credential. Those two headers exist only for logged-in dashboard sessions, which are not part of the public API.
 
-## API Keys
+## API keys
 
-API keys are the fastest way to integrate. Create one from the dashboard under **Settings → API Keys**. Each key is tied to a single store and a mode (live or test). The prefix encodes both the type and the mode.
-
-### Key types
-
-| Type | Prefix | Where it runs | Can do |
-| --- | --- | --- | --- |
-| **Secret** | `sp_sk_live_...` / `sp_sk_test_...` | Server-side only | Full API access, subject to scopes |
-| **Publishable** | `sp_pk_live_...` / `sp_pk_test_...` | Browser and client-side | Create checkouts only |
-
-<Warning>
-  Secret keys grant access to your account. Keep them on your server and never ship them in client-side code, mobile apps, or version control. Rotate immediately if a secret key is exposed. Publishable keys are safe to embed in a web page; they can only create checkouts.
-</Warning>
-
-Keys created before key types were introduced use the `sp_live_...` / `sp_test_...` prefix. They behave like secret keys with full access and continue to work.
-
-### Using an API key
+Create keys in the [dashboard](https://app.southpay.io) under **Settings → API keys**. Choose the mode (live or test) and the type (secret or publishable). The full key value is shown once, at creation. There is no endpoint that returns it again, and Southpay stores only a SHA-256 hash.
 
 ```bash
 curl https://api.southpay.io/api/v2/payments \
-  -H "Authorization: Bearer sp_sk_test_your_key_here"
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY"
 ```
 
-No `X-Store-Id` header is required when using an API key - the store is implicit in the key. Mode (live vs test) is also implicit, so no `X-Livemode` header is needed.
+<Danger>
+A secret key is full access to a store's money, bounded only by its scopes. Never put one in client-side code, a mobile binary, a public repository, or a URL. If one leaks, revoke it in the dashboard before you do anything else — rotation is instant and the old value stops working immediately.
+</Danger>
+
+Keys issued before key types existed use the bare `sp_live_…` / `sp_test_…` prefix. They still authenticate and behave as secret keys. Nothing generates that form any more.
+
+### Publishable keys
+
+A publishable key may call exactly one endpoint: `POST /api/v2/payments`. Every other path returns `403` with code `publishable_key_forbidden`. Its scope set is fixed to `payments:write` and cannot be widened.
+
+That restriction is the whole security model, so a publishable key is safe to embed in a page. It cannot read the payments it creates, list anything, or move money.
 
 ### Scopes
 
-A secret key carries a set of scopes that bound what it can do. By default a new secret key has full access. Restrict a key to least privilege by passing an explicit `scopes` array when you create it.
+Fifteen scopes exist. A new secret key gets all of them except the three `accounts:` scopes, which are added only for [platform accounts](/platform-accounts).
 
-| Scope | Access |
+| Scope | Grants |
 | --- | --- |
-| `payments:read` / `payments:write` | Read or create payment intents |
-| `refunds:read` / `refunds:write` | Read or create refunds |
-| `payouts:read` / `payouts:write` | Read or trigger payouts and schedules |
+| `payments:read` | List and read payment intents, their events, and reconciliation |
+| `payments:write` | Create payment intents |
+| `refunds:read` | List and read refunds |
+| `refunds:write` | Create refunds |
+| `payouts:read` | List and read payouts and payout schedules |
+| `payouts:write` | Create, retry and quote payouts; manage payout schedules |
 | `balances:read` | Read balances and reports |
-| `billing:read` / `billing:write` | Read or manage billing (customers, invoices, products, prices, subscriptions) |
-| `webhooks:read` / `webhooks:write` | Read or manage webhook endpoints |
-| `stores:read` | List and read store details |
+| `billing:read` | Read customers, invoices, products, prices and subscriptions |
+| `billing:write` | Manage all of the above |
+| `webhooks:read` | Read webhook endpoints and their deliveries |
+| `webhooks:write` | Create, update, rotate and delete webhook endpoints |
+| `stores:read` | Read store details |
+| `accounts:read` | Read your platform's sub-merchants |
+| `accounts:write` | Create and update sub-merchants, verification and onboarding links |
+| `accounts:act` | Send `X-Southpay-Account` to act as a sub-merchant |
 
-Write implies read for the same resource. A request that needs a scope the key lacks returns `403` with code `insufficient_scope`.
+Holding `<resource>:write` implies `<resource>:read`. A scope check that fails returns `403` with code `insufficient_scope`.
 
-Publishable keys are fixed to creating checkouts and cannot be widened. They are rejected on every endpoint except `POST /api/v2/payments`.
+The required scope is derived from the resource and the HTTP verb: any method other than `GET` or `HEAD` needs `:write`. Reports map to the `balances` resource, not their own.
 
-### What API keys can access
+<Note>
+Some endpoints are not in the scope map at all and accept any valid credential: balance swaps, connected integrations, OAuth connections and verification requests. Do not read a narrow scope list as a guarantee that a key cannot reach those.
+</Note>
 
-Secret API keys can call the **public API surface**: payment intents, balances, payouts, payout schedules, webhook endpoints, and verification requests.
+### Acting as a sub-merchant
 
-A handful of dashboard-only endpoints - listing/managing API keys themselves, payout details (bank/wallet), custom domains, store records, store settings, and the catalog endpoints (`supported_assets`, `networks`, `payment_currencies`) - require a logged-in dashboard session (JWT). These pages are flagged with a "Dashboard sessions only" callout in the API reference.
-
-### Dashboard sessions
-
-When you sign in to the Southpay dashboard you receive a JWT bearer token. Dashboard requests must include:
-
-- `Authorization: Bearer <jwt_token>`
-- `X-Store-Id: <store_id>` - selects which of your stores the request acts on
-- `X-Livemode: true` - opt into live mode. Defaults to test mode (`false`) when the header is absent.
-
-### Managing API keys
-
-**Create a secret key:**
-
-```bash
-curl -X POST https://api.southpay.io/api/v2/api_keys \
-  -H "Authorization: Bearer <jwt_token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": {
-      "name": "Production Server",
-      "mode": "live",
-      "key_type": "secret",
-      "scopes": ["payments:read", "payments:write"]
-    }
-  }'
-```
-
-`key_type` defaults to `secret`. Omit `scopes` to grant full access, or pass an array to restrict the key. The `secret` field in the response is the full key. **It is only shown once.** Store it in a secrets manager (AWS Secrets Manager, HashiCorp Vault, etc.).
-
-**Create a publishable key** for the browser SDK:
-
-```bash
-curl -X POST https://api.southpay.io/api/v2/api_keys \
-  -H "Authorization: Bearer <jwt_token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "api_key": {
-      "name": "Web checkout",
-      "mode": "live",
-      "key_type": "publishable"
-    }
-  }'
-```
-
-Publishable keys are scoped to checkout creation automatically. See [Checkout widget](/checkout-widget).
-
-**Revoke a key:**
-
-```bash
-curl -X DELETE https://api.southpay.io/api/v2/api_keys/{key_id} \
-  -H "Authorization: Bearer <jwt_token>"
-```
-
-<Warning>
-  Never expose API keys in client-side code, mobile apps, or version control. Rotate immediately if a key is compromised.
-</Warning>
-
----
+A platform sends `X-Southpay-Account: <account_id>` alongside its own credential to run any merchant endpoint against one of its sub-merchants. It requires `accounts:act`, and the platform feature must be enabled on your store. See [Platform accounts](/platform-accounts).
 
 ## OAuth 2.0
 
-Use OAuth when building a third-party application that needs to access a merchant's Southpay account. The flow uses Authorization Code + PKCE (no client secret required).
+Use OAuth when you are building an application that other merchants connect to their own Southpay accounts. The flow is Authorization Code with PKCE.
+
+<Warning>
+**PKCE is mandatory and only `S256` is accepted.** A request without `code_challenge` is rejected with `invalid_request`. `plain` is not supported. This applies to confidential clients too — a client secret does not exempt you.
+</Warning>
+
+Register the application first; see [OAuth apps](/oauth-apps) for that. The discovery document at `https://api.southpay.io/.well-known/oauth-authorization-server` advertises the endpoints, `response_types_supported: ["code"]`, `grant_types_supported: ["authorization_code", "refresh_token"]`, and `code_challenge_methods_supported: ["S256"]`.
 
 ### Available scopes
 
-| Scope | Access |
+Eighteen scopes may be requested. The first fifteen mirror the API key scopes above.
+
+`profile` · `stores:read` · `payments:read` · `payments:write` · `refunds:read` · `refunds:write` · `payouts:read` · `payouts:write` · `balances:read` · `billing:read` · `billing:write` · `webhooks:read` · `webhooks:write` · `accounts:read` · `accounts:write` · `accounts:act` · `agents:write` · `offline_access`
+
+| Scope | Grants |
 | --- | --- |
-| `profile` | Read user profile (name, email) |
-| `stores:read` | List and read store details |
-| `payments:read` | Read payment intents and events |
-| `payments:write` | Create payment intents |
-| `webhooks:read` | Read webhook endpoints and deliveries |
-| `webhooks:write` | Create and manage webhook endpoints |
+| `profile` | The merchant's name and email, via `GET /oauth/userinfo` |
+| `agents:write` | Exchange the token for an `spa_` agent credential at `POST /oauth/agent_credentials` |
 | `offline_access` | Issue a refresh token alongside the access token |
 
-### Step 1 - Generate a PKCE code verifier and challenge
+<Note>
+The consent screen currently renders no description for `accounts:read`, `accounts:write`, `accounts:act` and `agents:write`. Merchants approving those scopes see the name only. If your app requests them, explain them in your own UI before you send the merchant to the authorize page.
+</Note>
 
-```typescript
-import { randomBytes, createHash } from "crypto";
+### Step 1 — generate the PKCE pair
+
+<CodeGroup>
+```typescript pkce.ts
+import { createHash, randomBytes } from "node:crypto";
 
 const codeVerifier = randomBytes(32).toString("base64url");
-const codeChallenge = createHash("sha256")
-  .update(codeVerifier)
-  .digest("base64url");
+const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
 ```
 
-```python
-import secrets, hashlib, base64
+```python pkce.py
+import base64
+import hashlib
+import secrets
 
 code_verifier = secrets.token_urlsafe(32)
-digest = hashlib.sha256(code_verifier.encode()).digest()
-code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+code_challenge = (
+    base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
+    .rstrip(b"=")
+    .decode()
+)
 ```
+</CodeGroup>
 
-### Step 2 - Redirect the user to the authorization endpoint
+Keep `code_verifier` server-side and bound to the session. You send it only in step 3.
 
-```
-GET /api/v2/oauth/authorize
+### Step 2 — authorize
+
+```http Authorize request
+GET https://api.southpay.io/api/v2/oauth/authorize
   ?client_id=YOUR_CLIENT_ID
-  &redirect_uri=https://yourapp.com/callback
-  &scope=profile+payments:read+payments:write
+  &redirect_uri=https://yourapp.example/oauth/callback
+  &scope=profile+payments:read+payments:write+offline_access
   &code_challenge=BASE64URL_CHALLENGE
   &code_challenge_method=S256
   &state=RANDOM_CSRF_TOKEN
+  &livemode=true
 ```
 
-The response body contains the consent screen data (app name, logo, requested scopes, and the user's stores). Render a consent UI and `POST` the user's decision:
+**`livemode` selects the mode for the whole grant.** Pass `livemode=true` for production access. The mode is recorded on the authorization code, copied onto the access token, and cannot be changed afterwards — a token issued in test mode can never read live data, and there is no header that overrides it. Omitting the parameter yields a test-mode grant.
+
+The `GET` returns consent data as JSON: the application, the requested scopes, and the merchant's stores. Render your own consent UI from it, then post the decision.
 
 ```bash
-POST /api/v2/oauth/authorize
-Content-Type: application/json
-
-{
-  "client_id": "YOUR_CLIENT_ID",
-  "redirect_uri": "https://yourapp.com/callback",
-  "scope": "profile payments:read payments:write",
-  "code_challenge": "BASE64URL_CHALLENGE",
-  "state": "RANDOM_CSRF_TOKEN",
-  "store_id": "STORE_UUID",
-  "decision": "allow"
-}
-```
-
-On approval, the user is redirected to your `redirect_uri` with an authorization `code` and the original `state`:
-
-```
-https://yourapp.com/callback?code=AUTH_CODE&state=RANDOM_CSRF_TOKEN
-```
-
-Verify `state` matches what you sent to prevent CSRF attacks.
-
-### Step 3 - Exchange the code for an access token
-
-```bash
-curl -X POST https://api.southpay.io/api/v2/oauth/token \
+curl -X POST https://api.southpay.io/api/v2/oauth/authorize \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "YOUR_CLIENT_ID",
-    "code": "AUTH_CODE",
-    "redirect_uri": "https://yourapp.com/callback",
-    "code_verifier": "YOUR_CODE_VERIFIER",
-    "grant_type": "authorization_code"
+    "redirect_uri": "https://yourapp.example/oauth/callback",
+    "scope": "profile payments:read payments:write offline_access",
+    "code_challenge": "BASE64URL_CHALLENGE",
+    "code_challenge_method": "S256",
+    "state": "RANDOM_CSRF_TOKEN",
+    "store_id": "STORE_UUID",
+    "livemode": true,
+    "decision": "allow"
   }'
 ```
 
-**Response:**
+The response is `{"redirect_to": "https://yourapp.example/oauth/callback?code=…&state=…"}`. Send the browser there, and compare the returned `state` to what you issued before doing anything else.
 
-```json
+Authorization codes live for **10 minutes** and are single use.
+
+### Step 3 — exchange the code
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/oauth/token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "grant_type": "authorization_code",
+    "client_id": "YOUR_CLIENT_ID",
+    "code": "AUTH_CODE",
+    "redirect_uri": "https://yourapp.example/oauth/callback",
+    "code_verifier": "YOUR_CODE_VERIFIER"
+  }'
+```
+
+```json Response 200
 {
   "access_token": "spo_a1b2c3d4e5f6...",
   "token_type": "Bearer",
-  "expires_in": 7776000,
+  "expires_in": 3600,
   "scope": "profile payments:read payments:write offline_access",
-  "store_id": "STORE_UUID",
+  "store_id": "8d2f6c1a-4b70-4e39-9a55-c1e07f34b8d2",
+  "livemode": true,
   "refresh_token": "spr_...",
   "refresh_token_expires_in": 7776000
 }
 ```
+</CodeGroup>
 
-Access tokens are valid for **90 days**. The `store_id` identifies which store the token acts on.
+Confidential clients also send `client_secret`, in the body or by HTTP Basic auth.
 
-### Refresh tokens
+### Token lifetimes
 
-Request the `offline_access` scope to receive a `refresh_token` alongside the access token. Refresh tokens are also valid for 90 days and are **single-use**: each refresh rotates the token and returns a new one. Without `offline_access`, no refresh token is issued and you must re-run the authorization flow when the access token expires.
+The access token's lifetime is set by the scopes you asked for, not by a fixed policy.
+
+<Warning>
+**`expires_in` depends on whether you asked for `offline_access`, and the two lifetimes never appear together.**
+
+- **With `offline_access`**: the access token lives **3600 seconds**, and a refresh token is issued. Build a refresh loop; a one-hour token will expire mid-session.
+- **Without `offline_access`**: the access token lives **7,776,000 seconds (90 days)** and there is no refresh token. When it expires you re-run the whole authorization flow.
+
+An `expires_in` of 7776000 alongside a `refresh_token` is not a response this API produces.
+</Warning>
+
+Refresh tokens last 90 days and are single use — each refresh rotates them and returns a new one. Store the new value on every refresh.
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/oauth/token \
   -H "Content-Type: application/json" \
   -d '{
-    "client_id": "YOUR_CLIENT_ID",
     "grant_type": "refresh_token",
+    "client_id": "YOUR_CLIENT_ID",
     "refresh_token": "spr_..."
   }'
 ```
 
-Confidential clients also send `client_secret` (in the body or via HTTP Basic auth).
+Replaying a rotated refresh token within about 60 seconds is tolerated as a concurrency race and returns a valid pair. Replaying one later is treated as theft: the whole token family is revoked and the merchant must reauthorize.
 
-### Step 4 - Use the token
+### Using and revoking
 
 ```bash
 curl https://api.southpay.io/api/v2/payments \
   -H "Authorization: Bearer spo_a1b2c3d4e5f6..."
 ```
 
-OAuth tokens operate in **test mode** by default. For live mode access, use an API key.
-
-### Revoking a token
+An OAuth token is bound to one store and one mode. It carries the granted scopes and is checked against exactly the same scope map as an API key.
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/oauth/revoke \
   -H "Content-Type: application/json" \
-  -d '{
-    "token": "spo_a1b2c3d4e5f6..."
-  }'
+  -d '{"token": "spo_a1b2c3d4e5f6..."}'
 ```
 
-### OAuth flow diagram
+Revocation returns `200` with an empty body.
+
+<Note>
+OAuth endpoints return errors in the RFC 6749 shape, `{"error": "invalid_request", "error_description": "…"}`, which is not the shape the rest of the API uses. See [Errors](/errors).
+</Note>
+
+### Flow
 
 ```mermaid
 sequenceDiagram
-  participant User
+  participant Merchant
   participant YourApp
   participant Southpay
 
-  YourApp->>YourApp: Generate code_verifier + code_challenge
-  User->>YourApp: Clicks "Connect with Southpay"
-  YourApp->>Southpay: GET /oauth/authorize?code_challenge=...
-  Southpay-->>YourApp: Consent screen data
-  YourApp->>User: Show consent UI
-  User->>YourApp: Approves
-  YourApp->>Southpay: POST /oauth/authorize { decision: "allow" }
-  Southpay-->>YourApp: Redirect to callback?code=AUTH_CODE
-  YourApp->>Southpay: POST /oauth/token { code, code_verifier }
-  Southpay-->>YourApp: { access_token: "spo_..." }
-  YourApp->>Southpay: API requests with Bearer spo_...
+  YourApp->>YourApp: generate code_verifier + S256 challenge
+  Merchant->>YourApp: clicks Connect
+  YourApp->>Southpay: GET /oauth/authorize (challenge, livemode, state)
+  Southpay-->>YourApp: consent data
+  YourApp->>Merchant: render consent
+  Merchant->>YourApp: approves
+  YourApp->>Southpay: POST /oauth/authorize (decision: allow)
+  Southpay-->>YourApp: redirect_to ?code=...&state=...
+  YourApp->>YourApp: verify state
+  YourApp->>Southpay: POST /oauth/token (code, code_verifier)
+  Southpay-->>YourApp: access_token spo_... (+ refresh_token)
+  YourApp->>Southpay: Authorization: Bearer spo_...
 ```
 
----
+## Agent credentials
 
-## Choosing the right method
+`spa_live_` and `spa_test_` credentials authenticate the `/api/v2/agentic/*` surface and nothing else. A regular API key is rejected there, and an agent credential is rejected everywhere else.
 
-| | API Key | OAuth |
-| --- | --- | --- |
-| Created by | Store owner | User authorization |
-| Livemode | Yes (live keys) | Yes (via `X-Livemode` header) |
-| Store context | Implicit (key's store) | Granted store |
-| Expiry | Until revoked | 90 days (refreshable with `offline_access`) |
-| Best for | Your own backend | Third-party integrations |
+Their scope set is different and smaller: `payments:read`, `payments:write`, `payouts:read`, `payouts:write`, `assets:read`, `assets:write`, `x402:read`, `x402:write`. The agentic API is also rate limited at 120 requests per minute per credential.
+
+An agent only ever sees records it created. See [Agent credentials](/agentic/agent-credentials).
+
+## Choosing
+
+| | API key | OAuth | Agent credential |
+| --- | --- | --- | --- |
+| Created by | The store owner, in the dashboard | The merchant, by authorizing your app | The store owner, or an OAuth exchange |
+| Store context | Fixed to the key's store | The store granted at authorize time | Fixed to the credential's store |
+| Mode | Fixed by the key prefix | Fixed by `livemode` at authorize time | Fixed by the credential prefix |
+| Expiry | Until revoked | 1 hour with refresh, 90 days without | Optional expiry set at creation |
+| Surface | Public API | Public API | `/api/v2/agentic/*` only |
+| Use for | Your own backend | An app other merchants install | Autonomous agents |
+
+## Endpoints you cannot reach with these credentials
+
+Several parts of the API accept only a logged-in dashboard session, and return `401` for an API key or OAuth token. They are not part of the public API and no integration should depend on them:
+
+API keys and agent credentials themselves, agent spend limits, [payout destinations](/payout-destinations), custom domains, store records and store settings, merchant-owned OAuth apps, and the reference-data endpoints `supported_assets`, `networks` and `payment_currencies`.
+
+Where you need one of those, configure it in the dashboard. The catalogue of assets and currencies is documented on [Supported currencies and assets](/currencies) so you do not need to call those endpoints at all.

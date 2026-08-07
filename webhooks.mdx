@@ -1,161 +1,162 @@
 ---
 title: "Webhooks"
-description: "Receive signed HTTP notifications for every payment event. Retried automatically with exponential backoff."
+description: "Signed event deliveries: the envelope, HMAC verification, the event catalogue, and exactly how retries and rotation behave."
 ---
 
-## How webhooks work
-
-1. You register an HTTPS endpoint and specify which event types to subscribe to
-2. Southpay generates a signing secret and returns it **once** - store it immediately
-3. When an event occurs, Southpay `POST`s a signed JSON payload to your endpoint
-4. Your server verifies the signature, returns `2xx`, and processes the event
-5. If delivery fails, Southpay retries automatically up to 10 times
-
----
+A webhook endpoint is a URL Southpay `POST`s signed JSON to when something changes on your store. You register the URL, name every event you want, store the signing secret, and verify each delivery before acting on it.
 
 ## Register an endpoint
 
-```bash
+<CodeGroup>
+```bash Request
 curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
-  -H "Authorization: Bearer sp_test_YOUR_KEY" \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "webhook_endpoint": {
-      "url": "https://yourapp.com/webhooks/southpay",
+      "url": "https://yourapp.example/webhooks/southpay",
       "description": "Order fulfillment handler",
       "subscribed_events": [
         "payment_intent.completed",
         "payment_intent.failed",
-        "payment_intent.expired"
+        "payment_intent.expired",
+        "payment_intent.refunded"
       ]
     }
   }'
 ```
 
-**Response:**
-
-```json
+```json Response 201
 {
-  "id": "018f...",
-  "url": "https://yourapp.com/webhooks/southpay",
+  "id": "b7e4c210-5d83-4f16-9c02-6ea1f3d85b47",
+  "url": "https://yourapp.example/webhooks/southpay",
+  "description": "Order fulfillment handler",
   "status": "active",
   "subscribed_events": [
     "payment_intent.completed",
     "payment_intent.failed",
-    "payment_intent.expired"
+    "payment_intent.expired",
+    "payment_intent.refunded"
   ],
-  "signing_secret": "whsec_a1b2c3d4e5f6...",
-  "created_at": "2026-04-19T14:00:00.000Z"
+  "signing_secret": "whsec_4f8b1c2d...",
+  "delivery_success_rate": null,
+  "created_at": "2026-08-07T14:01:00.000Z"
 }
 ```
+</CodeGroup>
 
 <Warning>
-  The `signing_secret` is returned **only on creation and after secret rotation**. Store it in a secrets manager immediately. It cannot be retrieved again.
+`signing_secret` appears **only** in the create response and in the response to `rotate_secret`. Every other read returns `signing_secret_preview`, the first twelve characters. Store the full value before you close the terminal.
 </Warning>
 
----
+Requires the `webhooks:write` scope. The endpoint id is a bare UUID — there is no `we_` prefix scheme anywhere in this API.
 
-## Event payload structure
+### subscribed_events is required, and literal
 
-Every webhook is a `POST` with `Content-Type: application/json` and this envelope:
+`subscribed_events` must be a non-empty array of exact event names from the [catalogue](#event-catalogue). It is validated as a strict subset, and matching at dispatch time is literal array containment.
+
+**Wildcards are not supported.** `"*"` fails validation. So does `"payment_intent.*"`. A merchant who wants everything must enumerate all 23 names. Omitting the field entirely yields an empty array, which then fails the presence check with `422` and a `{"errors": [...]}` body.
+
+<Note>
+If you create a second endpoint with the same `platform` value (`shopify`, `woocommerce`, `prestashop`, `magento`) in the same mode, Southpay does not return a conflict. It adopts the existing row, rotates its secret, and returns `200` with the new `signing_secret`. The old secret stops working immediately. This is how plugin reinstalls are meant to work; it is surprising if you hit it by accident.
+</Note>
+
+## The envelope
 
 ```json
 {
-  "id": "018f1a2b-ffff-7000-8000-000000000099",
+  "id": "d31a5c88-9b74-4c02-b6ff-7e2a4d190c65",
   "type": "payment_intent.completed",
-  "created": 1745071260,
-  "livemode": false,
+  "created": 1786125600,
+  "livemode": true,
   "api_version": "2026-04-14",
   "data": {
     "object": {
-      "id": "A1B2C3D4E5F6G7H8",
+      "id": "K4TP9WQZ2XR7HB3M",
       "status": "completed",
-      "settlement_amount_cents": 14900,
+      "settlement_amount_cents": 4999,
       "settlement_currency": "USD",
       "from_status": "processing",
       "to_status": "completed",
-      "metadata": {
-        "order_id": "order_8721"
-      }
+      "metadata": { "order_id": "order_8721" }
     }
   }
 }
 ```
 
-| Field | Type | Description |
+| Field | Type | Notes |
 | --- | --- | --- |
-| `id` | string (UUID) | Unique event ID. Use for deduplication. |
-| `type` | string | Event type (see [Event types](#event-types)) |
-| `created` | integer | Unix timestamp (seconds) |
-| `livemode` | boolean | `false` for test mode events |
-| `api_version` | string | Payload schema version. |
-| `account` | string (UUID) | Present only on events a [platform](/platform-accounts) receives about one of its sub-merchants. Names the account the event concerns. |
-| `data.object` | object | The resource that changed. |
-| `data.object.id` | string | The intent `reference` (the checkout token), not its UUID. |
-| `data.object.settlement_amount_cents` | integer | Settlement amount in minor units (e.g. cents). |
-| `data.object.from_status` / `to_status` | string | The transition that produced this event. |
+| `id` | string (UUID) | The event id. Deduplicate on this. |
+| `type` | string | See the [catalogue](#event-catalogue) |
+| `created` | integer | Unix seconds |
+| `livemode` | boolean | `false` for test-mode events |
+| `api_version` | string | Always the literal `"2026-04-14"` |
+| `account` | string (UUID) | **Only** on events fanned out to a [platform](/platform-accounts) about a sub-merchant. Absent on your own events, so you can route on its presence. |
+| `data.object` | object | The payload. Shape depends on the event family. |
 
----
+There is no top-level `"object": "event"` key.
 
-## Request headers
+<Warning>
+For payment and transaction events, `data.object` has exactly seven keys: `id`, `status`, `settlement_amount_cents`, `settlement_currency`, `from_status`, `to_status`, `metadata`.
 
-Every delivery includes:
+**`id` holds the payment intent's `reference`, not its UUID.** There is no `reference` key. There is no `settlement_amount` key — the amount is an integer in minor units under `settlement_amount_cents`.
+</Warning>
 
-| Header | Description |
+Billing events are different. `invoice.*` and `subscription.*` serialize the full detail view of the invoice or subscription into `data.object`, so you get line items, customer, period boundaries and every other field rather than the seven-key summary. `store.verification.*` events use a freshly generated UUID as the envelope `id` and carry the store's verification state.
+
+<Note>
+`api_version` is stamped from a constant, not from the `api_version` column on your endpoint. Changing that column has no effect on what you receive. Treat the field as informational.
+</Note>
+
+## Headers
+
+| Header | Value |
 | --- | --- |
-| `Southpay-Signature` | Signature string: `t=<timestamp>,v1=<digest>` |
-| `Southpay-Delivery-Id` | UUID of this specific delivery attempt |
+| `Southpay-Signature` | `t=<unix seconds>,v1=<hex digest>` |
+| `Southpay-Delivery-Id` | UUID of this delivery |
 | `Content-Type` | `application/json` |
 | `User-Agent` | `Southpay-Webhooks/1.0` |
 
----
+## Verifying the signature
 
-## Verifying signatures
-
-**Always verify the signature before processing any event.** This proves the request came from Southpay and that the payload was not tampered with.
-
-### How it works
-
-1. Parse `Southpay-Signature` header into `t` (timestamp) and `v1` (hex digest)
-2. Construct the signed string: `{timestamp}.{raw_request_body}`
-3. Compute `HMAC-SHA256(signing_secret, signed_string)` as hex
-4. Compare to `v1` using a **timing-safe equality check**
-
-```
-Southpay-Signature: t=1745071260,v1=a3f9d2e1b4c7...
-signed_payload     = "1745071260.{raw_json_body}"
-expected_digest    = HMAC-SHA256(signing_secret, signed_payload)
-```
+1. Split `Southpay-Signature` on `,` into `t` and `v1`.
+2. Build the signed string `"{t}.{raw request body}"`.
+3. Compute `HMAC-SHA256` over it, keyed with the signing secret, and hex-encode it.
+4. Compare to `v1` with a timing-safe comparison.
 
 <Warning>
-  Compute HMAC against the **raw request body bytes**, not a re-serialized JSON object. Parsing and re-stringifying JSON can alter whitespace or key order and will break verification.
+Two details break most first attempts.
+
+**Use the raw body bytes.** Parsing JSON and re-serializing it changes whitespace and key order, and the digest will not match.
+
+**Use the secret exactly as issued, `whsec_` prefix included.** It is the literal UTF-8 string that keys the HMAC. Do not strip the prefix and do not base64-decode it.
 </Warning>
 
-### Verification examples
+Southpay does **not** enforce a timestamp tolerance on outbound deliveries — it only stamps `t`. If you want replay protection, reject deliveries whose `t` is more than a few minutes old. That is your decision to make, not something the API does for you.
 
 <CodeGroup>
-
-```typescript Node.js
-import { createHmac, timingSafeEqual } from "crypto";
+```typescript server/webhook.ts
 import express from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
-function verifySignature(rawBody: Buffer, header: string, secret: string): boolean {
+const TOLERANCE_SECONDS = 300;
+
+export function verify(rawBody: Buffer, header: string, secret: string): boolean {
   const parts = Object.fromEntries(
-    header.split(",").map(p => p.split("=") as [string, string])
+    header.split(",").map(p => p.split("=", 2) as [string, string])
   );
-  const timestamp = parts["t"];
-  const v1 = parts["v1"];
-  if (!timestamp || !v1) return false;
+  if (!parts.t || !parts.v1) return false;
 
-  const signedPayload = `${timestamp}.${rawBody.toString("utf8")}`;
+  const age = Math.floor(Date.now() / 1000) - Number(parts.t);
+  if (!Number.isFinite(age) || Math.abs(age) > TOLERANCE_SECONDS) return false;
+
   const computed = createHmac("sha256", secret)
-    .update(signedPayload)
+    .update(`${parts.t}.${rawBody.toString("utf8")}`)
     .digest("hex");
 
-  const a = Buffer.from(computed, "hex");
-  const b = Buffer.from(v1, "hex");
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  const a = Buffer.from(computed);
+  const b = Buffer.from(parts.v1);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 const app = express();
@@ -165,329 +166,283 @@ app.post(
   express.raw({ type: "application/json" }),
   (req, res) => {
     const sig = req.headers["southpay-signature"] as string | undefined;
-    const secret = process.env.SOUTHPAY_WEBHOOK_SECRET!;
-
-    if (!sig || !verifySignature(req.body as Buffer, sig, secret)) {
-      return res.status(401).json({ error: "Invalid signature" });
+    if (!sig || !verify(req.body, sig, process.env.SOUTHPAY_WEBHOOK_SECRET!)) {
+      return res.status(401).end();
     }
 
-    const event = JSON.parse((req.body as Buffer).toString());
-
-    switch (event.type) {
-      case "payment_intent.completed":
-        fulfillOrder(event.data.object);
-        break;
-      case "payment_intent.failed":
-      case "payment_intent.expired":
-        cancelOrder(event.data.object);
-        break;
-    }
-
+    const event = JSON.parse(req.body.toString());
     res.json({ received: true });
+    queue.enqueue("southpay_event", event);
   }
 );
 ```
 
-```python Python
-import hmac
+```python server/webhook.py
 import hashlib
+import hmac
 import os
-from flask import Flask, request, jsonify
+import time
+
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
+TOLERANCE_SECONDS = 300
 
-def verify_signature(raw_body: bytes, header: str, secret: str) -> bool:
+
+def verify(raw_body: bytes, header: str, secret: str) -> bool:
     parts = dict(p.split("=", 1) for p in header.split(","))
-    timestamp = parts.get("t")
-    v1 = parts.get("v1")
+    timestamp, v1 = parts.get("t"), parts.get("v1")
     if not timestamp or not v1:
         return False
 
-    signed_payload = f"{timestamp}.{raw_body.decode('utf-8')}"
-    computed = hmac.new(
-        secret.encode("utf-8"),
-        signed_payload.encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
+    if abs(int(time.time()) - int(timestamp)) > TOLERANCE_SECONDS:
+        return False
 
+    computed = hmac.new(
+        secret.encode(),
+        f"{timestamp}.{raw_body.decode()}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
     return hmac.compare_digest(computed, v1)
+
 
 @app.post("/webhooks/southpay")
 def webhook():
     sig = request.headers.get("Southpay-Signature", "")
-    secret = os.environ["SOUTHPAY_WEBHOOK_SECRET"]
-
-    if not verify_signature(request.data, sig, secret):
+    if not verify(request.data, sig, os.environ["SOUTHPAY_WEBHOOK_SECRET"]):
         return jsonify(error="Invalid signature"), 401
 
-    event = request.get_json()
-    event_type = event.get("type")
-
-    if event_type == "payment_intent.completed":
-        fulfill_order(event["data"]["object"])
-    elif event_type in ("payment_intent.failed", "payment_intent.expired"):
-        cancel_order(event["data"]["object"])
-
+    enqueue("southpay_event", request.get_json())
     return jsonify(received=True)
 ```
 
-```go Go
-package main
+```go server/webhook.go
+package webhook
 
 import (
-    "crypto/hmac"
-    "crypto/sha256"
-    "encoding/hex"
-    "encoding/json"
-    "fmt"
-    "io"
-    "net/http"
-    "os"
-    "strings"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
 )
 
-func verifySignature(rawBody []byte, header, secret string) bool {
-    parts := make(map[string]string)
-    for _, p := range strings.Split(header, ",") {
-        kv := strings.SplitN(p, "=", 2)
-        if len(kv) == 2 {
-            parts[kv[0]] = kv[1]
-        }
-    }
-    timestamp, v1 := parts["t"], parts["v1"]
-    if timestamp == "" || v1 == "" {
-        return false
-    }
+const toleranceSeconds = 300
 
-    signedPayload := fmt.Sprintf("%s.%s", timestamp, string(rawBody))
-    mac := hmac.New(sha256.New, []byte(secret))
-    mac.Write([]byte(signedPayload))
-    computed := hex.EncodeToString(mac.Sum(nil))
+func Verify(rawBody []byte, header, secret string) bool {
+	parts := map[string]string{}
+	for _, p := range strings.Split(header, ",") {
+		if kv := strings.SplitN(p, "=", 2); len(kv) == 2 {
+			parts[kv[0]] = kv[1]
+		}
+	}
 
-    return hmac.Equal([]byte(computed), []byte(v1))
+	ts, v1 := parts["t"], parts["v1"]
+	if ts == "" || v1 == "" {
+		return false
+	}
+
+	sent, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil || abs(time.Now().Unix()-sent) > toleranceSeconds {
+		return false
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	fmt.Fprintf(mac, "%s.%s", ts, rawBody)
+	return hmac.Equal([]byte(hex.EncodeToString(mac.Sum(nil))), []byte(v1))
 }
 
-func webhookHandler(w http.ResponseWriter, r *http.Request) {
-    rawBody, _ := io.ReadAll(r.Body)
-    sig := r.Header.Get("Southpay-Signature")
-    secret := os.Getenv("SOUTHPAY_WEBHOOK_SECRET")
-
-    if !verifySignature(rawBody, sig, secret) {
-        http.Error(w, `{"error":"Invalid signature"}`, http.StatusUnauthorized)
-        return
-    }
-
-    var event map[string]interface{}
-    json.Unmarshal(rawBody, &event)
-
-    switch event["type"] {
-    case "payment_intent.completed":
-        fulfillOrder(event["data"])
-    case "payment_intent.failed", "payment_intent.expired":
-        cancelOrder(event["data"])
-    }
-
-    w.Header().Set("Content-Type", "application/json")
-    w.Write([]byte(`{"received":true}`))
+func abs(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 ```
 
-```ruby Ruby
+```ruby app/services/southpay_webhook.rb
 require "openssl"
-require "json"
 
-def verify_signature(raw_body, header, secret)
-  parts = header.split(",").map { |p| p.split("=", 2) }.to_h
-  timestamp = parts["t"]
-  v1 = parts["v1"]
-  return false unless timestamp && v1
+module SouthpayWebhook
+  TOLERANCE_SECONDS = 300
 
-  signed_payload = "#{timestamp}.#{raw_body}"
-  computed = OpenSSL::HMAC.hexdigest("sha256", secret, signed_payload)
-  ActiveSupport::SecurityUtils.secure_compare(computed, v1)
-end
+  def self.verify(raw_body, header, secret)
+    parts = header.to_s.split(",").map { |p| p.split("=", 2) }.to_h
+    timestamp = parts["t"]
+    v1 = parts["v1"]
+    return false unless timestamp && v1
+    return false if (Time.now.to_i - timestamp.to_i).abs > TOLERANCE_SECONDS
 
-post "/webhooks/southpay" do
-  raw_body = request.body.read
-  sig = request.env["HTTP_SOUTHPAY_SIGNATURE"] || ""
-  secret = ENV.fetch("SOUTHPAY_WEBHOOK_SECRET")
-
-  halt 401, { error: "Invalid signature" }.to_json unless verify_signature(raw_body, sig, secret)
-
-  event = JSON.parse(raw_body)
-
-  case event["type"]
-  when "payment_intent.completed"
-    fulfill_order(event.dig("data", "object"))
-  when "payment_intent.failed", "payment_intent.expired"
-    cancel_order(event.dig("data", "object"))
+    computed = OpenSSL::HMAC.hexdigest("sha256", secret, "#{timestamp}.#{raw_body}")
+    ActiveSupport::SecurityUtils.secure_compare(computed, v1)
   end
-
-  { received: true }.to_json
 end
 ```
-
 </CodeGroup>
 
----
+## Event catalogue
 
-## Event types
+Twenty-three names pass `subscribed_events` validation. Eighteen of them are emitted.
 
-### Payment Intent events
+### Payment intent events
 
-| Event | Triggered when |
+| Event | Fires when |
 | --- | --- |
-| `payment_intent.created` | A new Payment Intent is created |
-| `payment_intent.processing` | An on-chain transaction is detected |
-| `payment_intent.completed` | Payment confirmed and credited |
-| `payment_intent.failed` | Payment detected but cannot complete |
-| `payment_intent.expired` | Intent timed out with no payment |
-| `payment_intent.refunded` | Funds returned to sender |
+| `payment_intent.created` | An intent is created |
+| `payment_intent.processing` | A transaction for one of its deposit addresses is confirming or confirmed |
+| `payment_intent.completed` | Enough confirmed funds arrived and the balance is credited |
+| `payment_intent.failed` | Funds arrived but the amount rules were not met |
+| `payment_intent.expired` | The 60-minute window closed, or an agent canceled a pending intent |
+| `payment_intent.refunded` | A refund confirmed on-chain |
 
-### Verification events
-
-Emitted when a store passes or fails business verification. Most useful to [platforms](/platform-accounts) following their sub-merchants through onboarding.
-
-| Event | Triggered when |
-| --- | --- |
-| `store.verification.approved` | Verification passed; the store can transact |
-| `store.verification.rejected` | Verification refused. `data.object.rejection_reason` says why |
+Read `data.object.status` and, where you need the reason, fetch the intent for its `state_reason`. See [Payment lifecycle](/payment-lifecycle).
 
 ### Transaction events
 
-| Event | Triggered when |
+| Event | Fires when |
 | --- | --- |
-| `transaction.confirming` | New transaction detected, waiting for confirmations |
-| `transaction.confirmed` | Transaction reached required confirmation count |
-| `transaction.failed` | Transaction failed on-chain |
-
-### Payout events
-
-| Event | Triggered when |
-| --- | --- |
-| `payout.created` | A payout is initiated |
-| `payout.confirmed` | Payout transaction confirmed (on-chain for crypto, settled for fiat) |
-| `payout.failed` | Payout rejected by the rail or expired |
-
-### Fee sweep events
-
-Emitted when Southpay sweeps accrued fees from your store's crypto-received account to fee revenue. You typically don't need to subscribe - included for auditability.
-
-| Event | Triggered when |
-| --- | --- |
-| `fee_sweep.confirmed` | Fee sweep transaction confirmed |
-| `fee_sweep.failed` | Fee sweep transaction failed |
+| `transaction.confirming` | A deposit transaction is seen and awaiting confirmations |
+| `transaction.confirmed` | It reached the chain's required confirmation count |
+| `transaction.failed` | It failed on-chain |
 
 ### Billing events
 
-Only emitted for stores with billing enabled. See the [Recurring](/api-reference/recurring) and [Invoicing](/api-reference/invoicing) references.
+Emitted only for stores using [invoicing](/api-reference/invoicing) and [subscriptions](/subscriptions). `data.object` is the full resource, not the seven-key summary.
 
-| Event | Triggered when |
+| Event | Fires when |
 | --- | --- |
-| `subscription.created` | A subscription is created |
-| `subscription.updated` | A subscription changes (plan/items change, pause, resume, scheduled cancellation) |
-| `subscription.past_due` | A subscription cycle was not paid within its grace period |
-| `subscription.canceled` | A subscription is canceled |
-| `invoice.finalized` | An invoice is finalized and ready to be paid (a subscription renewal generates one each cycle) |
+| `invoice.finalized` | An invoice is finalized and payable. A subscription renewal produces one per cycle. |
 | `invoice.paid` | An invoice is paid in full |
 | `invoice.voided` | An invoice is voided |
+| `subscription.created` | A subscription is created |
+| `subscription.updated` | Items, quantity, pause, resume, or scheduled cancellation changed |
+| `subscription.past_due` | A cycle invoice went unpaid past its grace window |
+| `subscription.canceled` | A subscription ended |
 
----
+### Verification events
+
+| Event | Fires when |
+| --- | --- |
+| `store.verification.approved` | A store passed verification and can transact |
+| `store.verification.rejected` | Verification was refused. `data.object.rejection_reason` says why. |
+
+Most useful to [platforms](/platform-accounts) tracking sub-merchant onboarding.
+
+## Events that never arrive
+
+The catalogue above lists eighteen events. Five more pass validation and do nothing.
+
+<Warning>
+**Five event names pass validation but are never emitted.** Nothing in the API creates a delivery for any of them. If you subscribe, you will wait forever and no error will tell you so.
+
+- `payout.created`
+- `payout.confirmed`
+- `payout.failed`
+- `fee_sweep.confirmed`
+- `fee_sweep.failed`
+
+Payout lifecycle is not published over webhooks today. **Poll `GET /api/v2/payouts` or `GET /api/v2/payouts/{id}`** and read `status` and `state_transitions`. If you already have a subscription to any of these names, it is safe to leave in place and safe to remove — it has never delivered anything either way.
+</Warning>
+
+## Events you cannot receive
+
+The reverse problem exists too. Four event types are produced internally but cannot appear in `subscribed_events`, so no endpoint ever matches them and they are dropped:
+
+`payment_intent.canceled`, `payment_intent.underpaid_detected`, `transaction.pending`, `transaction.submitted`.
+
+The one that catches people out is `payment_intent.canceled`, emitted when an [agent](/agentic/index) cancels a pending intent. Watch for `payment_intent.expired` and check for `state_reason: "canceled_by_agent"` on the intent instead.
 
 ## Delivery and retries
 
-Southpay expects a `2xx` response within **30 seconds** of sending the request.
-
-If your endpoint returns a non-`2xx` status, times out, or is unreachable, the delivery is retried with exponential backoff:
-
-| Attempt | Delay after previous |
+| Property | Value |
 | --- | --- |
-| 1 | 10 seconds |
-| 2 | 30 seconds |
-| 3 | 2 minutes |
-| 4 | 5 minutes |
-| 5 | 10 minutes |
-| 6 | 30 minutes |
-| 7 | 1 hour |
-| 8 | 2 hours |
-| 9 | 5 hours |
-| 10 | 10 hours |
+| Success | Any `2xx` |
+| Connect timeout | 5 seconds |
+| Read timeout | 30 seconds |
+| Maximum attempts | 10 |
+| Total window | Roughly 18 hours |
 
-After 10 failed attempts, the endpoint is marked `error` and you receive an email notification. Use the dashboard to redeliver individual events or re-enable the endpoint.
+<Warning>
+**Every non-`2xx` response is retried**, including `400`, `401`, `403` and `404`. There is no "client errors are not retried" rule. A handler that returns `400` on a payload it does not recognise will be hammered ten times over eighteen hours for every such event.
 
-**`4xx` responses (except `429`)** are not retried - they indicate a client error (bad signature, endpoint logic error). Fix the issue and use the redeliver endpoint.
+Return `2xx` for events you choose to ignore. Reserve non-`2xx` for "I could not process this and I want it again".
+</Warning>
 
----
+Retries back off on this schedule: 30 seconds, 2 minutes, 5 minutes, 10 minutes, 30 minutes, 1 hour, 2 hours, 5 hours, 10 hours. After the tenth failed attempt the endpoint flips to `status: "error"` and the store owner is emailed.
 
-## Redeliver a failed event
+<Note>
+While an endpoint is not `active` — disabled by you, or flipped to `error` — queued deliveries are dropped rather than held. Re-enabling the endpoint does not replay them. Use `redeliver` for anything you need back.
+</Note>
 
-```bash
-curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/redeliver \
-  -H "Authorization: Bearer sp_test_YOUR_KEY" \
-  -G --data-urlencode "delivery_id=018f..."
-```
+Deliveries are also refused before they leave if the URL resolves to a private, loopback, link-local or unique-local address. The delivery is marked `failed` and the endpoint flips to `error`. Tunnel to a public hostname when testing locally.
 
----
+### Deduplication
 
-## Rotate your signing secret
-
-Rotate without downtime - the new secret takes effect immediately:
-
-```bash
-curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/rotate_secret \
-  -H "Authorization: Bearer sp_test_YOUR_KEY"
-```
-
-Returns the new `signing_secret`. Update your environment variable and re-deploy.
-
----
-
-## Enable and disable endpoints
-
-```bash
-# Disable
-curl -X PATCH https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/disable \
-  -H "Authorization: Bearer sp_test_YOUR_KEY"
-
-# Re-enable
-curl -X PATCH https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/enable \
-  -H "Authorization: Bearer sp_test_YOUR_KEY"
-```
-
----
-
-## Send a test event
-
-```bash
-curl -X POST https://api.southpay.io/api/v2/webhook_endpoints/{endpoint_id}/send_test \
-  -H "Authorization: Bearer sp_test_YOUR_KEY"
-```
-
-Sends a `payment_intent.completed` event with a synthetic payload. Useful for validating your endpoint before going live.
-
----
-
-## Deduplication
-
-Southpay guarantees **at-least-once delivery** - a successful delivery may occasionally be sent more than once during retries. Use the `id` field to deduplicate:
+Delivery is at-least-once. Southpay keys each delivery internally on `(endpoint, event)`, which prevents most duplicates, but a retry can still repeat a delivery your handler already processed and acknowledged slowly. Guard on the envelope `id`.
 
 ```typescript
-const eventId = event.id;
-if (await isEventAlreadyProcessed(eventId)) {
-  return res.json({ received: true }); // idempotent
-}
-await markEventProcessed(eventId);
-await processEvent(event);
+const claimed = await db.processedEvents.insertIfAbsent(event.id);
+if (!claimed) return res.json({ received: true });
+
+await fulfill(event);
 ```
 
----
+Claim the id before doing the work, not after, or two concurrent retries can both pass the check.
 
-## Security checklist
+## Managing an endpoint
 
-- Always verify `Southpay-Signature` before processing
-- Use timing-safe comparison (`timingSafeEqual`, `hmac.compare_digest`) - never string equality
-- Read the raw request body before parsing JSON - do not re-serialize for signature verification
-- Store the signing secret in an environment variable, never in source code
-- Your endpoint must use **HTTPS**
-- Return `2xx` quickly (< 30s) - offload heavy work to a background queue
-- Implement deduplication using the event `id`
+| Operation | Request |
+| --- | --- |
+| List | `GET /api/v2/webhook_endpoints` |
+| Read, with recent deliveries and the full event list | `GET /api/v2/webhook_endpoints/{id}` |
+| Update `url`, `description`, `subscribed_events`, `metadata` | `PATCH /api/v2/webhook_endpoints/{id}` |
+| Delete (soft) | `DELETE /api/v2/webhook_endpoints/{id}` → `204` |
+| Disable / enable | `PATCH /api/v2/webhook_endpoints/{id}/disable` / `/enable` |
+| Send a test event | `POST /api/v2/webhook_endpoints/{id}/send_test` |
+| Redeliver one delivery | `POST /api/v2/webhook_endpoints/{id}/redeliver` |
+| Rotate the secret | `POST /api/v2/webhook_endpoints/{id}/rotate_secret` |
+
+`send_test` takes an optional `event_type`. It defaults to your first subscribed event, falling back to `payment_intent.completed`. An unknown name returns `422 "Unknown event type"`.
+
+`redeliver` takes `delivery_id`, in the query string or the JSON body. Delivery ids come from `recent_deliveries` on the endpoint read.
+
+```bash
+curl -X POST "https://api.southpay.io/api/v2/webhook_endpoints/{id}/redeliver" \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"delivery_id": "1c9f0b7a-2d84-4e33-9a61-0f5c8d2b7e40"}'
+```
+
+### Rotating the secret
+
+`POST /api/v2/webhook_endpoints/{id}/rotate_secret` returns the endpoint with a new `signing_secret`.
+
+<Danger>
+Rotation is an immediate hard cutover. **There is no overlap window and no dual-signing period.** The moment the request returns, every delivery is signed with the new secret and the old one verifies nothing — including deliveries already queued and retries of older events.
+
+Deploy so that the new secret is live before you rotate: read the secret from a store your running processes re-read, rotate, then confirm. Rotating first and deploying second guarantees a gap of failed verifications, and those failures are retried as non-`2xx` for eighteen hours.
+</Danger>
+
+## Endpoint fields
+
+| Field | Notes |
+| --- | --- |
+| `id` | Bare UUID |
+| `url` | Must be HTTPS and publicly resolvable |
+| `status` | `active`, `disabled`, `error` |
+| `subscribed_events` | Literal list. No wildcards. |
+| `signing_secret_preview` | First twelve characters, followed by `...` |
+| `delivery_success_rate` | Percentage to one decimal place, or `null` with no deliveries |
+| `platform` | `woocommerce`, `prestashop`, `shopify`, `magento`, `custom` |
+| `api_version` | Stored but not used when building payloads |
+| `recent_deliveries[]` | On the single-endpoint read: `id`, `event_type`, `status`, `attempts`, `response_status`, `delivered_at`, `created_at` |
+
+Delivery `status` values are `pending`, `attempting`, `delivered`, `failed`, `ignored`.
+
+## Platform fan-out
+
+If you are a [platform](/platform-accounts), payment, transaction and store-verification events for your sub-merchants are delivered to your endpoints as well as theirs, with a top-level `account` field naming the sub-merchant.
+
+**Billing events do not fan out.** An invoice or subscription event on a sub-merchant reaches that merchant's endpoints only.

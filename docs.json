@@ -77,7 +77,7 @@
         "tab": "Guides",
         "pages": [
           {
-            "group": "Getting Started",
+            "group": "Getting started",
             "pages": [
               "index",
               "quickstart",
@@ -88,14 +88,17 @@
           {
             "group": "Authentication",
             "pages": [
-              "authentication"
+              "authentication",
+              "oauth-apps"
             ]
           },
           {
-            "group": "Core Resources",
+            "group": "Core resources",
             "pages": [
               "payment-intents",
-              "webhooks"
+              "payment-lifecycle",
+              "webhooks",
+              "payout-destinations"
             ]
           },
           {
@@ -105,7 +108,7 @@
             ]
           },
           {
-            "group": "Checkout widget",
+            "group": "Checkout",
             "pages": [
               "checkout-widget"
             ]
@@ -122,15 +125,19 @@
             ]
           },
           {
+            "group": "Platform",
+            "pages": [
+              "platform-accounts"
+            ]
+          },
+          {
             "group": "Integrations",
             "pages": [
-              "platform-accounts",
-              "oauth-apps",
               "integrations/n8n"
             ]
           },
           {
-            "group": "Integration",
+            "group": "Building reliably",
             "pages": [
               "idempotency",
               "errors",
@@ -157,21 +164,10 @@
             ]
           },
           {
-            "group": "Platform",
-            "pages": [
-              "api-reference/platform-accounts"
-            ]
-          },
-          {
-            "group": "Webhooks",
-            "pages": [
-              "api-reference/webhook-endpoints"
-            ]
-          },
-          {
             "group": "Balances",
             "pages": [
-              "api-reference/balances"
+              "api-reference/balances",
+              "api-reference/balance-swaps"
             ]
           },
           {
@@ -182,21 +178,28 @@
             ]
           },
           {
+            "group": "Billing",
+            "pages": [
+              "api-reference/invoicing",
+              "api-reference/recurring"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "pages": [
+              "api-reference/webhook-endpoints"
+            ]
+          },
+          {
+            "group": "Platform",
+            "pages": [
+              "api-reference/platform-accounts"
+            ]
+          },
+          {
             "group": "Agentic",
             "pages": [
               "api-reference/agentic"
-            ]
-          },
-          {
-            "group": "Invoicing",
-            "pages": [
-              "api-reference/invoicing"
-            ]
-          },
-          {
-            "group": "Recurring",
-            "pages": [
-              "api-reference/recurring"
             ]
           },
           {

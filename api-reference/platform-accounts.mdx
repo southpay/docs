@@ -1,234 +1,340 @@
 ---
 title: "Platform accounts"
-description: "Create and manage sub-merchants, onboard them, and read across your whole book."
+description: "Create and manage sub-merchant accounts, attest their verification, issue onboarding links, and act on their behalf as a platform."
 sidebarTitle: "Platform accounts"
 ---
 
+A platform account lets you onboard other businesses under your own Southpay account, take payments on their behalf, and collect a fee on each one. Each business is a **sub-merchant**: a separate store with its own balances, payouts and verification state.
+
+Paths are relative to `https://api.southpay.io/api/v2`.
+
 <Warning>
-  These endpoints are only available to accounts Southpay has enabled as a platform. Every other account receives `403 not_a_platform`. See the [Platform accounts guide](/platform-accounts) for how the model works.
+Platform mode is not self-serve. It is gated on the `platform_accounts` feature flag, which only Southpay staff can enable. Until it is enabled on your store, **every endpoint on this page returns `403`** with `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}`. Contact support before integrating.
 </Warning>
 
-Base URL: `https://api.southpay.io/api/v2`
+## Authentication and scope
 
-## Scopes
-
-| Scope | Grants |
-| --- | --- |
-| `accounts:read` | List and read your sub-merchants, and read platform reports. |
-| `accounts:write` | Create and update sub-merchants, attest verification, mint onboarding links. |
-| `accounts:act` | Send `X-Southpay-Account` to scope a request to a sub-merchant. |
-
-These scopes are not included in a standard secret key. A key created on a platform account carries them by default; a key created before your account was enabled does not, so rotate or recreate it.
-
----
-
-## The account object
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `id` | string (UUID) | The sub-merchant's account id. Use as `X-Southpay-Account`. |
-| `name` | string | Business name. |
-| `external_id` | string \| null | Your own identifier for this merchant. |
-| `platform_fee_percentage` | string \| null | Effective rate as a decimal, e.g. `"0.005"` for 0.5%. Falls back to your platform default. |
-| `charges_enabled` | boolean | Whether the merchant has passed verification. |
-| `payouts_enabled` | boolean | Whether the merchant has a payout destination. |
-| `kyc_confirmed_at` | string \| null | ISO 8601 timestamp of verification. |
-| `created_at` | string | ISO 8601. |
-
----
+Reads require `accounts:read`, writes require `accounts:write`, and acting on a sub-merchant requires `accounts:act`. None of the three are in the default API key scope set — a key created before your store became a platform will not hold them. Issue a new key with the platform scopes.
 
 ## Create a sub-merchant
 
-Idempotent on `external_id`: sending one that already exists returns the existing account with `201` rather than creating a duplicate.
+**`POST /platform/accounts`** — scope `accounts:write`.
+
+All fields go inside a required `account` object.
+
+<ParamField body="account.name" type="string" required>
+  The sub-merchant's business name. Whitespace is trimmed; a blank value is rejected.
+</ParamField>
+
+<ParamField body="account.external_id" type="string">
+  Your own identifier for this merchant. Creation is **idempotent on this value** — posting the same `external_id` twice returns the existing account rather than creating a second one.
+</ParamField>
+
+<ParamField body="account.platform_fee_percentage" type="string">
+  Your fee on this sub-merchant's payments, as a decimal fraction (`"0.015"` is 1.5%).
+</ParamField>
+
+<ParamField body="account.country" type="string">
+  ISO country code. Used once, to seed the new store's defaults. Ignored on update.
+</ParamField>
 
 <CodeGroup>
 ```bash Request
-POST /platform/accounts
-Authorization: Bearer <PLATFORM_API_KEY>
-Content-Type: application/json
-
-{
-  "account": {
-    "name": "Corner Coffee",
-    "external_id": "cust_10482",
-    "platform_fee_percentage": "0.005",
-    "country": "PT"
-  }
-}
+curl -X POST https://api.southpay.io/api/v2/platform/accounts \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "account": {
+      "name": "Blue Harbour Coffee",
+      "external_id": "merchant_8812",
+      "platform_fee_percentage": "0.015",
+      "country": "PT"
+    }
+  }'
 ```
 
-```json Response
+```json Response 201
 {
-  "id":                      "9f2b7c1e-...",
-  "name":                    "Corner Coffee",
-  "external_id":             "cust_10482",
-  "platform_fee_percentage": "0.005",
-  "charges_enabled":         false,
-  "payouts_enabled":         false,
-  "kyc_confirmed_at":        null,
-  "created_at":              "2026-08-05T14:22:10Z"
+  "id": "c7d8e9f0-a1b2-4c3d-8e4f-506172839405",
+  "name": "Blue Harbour Coffee",
+  "external_id": "merchant_8812",
+  "platform_fee_percentage": "0.015",
+  "kyc_confirmed_at": null,
+  "charges_enabled": false,
+  "payouts_enabled": false,
+  "created_at": "2026-05-12T09:00:00.000Z"
 }
 ```
 </CodeGroup>
 
-`country` seeds the merchant's default settlement currency. It does not have to match where they are verified.
+### Response fields
 
----
+<ResponseField name="id" type="string" required>
+  The sub-merchant's store id. Send this in `X-Southpay-Account` to act on their behalf.
+</ResponseField>
+
+<ResponseField name="name" type="string" required />
+
+<ResponseField name="external_id" type="string | null">
+  Your identifier, as supplied at create time.
+</ResponseField>
+
+<ResponseField name="platform_fee_percentage" type="string | null">
+  The effective fee as a **string**, not a number.
+</ResponseField>
+
+<ResponseField name="kyc_confirmed_at" type="string | null">
+  When verification was approved. Null until then.
+</ResponseField>
+
+<ResponseField name="charges_enabled" type="boolean" required>
+  True once KYC is confirmed. Until then the sub-merchant cannot take payments.
+</ResponseField>
+
+<ResponseField name="payouts_enabled" type="boolean" required>
+  True once the sub-merchant has chosen a payout destination.
+</ResponseField>
 
 ## List sub-merchants
 
-Filter to one with `?external_id=`.
+**`GET /platform/accounts`** — scope `accounts:read`.
 
-```bash
-GET /platform/accounts
-Authorization: Bearer <PLATFORM_API_KEY>
-```
+Returns a **bare array** of active sub-merchants, newest first. No envelope, no pagination.
 
-Returns an array of account objects, newest first. Offboarded accounts are excluded.
-
----
+<ParamField query="external_id" type="string">
+  Exact match on your own identifier. The way to resolve one of your ids to a Southpay account id.
+</ParamField>
 
 ## Retrieve a sub-merchant
 
-```bash
-GET /platform/accounts/{account_id}
-```
+**`GET /platform/accounts/{id}`** — scope `accounts:read`. Returns a bare account object.
 
----
+An unknown id returns `404` with the global handler's message and **no machine code**: `{"error": {"message": "Couldn't find Store with 'id'=…", "code": null}}`.
 
 ## Update a sub-merchant
 
-```bash
-PATCH /platform/accounts/{account_id}
+**`PATCH /platform/accounts/{id}`** — scope `accounts:write`.
 
-{ "account": { "platform_fee_percentage": "0.0075" } }
+<Warning>
+Only `name` and `platform_fee_percentage` are actually applied. `external_id` and `country` are accepted by the request and then **silently discarded** — you get a `200` and the values do not change. Do not build a settings form that lets a user edit `external_id` here; set it once at create time.
+</Warning>
+
+<CodeGroup>
+```bash Request
+curl -X PATCH https://api.southpay.io/api/v2/platform/accounts/c7d8e9f0-a1b2-4c3d-8e4f-506172839405 \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{ "account": { "platform_fee_percentage": "0.02" } }'
 ```
 
-A rate change applies to payments created after it. Payments already in flight keep the rate they were created with.
-
----
+```json Response 200
+{
+  "id": "c7d8e9f0-a1b2-4c3d-8e4f-506172839405",
+  "name": "Blue Harbour Coffee",
+  "external_id": "merchant_8812",
+  "platform_fee_percentage": "0.02",
+  "kyc_confirmed_at": "2026-05-14T11:02:00.000Z",
+  "charges_enabled": true,
+  "payouts_enabled": true,
+  "created_at": "2026-05-12T09:00:00.000Z"
+}
+```
+</CodeGroup>
 
 ## Attest verification
 
-Submit business details you have already verified yourself. Recorded as attested by your platform.
+**`POST /platform/accounts/{account_id}/verification`** — scope `accounts:write`.
 
-```bash
-POST /platform/accounts/{account_id}/verification
+Submits KYB details you have already collected, so the sub-merchant does not have to re-enter them. Fields may be sent inside a `verification_request` object or at the top level.
 
+<ParamField body="business_legal_name" type="string" />
+<ParamField body="business_country" type="string" />
+<ParamField body="registration_number" type="string" />
+<ParamField body="tax_id" type="string" />
+<ParamField body="business_website" type="string" />
+<ParamField body="contact_email" type="string" />
+<ParamField body="contact_phone" type="string" />
+<ParamField body="business_description" type="string" />
+
+Returns `201` with the verification request: `id`, `status`, the submitted fields, plus `rejection_reason`, `submitted_at`, `reviewed_at`, `created_at`, `updated_at`.
+
+`status` is `pending`, `approved` or `rejected`. Approval is a human review — attesting does not approve anything by itself. Subscribe to `store.verification.approved` and `store.verification.rejected` to learn the outcome; both fan out to the platform's own [webhook endpoints](/api-reference/webhook-endpoints).
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `409` | `{"error": {"message": "…", "code": "verification_already_pending"}}` | A submission is already awaiting review. |
+| `422` | `{"error": {"message": "…", "code": "invalid_verification"}}` | Validation failure. |
+| `404` | `{"error": {"message": "Unknown sub-merchant account", "code": "account_not_found"}}` | Unknown `account_id`. |
+
+## Issue an onboarding link
+
+**`POST /platform/accounts/{account_id}/onboarding_links`** — scope `accounts:write`.
+
+Creates a single-use dashboard link the sub-merchant opens to complete a step themselves. Fields may be sent inside an `onboarding_link` object or at the top level.
+
+<ParamField body="purpose" type="string">
+  `onboarding`, `kyb` or `payout_destination`. Pick `payout_destination` when the only thing missing is where their money goes — a platform is not allowed to set that itself.
+</ParamField>
+
+<ParamField body="return_url" type="string">
+  Where the sub-merchant lands after finishing.
+</ParamField>
+
+<ParamField body="expires_in" type="integer">
+  Link lifetime **in seconds**. Defaults to 7 days and is capped at 30 days.
+</ParamField>
+
+```json Response 201
 {
-  "verification_request": {
-    "business_legal_name": "Corner Coffee Lda",
-    "business_country":    "PT",
-    "contact_email":       "owner@cornercoffee.example",
-    "registration_number": "PT123456789"
-  }
+  "id": "d8e9f0a1-b2c3-4d4e-9f50-617283940516",
+  "account_id": "c7d8e9f0-a1b2-4c3d-8e4f-506172839405",
+  "purpose": "payout_destination",
+  "return_url": "https://platform.example.com/merchants/8812",
+  "token_prefix": "spob_4a2c",
+  "token": "spob_4a2c…",
+  "url": "https://app.southpay.io/onboarding/spob_4a2c…",
+  "expires_at": "2026-05-19T09:00:00.000Z",
+  "completed_at": null,
+  "created_at": "2026-05-12T09:00:00.000Z"
 }
 ```
 
-`business_legal_name`, `business_country` (ISO 3166-1 alpha-2) and `contact_email` are required. Returns `409 verification_already_pending` if one is already under review.
+<Danger>
+`token` and `url` are returned **only on create**. Retrieving the link later gives you `token_prefix` and nothing usable. Hand the URL to the sub-merchant immediately or store it securely.
+</Danger>
 
----
-
-## Create an onboarding link
-
-Returns a URL to redirect the merchant to. The token is shown once and cannot be retrieved later.
-
-<CodeGroup>
-```bash Request
-POST /platform/accounts/{account_id}/onboarding_links
-
-{
-  "onboarding_link": {
-    "return_url": "https://yourapp.example/onboarding/done",
-    "purpose":    "onboarding",
-    "expires_in": 604800
-  }
-}
-```
-
-```json Response
-{
-  "id":           "0b91...",
-  "account_id":   "9f2b7c1e-...",
-  "token":        "spob_...",
-  "url":          "https://app.southpay.io/onboarding/spob_...",
-  "purpose":      "onboarding",
-  "return_url":   "https://yourapp.example/onboarding/done",
-  "expires_at":   "2026-08-12T14:22:10Z",
-  "completed_at": null
-}
-```
-</CodeGroup>
-
-| Field | Description |
-| --- | --- |
-| `purpose` | `onboarding` (default), `kyb`, or `payout_destination`. A scoped link permits only that step. |
-| `return_url` | Where the merchant is sent on completion. Must be `https`. |
-| `expires_in` | Seconds. Defaults to 7 days, capped at 30. |
-
-Links are single use. Mint a new one to reopen a step.
-
----
+A validation failure returns `422` `{"error": {"message": "…", "code": "invalid_onboarding_link"}}`.
 
 ## Platform overview
 
-<CodeGroup>
-```bash Request
-GET /platform/overview?from=2026-07-01&to=2026-07-31
-Authorization: Bearer <PLATFORM_API_KEY>
-```
+**`GET /platform/overview`** — scope `accounts:read`.
 
-```json Response
+Aggregate figures across your sub-merchants for a date range.
+
+<ParamField query="from" type="string">
+  ISO date. Defaults to 29 days before `to`.
+</ParamField>
+
+<ParamField query="to" type="string">
+  ISO date. Defaults to today.
+</ParamField>
+
+Ranges longer than 365 days are clamped. Unparseable dates fall back to the defaults.
+
+```json Response 200
 {
-  "from":                "2026-07-01",
-  "to":                  "2026-07-31",
-  "livemode":            true,
-  "sub_merchant_count":  24,
-  "activated_count":     19,
-  "completed_payments":  1432,
-  "volume_by_currency":  [ { "currency": "EUR", "amount_cents": 84210050 } ],
-  "platform_fee_earned": [ { "asset_id": "ETH_USDC", "amount_atomic": "421050" } ],
-  "top_sub_merchants":   [ { "account_id": "9f2b...", "name": "Corner Coffee", "amount_cents": 1204000 } ]
+  "from": "2026-04-13",
+  "to": "2026-05-12",
+  "livemode": true,
+  "sub_merchant_count": 42,
+  "activated_count": 31,
+  "completed_payments": 1874,
+  "volume_by_currency": [
+    { "currency": "EUR", "amount_cents": 9481200 },
+    { "currency": "USD", "amount_cents": 2210400 }
+  ],
+  "platform_fee_earned": [
+    { "asset_id": "ETH_USDC", "amount_atomic": "142218000" }
+  ],
+  "top_sub_merchants": [
+    { "account_id": "c7d8e9f0-a1b2-4c3d-8e4f-506172839405", "name": "Blue Harbour Coffee", "amount_cents": 1204800 }
+  ]
 }
 ```
-</CodeGroup>
 
-`from` and `to` default to the last 30 days and are capped at a 365 day range. `platform_fee_earned` is net of refund clawbacks.
+`activated_count` is the number of sub-merchants with confirmed KYC. `platform_fee_earned` is your accrued fee per asset in atomic units, net of debits. `top_sub_merchants` is capped at five.
 
----
+## Platform payments
 
-## Payments across sub-merchants
+**`GET /platform/payments`** — scope `accounts:read`.
 
-```bash
-GET /platform/payments?account_id=9f2b...&status=completed&page=1
+Payments across every sub-merchant, newest first. This is a purpose-built summary, not the [payment intent](/api-reference/payments) shape — there is no `reference` lookup, no addresses and no metadata.
+
+<ParamField query="account_id" type="string">
+  Limit to one sub-merchant.
+</ParamField>
+
+<ParamField query="status" type="string">
+  `pending`, `processing`, `completed`, `failed`, `expired` or `refunded`. Unrecognized values are ignored rather than rejected.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="25">
+  Between 1 and 100.
+</ParamField>
+
+```json Response 200
+{
+  "data": [
+    {
+      "id": "7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f",
+      "reference": "A1B2C3D4E5F6G7H8",
+      "status": "completed",
+      "settlement_currency": "EUR",
+      "settlement_amount_cents": 4999,
+      "platform_fee_percentage": "0.015",
+      "created_at": "2026-05-11T14:21:58Z",
+      "account": {
+        "id": "c7d8e9f0-a1b2-4c3d-8e4f-506172839405",
+        "name": "Blue Harbour Coffee"
+      }
+    }
+  ],
+  "meta": { "total": 1874, "page": 1, "per_page": 25, "total_pages": 75 }
+}
 ```
 
-| Parameter | Description |
-| --- | --- |
-| `account_id` | Restrict to one sub-merchant. |
-| `status` | `pending`, `processing`, `completed`, `failed`, `expired`, `refunded`. |
-| `page`, `per_page` | Defaults to 25 per page, max 100. |
-
-Each row carries the `account` it belongs to and the `platform_fee_percentage` snapshotted on that payment.
-
----
+`settlement_amount_cents` is an integer here, unlike the two-decimal `settlement_amount` string on a payment intent. `platform_fee_percentage` is the rate snapshotted at payment time, as a string, and may be null on older payments.
 
 ## Acting on a sub-merchant
 
-Add `X-Southpay-Account` to any merchant endpoint:
+To call any other endpoint as a sub-merchant, add the header:
 
-```bash
-POST /payments
-Authorization: Bearer <PLATFORM_API_KEY>
-X-Southpay-Account: 9f2b7c1e-...
-Content-Type: application/json
-
-{ "payment_intent": { "amount": "24.00", "currency": "EUR" } }
+```http
+X-Southpay-Account: c7d8e9f0-a1b2-4c3d-8e4f-506172839405
 ```
 
-| Error | Meaning |
-| --- | --- |
-| `403 not_a_platform` | Your account is not an enabled platform. |
-| `403 account_not_found` | That account is not one of your sub-merchants, or has been offboarded. |
-| `403 insufficient_scope` | Your credential lacks `accounts:act`. |
-| `403 platform_cannot_change_payout_destination` | Payout destinations can only be changed by the merchant, through an onboarding link. |
+Your credential must hold `accounts:act` in addition to the scope the target endpoint needs. Everything then behaves as if the sub-merchant made the call — their balances, their payments, their webhooks.
+
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/payments \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "X-Southpay-Account: c7d8e9f0-a1b2-4c3d-8e4f-506172839405" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: order_8812_1043" \
+  -d '{ "payment_intent": { "amount": "12.50", "currency": "EUR" } }'
+```
+
+### Guardrails
+
+Two things a platform can never do while acting, regardless of scope:
+
+| Status | Body | Blocked action |
+| --- | --- | --- |
+| `403` | `{"error": {"message": "…", "code": "platform_cannot_issue_credentials"}}` | Creating, rotating or revoking the sub-merchant's API keys or agent credentials. |
+| `403` | `{"error": {"message": "…", "code": "platform_cannot_change_payout_destination"}}` | Changing where the sub-merchant's money goes. |
+
+For [payout destinations](/payout-destinations), issue an onboarding link with `purpose: "payout_destination"` and let the sub-merchant set it themselves.
+
+### Header errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `403` | `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}` | Your store is not platform-enabled. |
+| `403` | `{"error": {"message": "Insufficient scope: accounts:act required", "code": "insufficient_scope"}}` | Credential lacks `accounts:act`. |
+| `403` | `{"error": {"message": "Unknown sub-merchant account", "code": "account_not_found"}}` | The id is not one of your sub-merchants. Note this is `403`, not `404`. |
+
+## Webhook fan-out
+
+Payment and store-verification events for a sub-merchant are delivered twice: once to the sub-merchant's own endpoints, and once to yours with an extra top-level `account` key holding the sub-merchant's store id. Use that key to route the event.
+
+Billing events do **not** fan out to platforms.
+
+## Create and update errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": {"message": "Name can't be blank", "code": "invalid_account"}}` | Missing or blank `name`. |
+| `422` | `{"error": {"message": "A sub-merchant with external_id merchant_8812 already exists", "code": null}}` | Duplicate `external_id` that could not be adopted. |
+| `403` | `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}` | Feature flag not enabled. |

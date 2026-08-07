@@ -1,132 +1,100 @@
 ---
 title: "Idempotency"
-description: "Safely retry any API request without risk of duplicate charges."
+description: "How the Idempotency-Key header actually behaves on Southpay: what it protects, what it does not, and how to choose a key."
 ---
 
-## What is idempotency?
+Send an `Idempotency-Key` header on a create request and Southpay will not create a second record if you send the same request twice. That is the whole guarantee. It is narrower than idempotency on most payment APIs, and the differences matter, so this page describes the mechanism rather than the idea.
 
-An idempotent request produces the same result no matter how many times it is submitted. This is essential for handling network timeouts, connection drops, and retries safely - you can always retry a request without worrying about creating duplicate payments.
+## Where the header applies
 
----
+| Endpoint | `Idempotency-Key` |
+| --- | --- |
+| `POST /api/v2/payments` | Optional, strongly recommended |
+| `POST /api/v2/agentic/payments` | Optional |
+| `POST /api/v2/payments/{id}/refunds` | **Required** |
+| `POST /api/v2/payouts` | **Required** |
+| `POST /api/v2/balance_swaps` | **Required** |
+| `POST /api/v2/agentic/payouts` | **Required** |
+| `POST /api/v2/agentic/payments/{id}/refunds` | **Required** |
+| `POST /api/v2/agentic/x402/settlements` | **Required** |
 
-## How to use it
+Omitting it where it is required returns `422`. Agentic endpoints use the code `idempotency_key_required`; the public endpoints return the plain string `{"error": "Idempotency-Key header is required"}`.
 
-Pass an `Idempotency-Key` header on any `POST` request. The value must be unique per intended operation and can be any string up to 255 characters.
+Everything else ignores the header entirely. **Billing (customers, invoices, products, prices, subscriptions), webhook endpoints, platform accounts and payout schedules do not read it.** Sending it there is harmless and does nothing. Retrying a billing create after a timeout can produce two customers.
 
-```bash
+```bash Request
 curl -X POST https://api.southpay.io/api/v2/payments \
-  -H "Authorization: Bearer sp_test_YOUR_KEY" \
-  -H "Idempotency-Key: order_8721_checkout_attempt_1" \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Idempotency-Key: 5b1c9a7e-order-8721" \
   -H "Content-Type: application/json" \
-  -d '{
-    "payment_intent": {
-      "amount": "49.99",
-      "currency": "USD"
-    }
-  }'
+  -d '{"payment_intent": {"amount": "49.99", "currency": "USD"}}'
 ```
 
-If you send the same `Idempotency-Key` again:
-- The original Payment Intent is returned as-is
-- No new Payment Intent is created
-- The HTTP status code is `200` (not `201`)
+## What a replay returns
 
----
+A replay returns **the record the first call created, with the status code the endpoint normally returns**. For `POST /payments` and `POST /payouts` that is `201 Created`, not `200 OK`.
 
-## Key generation
+There is no shared idempotency store and no cached response. The key is a column on the created row, and a replay is a lookup that finds that row and re-serializes it. Consequences:
 
-Good idempotency keys are deterministic from your business context:
+- **Nothing tells you it was a replay.** No `Idempotency-Replayed` header, no distinct status. If you need to know, compare the returned `id` to what you have stored.
+- **The body reflects the record as it is now, not as it was.** Replay a payment create an hour later and you get the same intent with `status: "expired"` and, if it was paid, a different `settlement_status`. The response is live, not a snapshot.
+- **A different body with the same key is ignored, silently.** Southpay does not compare request payloads. Send `49.99 USD` with key `K`, then `999.00 USD` with key `K`, and you get the original `49.99` intent back at `201`. There is no `409`, no conflict detection, and no error code for this. Your amount change is dropped without a word.
+
+<Warning>
+Because a mismatched payload is dropped rather than rejected, a key derived only from an order id will silently return a stale intent if the cart total changes. Include something that varies with the request contents, or version the key when the payload changes.
+</Warning>
+
+## Keys never expire
+
+There is no TTL, no expiry column, and no sweeper job. A key lives as long as the row it is attached to, which is forever.
+
+This is the opposite of the usual 24-hour window, and it changes how you generate keys. A key you used for an order last year will still resolve to last year's payment intent today. If a customer retries a checkout after the first intent expired, **you must use a new key** or you will hand them the dead intent.
 
 ```typescript
-const idempotencyKey = `order_${orderId}_payment_v1`;
+const key = `order-${order.id}-attempt-${order.paymentAttemptCount}`;
 ```
 
-```python
-idempotency_key = f"order_{order_id}_payment_v1"
-```
+Increment the attempt counter whenever you want a genuinely new payment for the same order. Do not reuse the order id alone.
 
-**Guidelines:**
-- Derive the key from your internal order or transaction ID
-- Append a version suffix if you intentionally want to retry with new parameters
-- Use a new key if you are creating a genuinely new payment for the same order (e.g. after the first one expired)
+## Uniqueness scope, and one sharp edge
 
-**Do not** use random UUIDs generated at request time - that defeats the purpose, since a new UUID on each retry means a new payment intent each time.
+Different resources scope the key differently.
 
----
+| Resource | Key is unique across |
+| --- | --- |
+| Payment intents | Your store |
+| Refunds | The payment intent and asset (the key is namespaced internally) |
+| Agentic payouts and x402 settlements | The agent credential (the key is namespaced internally) |
+| Payouts, balance swaps | **The whole table** |
 
-## Scope
+<Warning>
+**Make payout and balance swap keys globally unique.** Their uniqueness constraint is not scoped to your store, so a short, guessable key like `payout-1` can collide with another merchant's record. Prefix every payout and swap key with a UUID you generate.
+</Warning>
 
-Idempotency keys are scoped to:
-- A single **store**
-- A single **mode** (test or live)
+The other sharp edge is mode. Payment intent lookup is scoped to `(store, key, livemode)`, but the database constraint enforcing uniqueness is only `(store, key)`. Reusing the same key in live mode that you already used in test mode does not create a new intent and does not return the old one — it fails. **Never share an idempotency key between test and live mode.** Prefix your keys with the mode if there is any chance your test and production systems generate the same values.
 
-The same key reused across different stores or modes creates separate resources.
+## Choosing a key
 
----
-
-## Expiry
-
-Once a Payment Intent reaches a terminal state (`completed`, `expired`, `failed`, `refunded`), the idempotency key is consumed. Using the same key after that point will return the original terminal-state intent.
-
-To create a replacement payment (e.g. after expiry), generate a new key:
+- Make it unique per **intended operation**, not per HTTP request. A retry of the same operation must reuse the key; that is the entire point.
+- Do not generate a fresh UUID inside the retry loop. A new value on each attempt means a new payment intent on each attempt.
+- Do generate the UUID once, before the first attempt, and persist it alongside the order before you send the request. If your process dies mid-request you can resume with the same key.
+- There is no length limit and no character validation. Anything your HTTP client will send as a header value is accepted.
 
 ```typescript
-const retryKey = `order_${orderId}_payment_v2`;
+const attempt = await db.paymentAttempts.create({
+  orderId: order.id,
+  idempotencyKey: `${mode}-${crypto.randomUUID()}`,
+});
+
+const intent = await createPaymentIntent(order, attempt.idempotencyKey);
 ```
 
----
+Persisting the key first is what makes the retry safe. If the `POST` times out, you do not know whether it landed — replaying the stored key resolves that without risking a duplicate.
 
-## Example: safe retry loop
+## What idempotency does not cover
 
-```typescript
-async function createPaymentWithRetry(
-  amount: string,
-  currency: string,
-  orderId: string
-): Promise<PaymentIntent> {
-  const idempotencyKey = `order_${orderId}_payment_v1`;
-  const maxAttempts = 3;
+- It does not make `5xx` responses safe on endpoints that ignore the header. Retrying `POST /billing/customers` after a timeout can create two customers; deduplicate on your side.
+- It does not deduplicate webhook deliveries to your endpoint. Southpay uses its own internal key per `(endpoint, event)` pair, but delivery is at-least-once and retries can repeat. [Deduplicate on the event `id`](/webhooks#deduplication).
+- It does not roll anything back. If a request partly succeeded before failing, the replay returns whatever state exists.
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const response = await fetch("https://api.southpay.io/api/v2/payments", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.SOUTHPAY_API_KEY}`,
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey,
-        },
-        body: JSON.stringify({
-          payment_intent: { amount, currency },
-        }),
-      });
-
-      if (response.ok || response.status === 422) {
-        return await response.json();
-      }
-
-      // 5xx errors are safe to retry with the same key
-      if (attempt < maxAttempts) {
-        await sleep(1000 * attempt);
-      }
-    } catch (err) {
-      if (attempt === maxAttempts) throw err;
-      await sleep(1000 * attempt);
-    }
-  }
-
-  throw new Error("Failed after maximum retry attempts");
-}
-```
-
-<Note>
-  `5xx` server errors can always be retried with the same `Idempotency-Key`. `4xx` errors indicate a client-side issue (bad parameters, auth failure) - retrying with the same key will produce the same error.
-</Note>
-
----
-
-## Idempotency in webhooks
-
-Webhook deliveries are also idempotent - Southpay uses an internal idempotency key per `(endpoint, event)` pair, so the same event is never delivered twice to the same endpoint under normal conditions.
-
-However, at-least-once delivery means rare duplicates can occur during retries. Always [deduplicate on the event `id`](/webhooks#deduplication) in your webhook handler.
+See [Errors](/errors#what-to-retry) for which status codes are worth retrying at all.

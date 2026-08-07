@@ -1,183 +1,354 @@
 ---
 title: "Recurring"
-description: "Products, prices, and subscriptions for recurring billing."
+description: "Products, prices and subscriptions: model a catalog, bill customers on a repeating interval, and pause, cancel or resume."
 sidebarTitle: "Recurring"
 ---
 
-<Note>
-  All endpoints require authentication; see [Authentication](/authentication).
-</Note>
+Recurring billing has three resources. A **product** is the thing you sell. A **price** attaches an amount, a currency and an interval to a product. A **subscription** binds a customer to one or more prices and generates an [invoice](/api-reference/invoicing) each cycle.
 
-Base URL: `https://api.southpay.io/api/v2/billing`
+Prices are immutable on the fields that matter. To change what you charge, create a new price and archive the old one.
 
-A subscription bills a customer on a price's interval, generating an [invoice](/api-reference/invoicing) each cycle that settles through the same crypto checkout as a one-off [payment intent](/api-reference/payments). Money amounts are in **cents** of the stated `currency`.
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-Subscribe to the [subscription webhook events](/webhooks#billing-events) (`subscription.created`, `subscription.updated`, `subscription.past_due`, `subscription.canceled`) plus the `invoice.finalized` / `invoice.paid` events that carry each renewal and payment, rather than polling.
+## Authentication and scope
 
----
+Reads require `billing:read`, writes require `billing:write`. Publishable keys are rejected. Idempotency keys are not used anywhere in billing — retrying a create makes a second record.
 
-## Products and prices
+## Products
 
-A product is a sellable thing; a price attaches an amount, currency, and billing interval to it. Prices are immutable once created (you archive and replace rather than edit).
+### Create a product
 
-```bash
-GET   /billing/products                       # list
-POST  /billing/products                        # create
-GET   /billing/products/:id                    # read (includes prices)
-PATCH /billing/products/:id                    # update
+**`POST /billing/products`** — scope `billing:write`. Fields go inside a required `product` object.
 
-GET   /billing/products/:product_id/prices     # list
-POST  /billing/products/:product_id/prices     # create
-GET   /billing/products/:product_id/prices/:id # read
-POST  /billing/products/:product_id/prices/:id/archive
-POST  /billing/products/:product_id/prices/:id/activate
-```
+<ParamField body="product.name" type="string" required />
+<ParamField body="product.description" type="string" />
+<ParamField body="product.metadata" type="object" />
 
-A price has `unit_amount_cents`, `currency`, `interval` (one of `daily`, `weekly`, `monthly`, `yearly`), `interval_count`, and `active`. Set `interval_count` to bill every N intervals — for example `interval: "monthly"` with `interval_count: 3` is quarterly. Money fields (`unit_amount_cents`, `currency`, `interval`, `interval_count`) are immutable once the price exists; archive and create a new price to change them.
-
-```json Price
-{
-  "id": "01J2...",
-  "product_id": "01JP...",
-  "unit_amount_cents": 2900,
-  "currency": "USD",
-  "interval": "monthly",
-  "interval_count": 1,
-  "active": true,
-  "metadata": {},
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
-}
-```
-
----
-
-## Subscriptions
-
-A subscription bills a customer on a recurring schedule, issuing an invoice each cycle.
-
-```bash
-GET   /billing/subscriptions             # list (status, customer_id, page, per_page)
-POST  /billing/subscriptions             # create
-GET   /billing/subscriptions/:id         # read (includes items, price, customer)
-PATCH /billing/subscriptions/:id         # change plan (replace items/quantities)
-POST  /billing/subscriptions/:id/cancel     # cancel now or at period end
-POST  /billing/subscriptions/:id/uncancel   # undo a scheduled cancellation
-POST  /billing/subscriptions/:id/pause
-POST  /billing/subscriptions/:id/resume
-```
-
-### Items
-
-A subscription is billed as one or more **items**, each pairing a price with a quantity. The first item is the anchor: its price sets the billing interval and currency for the whole subscription, and is mirrored on the top-level `price_id`/`quantity`. Add more items for a base plan plus add-ons — every item becomes a line on the same cycle invoice.
-
-All items must share the same `interval`, `interval_count`, and `currency`.
-
-A single price serves any number of customers: reuse one `price_id` across many subscriptions, one per customer.
-
-### Create
+<ParamField body="product.active" type="boolean">
+  Accepted but **ignored on create**. New products are always active. Use `PATCH` to deactivate one.
+</ParamField>
 
 <CodeGroup>
-```bash Create
-POST /billing/subscriptions
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "subscription": {
-    "customer_id": "01J0...",
-    "items": [
-      { "price_id": "01J2...", "quantity": 1 },
-      { "price_id": "01J5...", "quantity": 3 }
-    ],
-    "trial_period_days": 14,
-    "grace_cycles": 1,
-    "metadata": {}
-  }
-}
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/billing/products \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{ "product": { "name": "Pro plan", "description": "Everything in Basic, plus reporting" } }'
 ```
 
 ```json Response 201
 {
-  "id": "01J3...",
-  "customer_id": "01J0...",
-  "price_id": "01J2...",
-  "quantity": 1,
-  "status": "trialing",
-  "items": [
-    {
-      "id": null,
-      "quantity": 1,
-      "price": { "id": "01J2...", "product_id": "01JP...", "product_name": "Pro plan", "unit_amount_cents": 2900, "currency": "USD", "interval": "monthly", "interval_count": 1 }
-    },
-    {
-      "id": "01JI...",
-      "quantity": 3,
-      "price": { "id": "01J5...", "product_id": "01JQ...", "product_name": "Extra seats", "unit_amount_cents": 500, "currency": "USD", "interval": "monthly", "interval_count": 1 }
-    }
-  ],
-  "price": { "id": "01J2...", "product_id": "01JP...", "product_name": "Pro plan", "unit_amount_cents": 2900, "currency": "USD", "interval": "monthly", "interval_count": 1 },
-  "customer": { "id": "01J0...", "email": "ada@example.com", "name": "Ada Lovelace" },
-  "current_period_start": "2026-05-12T12:00:00.000Z",
-  "current_period_end": "2026-05-26T12:00:00.000Z",
-  "next_billing_at": "2026-05-26T12:00:00.000Z",
-  "trial_end": "2026-05-26T12:00:00.000Z",
-  "started_at": "2026-05-12T12:00:00.000Z",
-  "cancel_at_period_end": false,
-  "cancel_at": null,
-  "canceled_at": null,
-  "paused_at": null,
-  "failed_cycle_count": 0,
-  "grace_cycles": 1,
+  "id": "7182930a-4b51-4627-8394-950617283940",
+  "name": "Pro plan",
+  "description": "Everything in Basic, plus reporting",
+  "active": true,
   "metadata": {},
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z",
+  "prices": []
 }
 ```
 </CodeGroup>
 
-| Field | Required | Description |
-| --- | --- | --- |
-| `subscription[customer_id]` | Yes | An existing billing customer. |
-| `subscription[items]` | Yes* | Array of `{ price_id, quantity }`. The first item is the anchor. |
-| `subscription[price_id]` | Yes* | Shorthand for a single-item subscription. Provide either `items` or `price_id`. |
-| `subscription[quantity]` | No | Quantity for the `price_id` shorthand. Defaults to 1. |
-| `subscription[trial_period_days]` | No | Days of free trial. No invoice is issued during the trial; the first invoice is generated when it ends. Defaults to 0. |
-| `subscription[grace_cycles]` | No | Cycles to allow past-due before the subscription is treated as failed. Defaults to 1. |
-| `subscription[metadata]` | No | Arbitrary key-value pairs. |
+### List products
 
-### Statuses
+**`GET /billing/products`** — scope `billing:read`.
 
-| Status | Meaning |
-| --- | --- |
-| `trialing` | In a free trial. Converts to `active` and bills its first cycle at `trial_end`. |
-| `active` | Billing normally each cycle. |
-| `past_due` | A cycle invoice went unpaid within its grace window. |
-| `paused` | Billing suspended. Call `resume` to continue. |
-| `canceled` | Ended. Terminal. |
+Returns a **bare array** with no envelope and no pagination.
 
-### Change the plan
+<ParamField query="active" type="string">
+  Send `true` to return only active products. Any other value is ignored and everything is returned.
+</ParamField>
 
-`PATCH /billing/subscriptions/:id` replaces the subscription's items. Send the full new set of items; the change applies from the next cycle (there is no mid-cycle proration).
+### Retrieve and update
 
-```bash
-PATCH /billing/subscriptions/01J3...
+**`GET /billing/products/{id}`** — scope `billing:read`. Includes a `prices` array, newest first.
 
-{ "subscription": { "items": [ { "price_id": "01J9...", "quantity": 2 } ] } }
+**`PATCH /billing/products/{id}`** — scope `billing:write`. Accepts `name`, `description`, `active` and `metadata`. This is the only way to set `active`. Deactivating a product does not archive its prices or cancel subscriptions using them — do those separately.
+
+Unknown id returns `404` `{"error": "Product not found"}`.
+
+## Prices
+
+### Create a price
+
+**`POST /billing/products/{product_id}/prices`** — scope `billing:write`. Fields go inside a required `price` object.
+
+<ParamField body="price.unit_amount_cents" type="integer" required>
+  Minor units of `currency`.
+</ParamField>
+
+<ParamField body="price.currency" type="string" required>
+  Fiat currency. Every price on one subscription must share it.
+</ParamField>
+
+<ParamField body="price.interval" type="string" required>
+  `daily`, `weekly`, `monthly` or `yearly`.
+</ParamField>
+
+<ParamField body="price.interval_count" type="integer">
+  How many intervals per cycle. `interval: "monthly"` with `interval_count: 3` bills quarterly.
+</ParamField>
+
+<ParamField body="price.metadata" type="object" />
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/billing/products/7182930a-4b51-4627-8394-950617283940/prices \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{ "price": { "unit_amount_cents": 4900, "currency": "EUR", "interval": "monthly", "interval_count": 1 } }'
 ```
+
+```json Response 201
+{
+  "id": "82930a4b-5162-4738-9495-061728394051",
+  "product_id": "7182930a-4b51-4627-8394-950617283940",
+  "unit_amount_cents": 4900,
+  "currency": "EUR",
+  "interval": "monthly",
+  "interval_count": 1,
+  "active": true,
+  "metadata": {},
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z"
+}
+```
+</CodeGroup>
+
+<Warning>
+`product_id`, `unit_amount_cents`, `currency`, `interval` and `interval_count` are immutable. There is no `PATCH` for a price. To change an amount, create a new price and archive the old one — existing subscriptions keep billing the price they were created with until you update them.
+</Warning>
+
+### List and retrieve prices
+
+**`GET /billing/products/{product_id}/prices`** — scope `billing:read`. A **bare array**, newest first, unpaginated. Includes archived prices.
+
+**`GET /billing/products/{product_id}/prices/{id}`** — scope `billing:read`. Unknown id returns `404` `{"error": "Price not found"}`.
+
+### Archive and activate
+
+**`POST /billing/products/{product_id}/prices/{id}/archive`** sets `active: false`. The price can no longer be used on new subscriptions.
+
+**`POST /billing/products/{product_id}/prices/{id}/activate`** sets it back to `true`.
+
+Both take no body and return `200` with the price.
+
+## Subscriptions
+
+### Create a subscription
+
+**`POST /billing/subscriptions`** — scope `billing:write`. Fields go inside a required `subscription` object.
+
+<ParamField body="subscription.customer_id" type="string" required>
+  Must be an active [customer](/api-reference/invoicing#customers).
+</ParamField>
+
+<ParamField body="subscription.price_id" type="string">
+  The anchor price. Use this for a single-price subscription.
+</ParamField>
+
+<ParamField body="subscription.items" type="object[]">
+  Multiple prices on one subscription. Use instead of `price_id`.
+  <Expandable title="item properties">
+    <ParamField body="price_id" type="string" required />
+    <ParamField body="quantity" type="integer" default="1" />
+  </Expandable>
+</ParamField>
+
+<ParamField body="subscription.quantity" type="integer" default="1">
+  Quantity for the anchor price.
+</ParamField>
+
+<ParamField body="subscription.trial_period_days" type="integer" default="0">
+  Days before the first charge. Non-zero starts the subscription in `trialing`.
+</ParamField>
+
+<ParamField body="subscription.grace_cycles" type="integer" default="1">
+  How many failed cycles are tolerated in `past_due` before cancellation.
+</ParamField>
+
+<ParamField body="subscription.metadata" type="object" />
+
+Every price on a subscription must share the same `interval`, `interval_count` and `currency`. Mixing them is rejected.
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/billing/subscriptions \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subscription": {
+      "customer_id": "3d4e5f60-7182-4930-a516-273849506172",
+      "price_id": "82930a4b-5162-4738-9495-061728394051",
+      "quantity": 1,
+      "trial_period_days": 14
+    }
+  }'
+```
+
+```json Response 201
+{
+  "id": "930a4b51-6273-4849-9506-172839405162",
+  "customer_id": "3d4e5f60-7182-4930-a516-273849506172",
+  "price_id": "82930a4b-5162-4738-9495-061728394051",
+  "status": "trialing",
+  "quantity": 1,
+  "current_period_start": "2026-05-12T09:00:00.000Z",
+  "current_period_end": "2026-06-12T09:00:00.000Z",
+  "next_billing_at": "2026-05-26T09:00:00.000Z",
+  "started_at": "2026-05-12T09:00:00.000Z",
+  "trial_end": "2026-05-26T09:00:00.000Z",
+  "canceled_at": null,
+  "paused_at": null,
+  "cancel_at_period_end": false,
+  "cancel_at": null,
+  "failed_cycle_count": 0,
+  "grace_cycles": 1,
+  "metadata": {},
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z",
+  "customer": { "id": "3d4e5f60-…", "email": "ana@example.com", "name": "Ana Ferreira" },
+  "price": {
+    "id": "82930a4b-5162-4738-9495-061728394051",
+    "product_id": "7182930a-4b51-4627-8394-950617283940",
+    "product_name": "Pro plan",
+    "unit_amount_cents": 4900,
+    "currency": "EUR",
+    "interval": "monthly",
+    "interval_count": 1
+  },
+  "items": [
+    { "id": null, "quantity": 1, "price": { "id": "82930a4b-…", "product_name": "Pro plan", "…": "…" } }
+  ]
+}
+```
+</CodeGroup>
+
+<Note>
+The first entry in `items` is the anchor price and always has `id: null` — it is synthesized from `price_id` rather than being a stored item row. Only add-on items have real ids. Do not use `items[].id` as a stable key without checking for null.
+</Note>
+
+### Response fields
+
+<ResponseField name="status" type="string" required>
+  `trialing`, `active`, `past_due`, `paused` or `canceled`. See [lifecycle](#subscription-lifecycle).
+</ResponseField>
+
+<ResponseField name="current_period_start" type="string" required>
+  Start of the cycle being billed.
+</ResponseField>
+
+<ResponseField name="current_period_end" type="string" required>
+  End of that cycle. Also the effective date for a period-end cancellation.
+</ResponseField>
+
+<ResponseField name="next_billing_at" type="string | null">
+  When the next invoice is generated. During a trial this is `trial_end`.
+</ResponseField>
+
+<ResponseField name="trial_end" type="string | null">
+  Null when `trial_period_days` was zero.
+</ResponseField>
+
+<ResponseField name="cancel_at_period_end" type="boolean" required>
+  True when a cancellation is scheduled. The subscription is still `active` and still billing until `cancel_at`.
+</ResponseField>
+
+<ResponseField name="cancel_at" type="string | null">
+  When the scheduled cancellation takes effect.
+</ResponseField>
+
+<ResponseField name="failed_cycle_count" type="integer" required>
+  Consecutive failed cycles. Once it exceeds `grace_cycles` the subscription is canceled.
+</ResponseField>
+
+<ResponseField name="grace_cycles" type="integer" required>
+  Tolerance before cancellation. Default 1.
+</ResponseField>
+
+<ResponseField name="amount_cents" type="integer">
+  Total per cycle across all items. Present on the list view only.
+</ResponseField>
+
+### List subscriptions
+
+**`GET /billing/subscriptions`** — scope `billing:read`.
+
+<ParamField query="status" type="string">
+  `trialing`, `active`, `past_due`, `paused` or `canceled`.
+</ParamField>
+
+<ParamField query="customer_id" type="string" />
+
+<Warning>
+This endpoint is **unpaginated**. It returns a bare array of every matching subscription in one response — no `data` wrapper, no `meta`, no `page` or `per_page`. Invoices and customers on the same billing surface *are* paginated with `{data, meta}`. Filter by `status` or `customer_id` to keep the response bounded.
+</Warning>
+
+Rows include `customer`, `amount_cents`, `currency`, `interval` and `interval_count` on top of the base fields.
+
+### Retrieve and update
+
+**`GET /billing/subscriptions/{id}`** — scope `billing:read`. Adds `price`, `items` and `customer`.
+
+**`PATCH /billing/subscriptions/{id}`** — scope `billing:write`. Accepts `price_id`, `quantity`, `grace_cycles`, `items` and `metadata`. Sending `items` replaces the full set. A canceled subscription cannot be changed: `422` `{"error": "Cannot change a canceled subscription"}`.
+
+Unknown id returns `404` `{"error": "Subscription not found"}`.
 
 ### Cancel
 
-`cancel` ends the subscription immediately. Pass `at_period_end: true` to keep it active until the current period ends and cancel automatically — the response then has `cancel_at_period_end: true` and `cancel_at` set. Call `uncancel` to clear a scheduled cancellation while the subscription is still live.
+**`POST /billing/subscriptions/{id}/cancel`** — scope `billing:write`.
 
-```bash
-POST /billing/subscriptions/01J3.../cancel
+<ParamField body="at_period_end" type="boolean" default="false">
+  Sent at the **top level**, not inside a `subscription` object. Omitting it cancels immediately.
+</ParamField>
 
-{ "at_period_end": true }
-```
+Immediately: `status` becomes `canceled` and `canceled_at` is stamped. At period end: the subscription stays `active`, `cancel_at_period_end` becomes true and `cancel_at` is set to `current_period_end`.
+
+Both return `200` with the full subscription. Canceling an already-canceled subscription is a no-op `200`.
+
+### Uncancel
+
+**`POST /billing/subscriptions/{id}/uncancel`** — scope `billing:write`. No body.
+
+Clears a scheduled period-end cancellation. It cannot revive an already-`canceled` subscription — that is terminal, and the call returns `200` with the subscription unchanged. Check `status` on the response, not the status code.
 
 ### Pause and resume
 
-`pause` suspends billing; `resume` restarts it and opens a fresh period from now.
+**`POST /billing/subscriptions/{id}/pause`** stops billing and sets `paused_at`.
 
-If a cycle invoice goes unpaid, Southpay emits `subscription.past_due`. Once the grace window (roughly `grace_cycles` × the billing interval) is exhausted, the invoice is marked uncollectible and the subscription is canceled for non-payment.
+**`POST /billing/subscriptions/{id}/resume`** sets `status` back to `active`, clears `paused_at`, resets `failed_cycle_count` to zero, and **restarts the billing period from now** — `current_period_start`, `current_period_end` and `next_billing_at` are all recalculated. The customer is not charged for the paused span.
+
+Both take no body and return `200` with the subscription.
+
+## Subscription lifecycle
+
+| Status | Terminal | Meaning |
+| --- | --- | --- |
+| `trialing` | No | In a trial. No charge yet. |
+| `active` | No | Billing normally. |
+| `past_due` | No | A cycle failed. Retried until `grace_cycles` is exhausted. |
+| `paused` | No | Billing suspended. |
+| `canceled` | Yes | Finished. Cannot be restarted. |
+
+Allowed transitions: `trialing` to `active` or `canceled`; `active` to `past_due`, `paused` or `canceled`; `past_due` to `active` or `canceled`; `paused` to `active` or `canceled`.
+
+An illegal transition returns `422` `{"error": "Cannot move subscription from canceled to active"}`.
+
+Four [webhook events](/api-reference/webhook-endpoints#event-catalogue) fire: `subscription.created`, `subscription.updated`, `subscription.past_due` and `subscription.canceled`. Pausing, resuming, uncanceling and scheduling a period-end cancellation all emit `subscription.updated` — inspect the payload to tell them apart. Billing events carry the full subscription object in `data.object` and do not fan out to platform accounts.
+
+## Errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": "Customer not found"}` | Unknown `customer_id` on create. |
+| `422` | `{"error": "Customer is not active"}` | The customer was deleted. |
+| `422` | `{"error": "Price not found"}` | Unknown `price_id` on create or update. |
+| `422` | `{"error": "Price is not active"}` | The price is archived. |
+| `422` | `{"error": "Price does not belong to this store"}` | Cross-store price id. |
+| `422` | `{"error": "At least one item is required"}` | Neither `price_id` nor `items` supplied. |
+| `422` | `{"error": "All items must share the same billing interval"}` | Mixed intervals. |
+| `422` | `{"error": "All items must use the same currency"}` | Mixed currencies. |
+| `422` | `{"error": "Cannot change a canceled subscription"}` | Update after cancellation. |
+| `404` | `{"error": "Product not found"}` / `{"error": "Price not found"}` / `{"error": "Subscription not found"}` | Unknown id. |
+| `422` | `{"errors": ["Interval is not included in the list"]}` | Model validation. Note the plural array envelope. |

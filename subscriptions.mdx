@@ -48,10 +48,10 @@ Content-Type: application/json
 ```json
 {
   "subscription": {
-    "customer_id": "01J0...",
+    "customer_id": "7b3f9d02-1c48-4ea6-95f7-0d21c6b48e93",
     "items": [
-      { "price_id": "01J2...", "quantity": 1 },
-      { "price_id": "01J5...", "quantity": 3 }
+      { "price_id": "a4c81e57-9026-4b3d-8f14-6e05b7c92d38", "quantity": 1 },
+      { "price_id": "e91d0472-53ba-4c68-90af-2d7e14c8b605", "quantity": 3 }
     ],
     "trial_period_days": 14,
     "grace_cycles": 1
@@ -59,7 +59,11 @@ Content-Type: application/json
 }
 ```
 
-For a single price, you can use the shorthand `"price_id": "01J2..."` (with an optional `"quantity"`) instead of `items`.
+Every id is a bare UUID. For a single price, use the shorthand `"price_id"` (with an optional `"quantity"`) instead of `items`.
+
+<Warning>
+Billing endpoints **ignore the `Idempotency-Key` header entirely.** Retrying a subscription or customer create after a timeout can produce a duplicate. Deduplicate on your side, or check for an existing record before retrying. See [Idempotency](/idempotency#where-the-header-applies).
+</Warning>
 
 To subscribe several customers to the same plan, create one subscription per customer with the same `items` — a price is shared, a subscription is per-customer.
 
@@ -71,7 +75,11 @@ Set `trial_period_days` to start the subscription in a `trialing` status. No inv
 
 At the start of each cycle Southpay creates and finalizes an invoice for every item, then advances the period. The customer pays the invoice on-chain, exactly like a one-off payment. Listen for `invoice.finalized` (a new cycle was billed) and `invoice.paid` (the customer paid) rather than polling.
 
-You can list a subscription's invoices with `GET /billing/invoices?subscription_id=...`.
+You can list a subscription's invoices with `GET /billing/invoices?subscription_id=...`. That endpoint is paginated inside a `meta` envelope.
+
+<Note>
+`GET /billing/subscriptions` is **not** paginated. It returns the whole filtered collection as a bare array, with no `meta` and no `pagination` key. Filters are `status` and `customer_id`. Do not write a pager against it, and do not assume the response is an object.
+</Note>
 
 ## Manage the lifecycle
 

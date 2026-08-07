@@ -1,194 +1,356 @@
 ---
 title: "Payouts"
-description: "Trigger on-demand fiat off-ramp payouts, quote them ahead of time, and inspect history."
+description: "Send funds from your store balance to a bank account or external wallet, quote a fiat payout, retry a failure, and read payout history."
 sidebarTitle: "Payouts"
 ---
 
-<Warning>
-  All endpoints require authentication. The store must have completed KYC verification before any payout endpoint will accept a request.
-</Warning>
+A payout moves money off your Southpay balance. You can send crypto on-chain to a wallet you control, or off-ramp USDT and USDC to a bank account.
 
-Base URL: `https://api.southpay.io/api/v2`
+Payouts arrive two ways: on demand through `POST /payouts`, or automatically from a [payout schedule](/api-reference/payout-schedules). Both produce the same resource.
 
-A payout disburses funds from your store balance. Payouts come from two sources:
+Paths are relative to `https://api.southpay.io/api/v2`.
 
-- **Automatic** - triggered by a [payout schedule](/api-reference/payout-schedules) on a recurring cadence.
-- **Manual** - created on demand via `POST /payouts`. This page documents the manual flow.
+## Before you can pay out
 
-Currently only **fiat off-ramp** payouts are exposed via the public API for manual creation. Crypto-rail payouts are configured via payout schedules.
+`POST /payouts` needs a **payout destination** — a saved bank account or wallet address, referenced by `fiat_payout_detail_id` or `crypto_payout_detail_id`. You cannot create one over the public API; they are configured in the dashboard. See [payout destinations](/payout-destinations) for what each kind is, where the ids come from, and what a fiat destination requires.
 
----
+The crypto path also accepts a raw `destination_address` instead of a saved detail id, which skips the saved-destination requirement but not the address validation.
 
-## Payout lifecycle
+## Authentication and scope
 
-| Status | Description |
-| --- | --- |
-| `pending` | Created and queued for execution. |
-| `submitted` | Submitted to the underlying rail, awaiting confirmation. |
-| `confirmed` | Final. Crypto: on-chain confirmations met. Fiat: settlement confirmed. |
-| `failed` | Rail rejected or expired the payout. Ledger entries are reversed. |
-| `retrying` | A retry is in flight after a prior failure (see [Retry a payout](#retry-a-payout)). |
-| `requires_review` | Held for manual review before it can proceed. |
+Reads require `payouts:read`, writes require `payouts:write`. Publishable keys cannot call any of these endpoints.
 
-The `payout_rail` field tells you how the payout is moving: `crypto` (on-chain to an external wallet), `fiat_autoswap` (swap to a stablecoin then off-ramp), or `fiat_manual` (off-ramp from an existing stablecoin balance). The public `POST /payouts` endpoint creates `fiat_manual` payouts; `crypto` and `fiat_autoswap` payouts are produced by [payout schedules](/api-reference/payout-schedules).
-
----
-
-## Quote a fiat payout
-
-Returns the expected fiat amount, fee, and exchange rate for a hypothetical payout - without creating one. Quotes are valid for a short window (see `expires_at`) and use a fresh FX rate snapshot.
-
-<CodeGroup>
-```bash Request
-POST /payouts/quote
-Authorization: Bearer <API_KEY>
-Content-Type: application/json
-
-{
-  "asset_id": "ETH_USDC",
-  "amount_atomic": "150000000",
-  "fiat_payout_detail_id": "01HX..."
-}
-```
-
-```json Response
-{
-  "asset_id":             "ETH_USDC",
-  "coin_symbol":          "USDC",
-  "amount_atomic":        "150000000",
-  "estimated_fiat_cents": 14820,
-  "estimated_fee_cents":  180,
-  "exchange_rate":        "0.988",
-  "fiat_currency":        "EUR",
-  "source_currency":      "USDC",
-  "minimum_atomic":       "5000000",
-  "meets_minimum":        true,
-  "expires_at":           "2026-05-12T13:05:00.000Z"
-}
-```
-</CodeGroup>
-
----
+<Note>
+Creating a crypto payout runs a step-up MFA check. For API keys and OAuth tokens that check is a no-op — it never fires. It only gates dashboard sessions, which return `403` `mfa_required` without two-factor enabled, or `503` `mfa_check_unavailable` if the identity provider is down. The same applies to `POST /balance_swaps` and `POST /payout_schedules/{id}/run`.
+</Note>
 
 ## Create a payout
 
-Triggers a fiat off-ramp. Requires an `Idempotency-Key` header - retrying with the same key returns the original payout instead of creating a duplicate.
+**`POST /payouts`** — scope `payouts:write`. `Idempotency-Key` is **required**.
+
+Parameters are sent at the **top level**, not wrapped in an object.
+
+<ParamField body="asset_id" type="string" required>
+  The asset to send, for example `ETH_USDC`. Must be an active asset in your current mode.
+</ParamField>
+
+<ParamField body="amount_atomic" type="string" required>
+  Amount in atomic units of `asset_id`, as a string. Must be positive.
+</ParamField>
+
+<ParamField body="fiat_payout_detail_id" type="string">
+  Off-ramp to this saved bank account. Sending this selects the fiat path.
+</ParamField>
+
+<ParamField body="crypto_payout_detail_id" type="string">
+  Send on-chain to this saved wallet. Its network must match the asset's network.
+</ParamField>
+
+<ParamField body="destination_address" type="string">
+  Send on-chain to a raw address. Used only when `crypto_payout_detail_id` is absent.
+</ParamField>
+
+Send exactly one destination. If `fiat_payout_detail_id` is present the payout takes the fiat path; otherwise it takes the crypto path and needs either `crypto_payout_detail_id` or `destination_address`.
 
 <CodeGroup>
-```bash Request
-POST /payouts
-Authorization: Bearer <API_KEY>
-Idempotency-Key: payout_2026_05_12_01
-Content-Type: application/json
+```bash Request (crypto)
+curl -X POST https://api.southpay.io/api/v2/payouts \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: payout_2026_05_12_a" \
+  -d '{
+    "asset_id": "ETH_USDC",
+    "amount_atomic": "250000000",
+    "crypto_payout_detail_id": "3c2b1a09-8f7e-4d6c-b5a4-93827160fed5"
+  }'
+```
 
-{
-  "asset_id": "ETH_USDC",
-  "amount_atomic": "150000000",
-  "fiat_payout_detail_id": "01HX..."
-}
+```bash Request (fiat)
+curl -X POST https://api.southpay.io/api/v2/payouts \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: payout_2026_05_12_b" \
+  -d '{
+    "asset_id": "ETH_USDT",
+    "amount_atomic": "250000000",
+    "fiat_payout_detail_id": "5e4d3c2b-1a09-4f8e-9d6c-b5a493827160"
+  }'
 ```
 
 ```json Response 201
 {
-  "id": "01HY...",
+  "id": "0a1b2c3d-4e5f-4061-8273-849506172839",
   "status": "pending",
-  "payout_rail": "fiat_manual",
-  "amount_atomic": "150000000",
-  "amount_decimal": "150.000000",
-  "destination_address": "**** **** **** **** 6819",
+  "payout_rail": "crypto",
+  "payout_schedule_id": null,
+  "amount_atomic": "250000000",
+  "amount_decimal": "250",
+  "destination_address": "0xabcd…",
   "provider_tx_id": null,
   "tx_hash": null,
-  "fiat_currency": "EUR",
+  "fiat_currency": null,
   "paid_fiat_amount_cents": null,
   "paid_fx_rate": null,
   "paid_fee_cents": null,
   "paid_at": null,
   "paid_external_reference": null,
   "network_fee_decimal": null,
+  "state_transitions": [
+    { "from": null, "to": "pending", "at": "2026-05-12T09:00:00Z", "note": null }
+  ],
+  "failure_reason": null,
+  "failure_code": null,
   "livemode": true,
+  "created_at": "2026-05-12T09:00:00.000Z",
+  "updated_at": "2026-05-12T09:00:00.000Z",
   "asset": {
     "asset_id": "ETH_USDC",
     "coin_symbol": "USDC",
     "chain_symbol": "ETH",
     "atomic_decimals": 6
-  },
-  "created_at": "2026-05-12T12:00:00.000Z",
-  "updated_at": "2026-05-12T12:00:00.000Z"
+  }
 }
 ```
 </CodeGroup>
 
-The `paid_*` fields are populated once the rail settles. For a fiat off-ramp, `paid_fiat_amount_cents`, `paid_fx_rate`, and `paid_fee_cents` reflect the actual settled values (which can differ from the quote), and `paid_external_reference` carries the bank reference.
+<Warning>
+Live-mode payouts are irreversible once broadcast. A replayed `Idempotency-Key` returns the original payout with status `201`, so a retry after a network timeout is safe — but only if you send the same key. A new key sends a second payout.
+</Warning>
 
-**Required fields**
+### Fiat off-ramp constraints
 
-| Field | Description |
-| --- | --- |
-| `asset_id` | Must be a coin eligible for fiat off-ramp (e.g. `USDC`, `USDT`). |
-| `amount_atomic` | Positive integer string - amount in atomic units of the asset. |
-| `fiat_payout_detail_id` | An active fiat payout detail (bank account) you've already saved. |
-| `Idempotency-Key` header | Required. Choose a value unique per logical payout. |
+- The store must have confirmed KYC. Otherwise `403` `{"error": "Store KYC verification required"}`.
+- Only USDT and USDC can be off-ramped. Anything else returns `422` `{"error": "BTC is not eligible for fiat off-ramp"}`.
+- Minimums are 10 USDT and 0.1 USDC. Below that: `422` `{"error": "Minimum amount for USDT fiat payout is 10 USDT"}`.
 
-**Common errors**
+## Response fields
 
-| Status | When |
-| --- | --- |
-| `403` | Store KYC is not confirmed. |
-| `404` | Asset or fiat payout detail not found / not active. |
-| `422` | Amount below minimum, insufficient balance, ineligible coin, or missing idempotency key. |
+<ResponseField name="id" type="string" required>
+  Bare UUID.
+</ResponseField>
 
----
+<ResponseField name="status" type="string" required>
+  `pending`, `submitted`, `confirmed`, `failed`, `retrying` or `requires_review`. See [lifecycle](#lifecycle).
+</ResponseField>
 
-## List payouts
+<ResponseField name="payout_rail" type="string" required>
+  `crypto` (on-chain), `fiat_manual` (off-ramp from an existing stablecoin balance) or `fiat_autoswap` (swap to a stablecoin, then off-ramp). `POST /payouts` produces `crypto` or `fiat_manual`; `fiat_autoswap` comes from schedules.
+</ResponseField>
+
+<ResponseField name="payout_schedule_id" type="string | null">
+  Set when the payout was created by a [schedule](/api-reference/payout-schedules).
+</ResponseField>
+
+<ResponseField name="amount_atomic" type="string" required>
+  Atomic units of `asset.asset_id`.
+</ResponseField>
+
+<ResponseField name="amount_decimal" type="string" required>
+  The same amount as a human decimal string with trailing zeros stripped.
+</ResponseField>
+
+<ResponseField name="destination_address" type="string | null">
+  On-chain destination. Null on fiat payouts.
+</ResponseField>
+
+<ResponseField name="tx_hash" type="string | null">
+  On-chain hash, once broadcast.
+</ResponseField>
+
+<ResponseField name="provider_tx_id" type="string | null">
+  Custody provider's own reference.
+</ResponseField>
+
+<ResponseField name="network_fee_decimal" type="string | null">
+  Network fee charged for a crypto payout, as a decimal string. Null until known.
+</ResponseField>
+
+<ResponseField name="fiat_currency" type="string | null">
+  Currency of the receiving bank account. Fiat payouts only.
+</ResponseField>
+
+<ResponseField name="paid_fiat_amount_cents" type="integer | null">
+  What actually landed in the bank account, in minor units. Only known after settlement.
+</ResponseField>
+
+<ResponseField name="paid_fx_rate" type="string | null">
+  The rate actually applied, which may differ from the quoted rate.
+</ResponseField>
+
+<ResponseField name="paid_fee_cents" type="integer | null">
+  Off-ramp fee actually charged.
+</ResponseField>
+
+<ResponseField name="paid_external_reference" type="string | null">
+  The bank reference on the outgoing transfer. Use this to match a Southpay payout to a line on your bank statement.
+</ResponseField>
+
+<ResponseField name="paid_at" type="string | null">
+  Settlement timestamp.
+</ResponseField>
+
+<ResponseField name="state_transitions" type="object[]" required>
+  Synthesized history, oldest first. Retries append a further `submitted`/`failed` pair rather than replacing earlier entries.
+
+  <Expandable title="entry properties">
+    <ResponseField name="from" type="string | null">Previous status. Null on the first entry.</ResponseField>
+    <ResponseField name="to" type="string">`pending`, `submitted`, `confirmed` or `failed`. Note that `retrying` and `requires_review` never appear here.</ResponseField>
+    <ResponseField name="at" type="string">ISO 8601 timestamp.</ResponseField>
+    <ResponseField name="note" type="string | null">Provider error message on a failed entry, otherwise null.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="failure_code" type="string | null">
+  Null unless `status` is `failed`. One of `insufficient_funds`, `destination_invalid`, `temporarily_unavailable`, `unknown`. Branch on this, not on `failure_reason`.
+</ResponseField>
+
+<ResponseField name="failure_reason" type="string | null">
+  The provider's raw error text. Free-form and not stable — for humans only.
+</ResponseField>
+
+<ResponseField name="asset" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="asset_id" type="string" />
+    <ResponseField name="coin_symbol" type="string" />
+    <ResponseField name="chain_symbol" type="string" />
+    <ResponseField name="atomic_decimals" type="integer" />
+  </Expandable>
+</ResponseField>
+
+## Quote a fiat payout
+
+**`POST /payouts/quote`** — scope `payouts:write`. Fiat only. Creates nothing.
+
+<ParamField body="asset_id" type="string" required>
+  Must be a USDT or USDC asset.
+</ParamField>
+
+<ParamField body="amount_atomic" type="string" required>
+  Atomic units. Must be positive.
+</ParamField>
+
+<ParamField body="fiat_payout_detail_id" type="string" required>
+  The bank account you would pay out to. Its currency drives the quote.
+</ParamField>
 
 <CodeGroup>
 ```bash Request
-GET /payouts?status=confirmed&asset_id=ETH_USDC&page=1&per_page=25
-Authorization: Bearer <API_KEY>
+curl -X POST https://api.southpay.io/api/v2/payouts/quote \
+  -H "Authorization: Bearer sp_sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "asset_id": "ETH_USDT",
+    "amount_atomic": "250000000",
+    "fiat_payout_detail_id": "5e4d3c2b-1a09-4f8e-9d6c-b5a493827160"
+  }'
 ```
 
-```json Response
+```json Response 200
 {
-  "data": [ { "id": "01HY...", "status": "confirmed", "...": "..." } ],
-  "pagination": { "page": 1, "per_page": 25, "total": 12, "total_pages": 1 }
+  "asset_id": "ETH_USDT",
+  "coin_symbol": "USDT",
+  "amount_atomic": "250000000",
+  "estimated_fiat_cents": 22940,
+  "estimated_fee_cents": 250,
+  "exchange_rate": "0.9176",
+  "fiat_currency": "EUR",
+  "source_currency": "USD",
+  "minimum_atomic": "10000000",
+  "meets_minimum": true,
+  "expires_at": "2026-05-12T09:05:00.000Z"
 }
 ```
 </CodeGroup>
 
-**Query parameters**
+`estimated_fiat_cents` and `estimated_fee_cents` are estimates. What actually lands is reported as `paid_fiat_amount_cents` and `paid_fee_cents` on the payout. Check `meets_minimum` before creating: a quote is still returned when the amount is below the minimum, but the payout would be rejected.
 
-| Parameter | Description |
-| --- | --- |
-| `status` | Filter by lifecycle status. |
-| `payout_rail` | Filter by rail: `crypto`, `fiat_autoswap`, or `fiat_manual`. |
-| `asset_id` | Restrict to one asset. |
-| `page`, `per_page` | Pagination. `per_page` defaults to 25, capped at 100. |
+## Retrieve a payout
 
----
+**`GET /payouts/{id}`** — scope `payouts:read`. Returns a bare payout object. Unknown id returns `404` `{"error": "Payout not found"}`.
 
-## Get a payout
+## List payouts
 
-```bash
-GET /payouts/:id
+**`GET /payouts`** — scope `payouts:read`. Newest first.
+
+<ParamField query="status" type="string">
+  Filter by payout status.
+</ParamField>
+
+<ParamField query="payout_rail" type="string">
+  `crypto`, `fiat_manual` or `fiat_autoswap`.
+</ParamField>
+
+<ParamField query="payout_schedule_id" type="string">
+  Only payouts produced by one schedule.
+</ParamField>
+
+<ParamField query="asset_id" type="string">
+  Only payouts of one asset.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1" />
+
+<ParamField query="per_page" type="integer" default="25">
+  Between 1 and 100.
+</ParamField>
+
+```json Response 200
+{
+  "data": [ { "id": "0a1b2c3d-4e5f-4061-8273-849506172839", "status": "confirmed", "…": "…" } ],
+  "pagination": {
+    "page": 1,
+    "per_page": 25,
+    "total": 1,
+    "total_pages": 1
+  }
+}
 ```
 
-Returns the same shape as the create response, reflecting current status. Subscribe to `payout.created`, `payout.confirmed`, and `payout.failed` [webhook events](/webhooks) instead of polling.
-
----
+<Warning>
+Payouts wrap the page in `pagination`, while payments and billing use `meta`, and balances and payout schedules return bare arrays. A shared client helper that assumes one envelope will silently read an empty page.
+</Warning>
 
 ## Retry a payout
 
-Re-attempts a payout that failed. Only payouts in a retryable state can be retried.
+**`POST /payouts/{id}/retry`** — scope `payouts:write`. No body, no MFA check.
 
-```bash
-POST /payouts/:id/retry
-Authorization: Bearer <API_KEY>
-```
+Only a `failed` payout whose funds have not already been returned to your balance can be retried. Returns `200` with the updated payout.
 
-Returns the updated payout object.
+| Status | Body | Cause |
+| --- | --- | --- |
+| `409` | `{"error": "Payout retry already in progress", "code": "retry_in_progress"}` | A retry is already in flight. |
+| `422` | `{"error": "Payout is not in a failed state (current: confirmed)", "code": "not_retryable"}` | Wrong status. |
+| `422` | `{"error": "This payout was returned to your balance. Send a new payout to try again.", "code": "not_retryable"}` | Ledger entries were already reversed. Create a fresh payout. |
+| `422` | `{"error": "Original payout already succeeded at provider (confirmed)", "code": "not_retryable"}` | The provider settled it after all. |
+| `404` | `{"error": "Payout not found"}` | Unknown id. |
 
-| Status | When |
-| --- | --- |
-| `409` | A retry is already in progress (`code: retry_in_progress`). |
-| `422` | The payout is not in a retryable state (`code: not_retryable`). |
-| `404` | Payout not found in the current mode. |
+## Lifecycle
+
+| Status | Terminal | Meaning |
+| --- | --- | --- |
+| `pending` | No | Created, funds reserved, queued. |
+| `submitted` | No | Handed to the rail, awaiting confirmation. |
+| `confirmed` | Yes | Crypto confirmed on-chain, or fiat settled. |
+| `failed` | Yes | Rejected. Ledger entries are reversed and the balance returns. |
+| `retrying` | No | A retry is in flight after a prior failure. |
+| `requires_review` | No | Held for manual review. |
+
+<Warning>
+There are no payout webhooks. `payout.created`, `payout.confirmed` and `payout.failed` appear in the subscribable event list and pass validation, but **no code path ever emits them**. Subscribing to them produces silence. Poll `GET /payouts/{id}` or `GET /payouts?status=…` instead.
+</Warning>
+
+## Create errors
+
+| Status | Body | Cause |
+| --- | --- | --- |
+| `422` | `{"error": "Idempotency-Key header is required"}` | Header missing. |
+| `404` | `{"error": "Asset not found"}` | Unknown or inactive `asset_id`. |
+| `422` | `{"error": "amount_atomic must be positive"}` | Zero, negative or missing. |
+| `422` | `{"error": "destination_address required"}` | Crypto path with no destination. |
+| `404` | `{"error": "Crypto payout detail not found or not active"}` | Bad `crypto_payout_detail_id`. |
+| `422` | `{"error": "Address network bsc does not match the ethereum network for USDC"}` | Saved wallet is on another chain. |
+| `403` | `{"error": "Store KYC verification required"}` | Fiat path without approved KYC. |
+| `404` | `{"error": "Fiat payout detail not found or not active"}` | Bad `fiat_payout_detail_id`. |
+| `422` | `{"error": "Insufficient balance"}` or `{"error": "No balance found for ETH_USDC"}` | Not enough funds. |
+
+Every one of these uses the flat `{"error": "<message>"}` envelope, except the `retry` responses above, which add a `code`. Errors raised deeper in the service layer — most notably from `POST /payout_schedules/{id}/run` — surface through the global handler as `{"error": {"message": "…", "code": null}}`. Handle both.

@@ -54,20 +54,26 @@ A few things follow from this:
 
 ## Fiat currencies
 
-These are the values accepted for `currency` on a payment intent. The intent settles in the same currency.
+These ten are the values accepted for `currency` on a payment intent. The intent settles in the same currency.
 
-| Code | Currency |
-| --- | --- |
-| `USD` | US Dollar |
-| `EUR` | Euro |
-| `GBP` | British Pound |
-| `HKD` | Hong Kong Dollar |
-| `SGD` | Singapore Dollar |
-| `JPY` | Japanese Yen |
-| `DKK` | Danish Krone |
-| `CHF` | Swiss Franc |
-| `SEK` | Swedish Krona |
-| `NOK` | Norwegian Krone |
+| Code | Currency | Valid on a payout schedule |
+| --- | --- | --- |
+| `USD` | US Dollar | Yes |
+| `EUR` | Euro | Yes |
+| `GBP` | British Pound | Yes |
+| `HKD` | Hong Kong Dollar | Yes |
+| `SGD` | Singapore Dollar | Yes |
+| `JPY` | Japanese Yen | Yes |
+| `DKK` | Danish Krone | No |
+| `CHF` | Swiss Franc | No |
+| `SEK` | Swedish Krona | No |
+| `NOK` | Norwegian Krone | No |
+
+<Warning>
+**The two lists are not the same length, and nothing warns you.** A payout schedule's `minimum_fiat_currency` accepts only the first six. Set it to `DKK`, `CHF`, `SEK` or `NOK` and it falls back to `USD` — your threshold is then interpreted as US dollars, silently.
+
+A bank account on a [fiat payout destination](/payout-destinations) can be denominated in any of the ten.
+</Warning>
 
 ## Crypto assets
 
@@ -77,32 +83,69 @@ Customers can pay with any of the assets below that your store has enabled. The 
   Need a network or token that is not listed here? Email [support@southpay.io](mailto:support@southpay.io) and ask for it. We add assets on request.
 </Info>
 
-| Token | Network | Standard | `asset_id` |
-| --- | --- | --- | --- |
-| USDT | Ethereum | ERC-20 | `ETH_USDT` |
-| USDT | Tron | TRC-20 | `TRON_USDT` |
-| USDT | Solana | SPL | `SOL_USDT` |
-| USDT | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDT` |
-| USDT | TON | Jetton | `TON_USDT` |
-| USDT.e | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDTE` |
-| USDC | Ethereum | ERC-20 | `ETH_USDC` |
-| USDC | Solana | SPL | `SOL_USDC` |
-| USDC | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDC2` |
-| USDC.e | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDC` |
-| USDS | Ethereum | ERC-20 | `ETH_USDS` |
-| BTC | Bitcoin | Native | `BTC` |
-| ETH | Ethereum | Native | `ETH` |
-| ETH | Avalanche (C-Chain) | ERC-20 (wrapped) | `AVAXC_WETH` |
-| SOL | Solana | Native | `SOL` |
-| AVAX | Avalanche (C-Chain) | Native | `AVAXC` |
-| TRX | Tron | Native | `TRON` |
-| LTC | Litecoin | Native | `LTC` |
-| ETC | Ethereum Classic | Native | `ETC` |
+| Token | Network | Standard | `asset_id` | Decimals |
+| --- | --- | --- | --- | --- |
+| USDT | Ethereum | ERC-20 | `ETH_USDT` | 6 |
+| USDT | Tron | TRC-20 | `TRON_USDT` | 6 |
+| USDT | Solana | SPL | `SOL_USDT` | 6 |
+| USDT | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDT` | 6 |
+| USDT | TON | Jetton | `TON_USDT` | 6 |
+| USDT | SUI | Native | `USDT_SUI` | 6 |
+| USDT.e | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDTE` | 6 |
+| USDC | Ethereum | ERC-20 | `ETH_USDC` | 6 |
+| USDC | Solana | SPL | `SOL_USDC` | 6 |
+| USDC | Polygon | ERC-20 | `MATIC_USDC` | 6 |
+| USDC | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDC2` | 6 |
+| USDC | Stellar | Native | `USDC_XLM` | 7 |
+| USDC.e | Avalanche (C-Chain) | ERC-20 | `AVAXC_USDC` | 6 |
+| USDS | Ethereum | ERC-20 | `ETH_USDS` | 18 |
+| BTC | Bitcoin | Native | `BTC` | 8 |
+| ETH | Ethereum | Native | `ETH` | 18 |
+| ETH | Avalanche (C-Chain) | ERC-20 (wrapped) | `AVAXC_WETH` | 18 |
+| SOL | Solana | Native | `SOL` | 9 |
+| AVAX | Avalanche (C-Chain) | Native | `AVAXC` | 18 |
+| TRX | Tron | Native | `TRON` | 6 |
+| LTC | Litecoin | Native | `LTC` | 8 |
+| ETC | Ethereum Classic | Native | `ETC` | 18 |
 
-### Testnet
+<Warning>
+Native ether is `ETH`. There is no `ETH_ETH` and no `ETH_ETH_ERC20`. There is no deposit asset on BNB Smart Chain, Arbitrum, Base, Optimism or Algorand — a customer cannot pay you on any of those.
+</Warning>
 
-In test mode, payments run on Ethereum Sepolia so you can integrate without moving real funds. See [Environments](/environments) for how test and live mode differ.
+`USDC` on Stellar carries **7** decimals, not 6 like every other USDC. Read `atomic_decimals` off the asset rather than assuming a value per token.
 
-| Token | Network | `asset_id` |
+### Deposit chains are not payout networks
+
+These are two different lists and conflating them is the most common mistake on this page.
+
+| Chain | Customers can pay you | You can be paid out |
 | --- | --- | --- |
-| ETH | Ethereum Sepolia | `SETH` |
+| Ethereum | Yes | Yes |
+| Bitcoin | Yes | Yes |
+| Solana | Yes | Yes |
+| Tron | Yes | Yes |
+| Litecoin | Yes | Yes |
+| Avalanche (C-Chain) | Yes | Yes |
+| Polygon | Yes | Yes |
+| Ethereum Classic | Yes | **No** |
+| TON | Yes | **No** |
+| SUI | Yes | **No** |
+| Stellar | Yes | **No** |
+| Base | **No** | Yes |
+| Arbitrum | **No** | Yes |
+| Optimism | **No** | Yes |
+| BNB Smart Chain | **No** | Yes |
+
+A payout must go to a destination on the same network as the asset. See [Payout destinations](/payout-destinations).
+
+Only `USDT` and `USDC` are eligible for the fiat off-ramp. Every other asset can be paid out on-chain only.
+
+### Test mode
+
+In test mode you get **exactly one asset**, and it is not one of the ones above.
+
+| Token | Network | `asset_id` | Decimals |
+| --- | --- | --- | --- |
+| ETH | Ethereum Sepolia | `SETH` | 18 |
+
+Sepolia USDT and USDC exist in the catalogue but are inactive, so no test payment intent ever returns an address for them. Anything that depends on which assets a customer sees has to be validated in live mode. See [Environments](/environments).
