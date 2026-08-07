@@ -1,55 +1,59 @@
-# Mintlify Starter Kit
+# SouthPay documentation
 
-Use the starter kit to get your docs deployed and ready to customize.
+The source for [docs.southpay.io](https://docs.southpay.io) — the developer
+documentation for the SouthPay crypto payments API.
 
-Click the green **Use this template** button at the top of this repo to copy the Mintlify starter kit. The starter kit contains examples with
+Built with [Mintlify](https://mintlify.com). Pages are MDX with YAML
+frontmatter; navigation and theming live in `docs.json`.
 
-- Guide pages
-- Navigation
-- Customizations
-- API reference pages
-- Use of popular components
-
-**[Follow the full quickstart guide](https://starter.mintlify.com/quickstart)**
-
-## AI-assisted writing
-
-Set up your AI coding tool to work with Mintlify:
+## Local development
 
 ```bash
-npx skills add https://mintlify.com/docs
-```
-
-This command installs Mintlify's documentation skill for your configured AI tools like Claude Code, Cursor, Windsurf, and others. The skill includes component reference, writing standards, and workflow guidance.
-
-See the [AI tools guides](/ai-tools) for tool-specific setup.
-
-## Development
-
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
-
-```
 npm i -g mint
-```
-
-Run the following command at the root of your documentation, where your `docs.json` is located:
-
-```
 mint dev
 ```
 
-View your local preview at `http://localhost:3000`.
+The preview runs at `http://localhost:3000`. It reads `docs.json` from the
+directory you run it in, so run it from the repository root.
 
-## Publishing changes
+## Before you open a pull request
 
-Install our GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app) to propagate changes from your repo to your deployment. Changes are deployed to production automatically after pushing to the default branch.
+```bash
+mint broken-links
+```
 
-## Need help?
+This validates `docs.json`, parses every MDX file and checks internal links.
+It must pass.
 
-### Troubleshooting
+Beyond that, three rules catch most problems:
 
-- If your dev environment isn't running: Run `mint update` to ensure you have the most recent version of the CLI.
-- If a page loads as a 404: Make sure you are running in a folder with a valid `docs.json`.
+- Every page needs `title` and `description` frontmatter. Descriptions are meta
+  descriptions — under 160 characters and specific.
+- Every code fence needs a language.
+- Document what the API does, not what it should do. Verify against the source
+  rather than against another page.
 
-### Resources
-- [Mintlify documentation](https://mintlify.com/docs)
+`AGENTS.md` covers terminology and style. `CONTRIBUTING.md` covers the
+workflow.
+
+## Branches
+
+`main` is the release branch — pushing to it deploys to docs.southpay.io.
+Work lands on `dev` first and is merged to `main` as a deliberate release.
+
+## Structure
+
+| Path | Contents |
+| --- | --- |
+| `docs.json` | Navigation, theming, redirects, SEO |
+| `*.mdx` | Guides |
+| `api-reference/` | Endpoint reference |
+| `agentic/` | Agentic commerce guides |
+| `integrations/` | Third-party integration guides |
+| `logo/`, `images/` | Brand assets |
+| `style.css` | Custom styling loaded by Mintlify |
+
+## Support
+
+Documentation issues: open an issue on this repository.
+API and account questions: [support@southpay.io](mailto:support@southpay.io).
