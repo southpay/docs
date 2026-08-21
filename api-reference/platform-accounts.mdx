@@ -109,15 +109,17 @@ Returns a **bare array** of active sub-merchants, newest first. No envelope, no 
 
 **`GET /platform/accounts/{id}`** — scope `accounts:read`. Returns a bare account object.
 
-An unknown id returns `404` with the global handler's message and **no machine code**: `{"error": {"message": "Couldn't find Store with 'id'=…", "code": null}}`.
+An unknown id returns `404` with a machine code: `{"error": {"message": "Unknown sub-merchant account", "code": "account_not_found"}}`.
 
 ## Update a sub-merchant
 
 **`PATCH /platform/accounts/{id}`** — scope `accounts:write`.
 
-<Warning>
-Only `name` and `platform_fee_percentage` are actually applied. `external_id` and `country` are accepted by the request and then **silently discarded** — you get a `200` and the values do not change. Do not build a settings form that lets a user edit `external_id` here; set it once at create time.
-</Warning>
+Applies `name`, `platform_fee_percentage` and `external_id`. Re-using an `external_id` that another of your sub-merchants already holds is refused with `422`, and the account keeps its previous value.
+
+<Note>
+`country` is accepted by the request and ignored. It only seeds default assets at creation time and cannot be changed afterwards.
+</Note>
 
 <CodeGroup>
 ```bash Request
@@ -140,6 +142,41 @@ curl -X PATCH https://api.southpay.io/api/v2/platform/accounts/c7d8e9f0-a1b2-4c3
 }
 ```
 </CodeGroup>
+
+## Delete a sub-merchant
+
+**`DELETE /platform/accounts/{id}`** — scope `accounts:write`.
+
+Retires a sub-merchant you own. The account is soft-deleted, its API keys and agent credentials are revoked, and its webhook endpoints are disabled. Ledger history is preserved, and a `store.deleted` platform event is emitted. Returns `204` with no body.
+
+The account stops appearing in `GET /platform/accounts` and can no longer be acted on through the `X-Southpay-Account` header.
+
+<CodeGroup>
+```bash Request
+curl -X DELETE https://api.southpay.io/api/v2/platform/accounts/c7d8e9f0-a1b2-4c3d-8e4f-506172839405 \
+  -H "Authorization: Bearer sp_sk_live_…"
+```
+
+```json Response 409
+{
+  "error": {
+    "message": "Sub-merchant has active funds or in-flight money movement",
+    "code": "account_has_active_funds",
+    "blockers": [{ "type": "store_balance", "count": 1 }]
+  }
+}
+```
+</CodeGroup>
+
+An account still holding money is refused with `409` and a `blockers` list naming what is in the way: `store_balance`, `pending_payout`, `in_flight_payment_intent` or `pending_refund`. Settle or pay out those first, then retry. There is no force flag on this endpoint — funds are never stranded by a platform call.
+
+## Restore a sub-merchant
+
+**`POST /platform/accounts/{id}/restore`** — scope `accounts:write`.
+
+Reverses a delete and returns the account object. Revoked API keys are **not** reissued and disabled webhook endpoints stay disabled; re-create those as needed.
+
+Restoring an account that was never deleted returns `422` with code `account_not_deleted`.
 
 ## Attest verification
 
@@ -336,5 +373,8 @@ Billing events do **not** fan out to platforms.
 | Status | Body | Cause |
 | --- | --- | --- |
 | `422` | `{"error": {"message": "Name can't be blank", "code": "invalid_account"}}` | Missing or blank `name`. |
-| `422` | `{"error": {"message": "A sub-merchant with external_id merchant_8812 already exists", "code": null}}` | Duplicate `external_id` that could not be adopted. |
+| `422` | `{"error": {"message": "A sub-merchant with external_id merchant_8812 already exists", "code": null}}` | Duplicate `external_id` that could not be adopted, on create or update. |
+| `422` | `{"error": {"message": "Validation failed: Platform fee percentage must be a decimal fraction between 0 and 1 (0.0125 means 1.25%)", "code": "invalid_account"}}` | `platform_fee_percentage` sent as a percent rather than a fraction. |
+| `409` | `{"error": {"message": "Sub-merchant has active funds or in-flight money movement", "code": "account_has_active_funds", "blockers": […]}}` | Delete attempted while the account still holds money. |
+| `404` | `{"error": {"message": "Unknown sub-merchant account", "code": "account_not_found"}}` | The id is not one of your sub-merchants. |
 | `403` | `{"error": {"message": "This account is not a platform", "code": "not_a_platform"}}` | Platform mode not enabled on your store. |

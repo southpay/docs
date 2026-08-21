@@ -85,7 +85,9 @@ Content-Type: application/json
 Accounts come back with: `id`, `name`, `external_id`, `platform_fee_percentage`, `kyc_confirmed_at`, `charges_enabled`, `payouts_enabled`, `verification_status`, `created_at`. `verification_status` is `not_started`, `pending`, `approved` or `rejected` — and it reads `approved` once KYC is confirmed, whatever the underlying verification request says.
 
 <Note>
-`external_id` and `country` are accepted by the update endpoint but not applied. Only `name` and `platform_fee_percentage` actually change on a `PATCH`. Set `external_id` at creation time; you cannot correct it later through the API.
+`name`, `platform_fee_percentage` and `external_id` all change on a `PATCH`. `country` is accepted and ignored — it only seeds default assets at creation time.
+
+Retire an account with `DELETE /platform/accounts/{id}`. It is a soft delete: keys are revoked, webhooks disabled, ledger history kept, and `POST /platform/accounts/{id}/restore` brings it back. An account still holding a balance, a pending payout, an in-flight payment or an open refund is refused with `409 account_has_active_funds` and a list of what is blocking it.
 </Note>
 
 See the [API reference](/api-reference/platform-accounts) for the full endpoint set.
