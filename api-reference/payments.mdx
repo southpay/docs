@@ -243,7 +243,7 @@ An unsupported `currency` also returns `422`, but through the global handler, so
 Omitting `currency` entirely, or omitting the `payment_intent` wrapper, currently returns `500` rather than a validation error. Always send both.
 </Note>
 
-`POST /payments` is rate limited to 120 requests per minute, keyed on your credential. Over the limit you get `429` with `{"error": "Too many requests. Please try again later."}` and no `Retry-After` header. See [Rate limits](/rate-limits) for every throttled path.
+`POST /payments` is rate limited to 1,200 requests per minute in live mode, with a burst of 200, counted against your store rather than the individual key. Over the limit you get `429` `{"error": {"message": "Too many requests", "code": "rate_limited"}}` with a `Retry-After` header in seconds. See [Rate limits](/rate-limits) for every throttled path.
 
 ## Retrieve a payment intent
 

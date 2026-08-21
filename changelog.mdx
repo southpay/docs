@@ -3,6 +3,33 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the SouthPay API and platform"
 ---
 
+<Update label="August 21, 2026" description="Rate limits move to token buckets, gain Retry-After and RateLimit headers, and are now counted per store" tags={["Improvement"]}>
+## Week of August 18
+
+Rate limiting was rebuilt. Limits are higher, the responses tell you where you stand, and the budget now belongs to your store rather than to an individual key.
+
+### What changed
+
+- **Higher limits.** `POST /api/v2/payments` goes from 120 to **1,200 requests per minute** in live mode, with a burst of 200. The agentic surface goes from 120 to **600 per minute per credential**. The OAuth token endpoint goes from 60 to 300 per minute. [See rate limits](/rate-limits)
+
+- **Token buckets instead of fixed windows.** Buckets refill continuously, so there are no window boundaries to time and sustained traffic under the rate never throttles.
+
+- **`Retry-After` on every `429`.** Wait the number of seconds it names. Authenticated responses also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, plus the `RateLimit` and `RateLimit-Policy` pair from the IETF draft, so you can pace a batch job without waiting to be throttled.
+
+- **The budget is per store.** Issuing more API keys no longer multiplies your allowance, and rotating a key no longer resets it. Platforms are budgeted **per sub-merchant**, so one busy sub-merchant cannot exhaust the budget the others depend on.
+
+- **Consistent `429` body.** Throttled requests now return the standard `{"error": {"message": ..., "code": "rate_limited"}}` envelope. The old bare-string body is gone.
+
+- **Onramp limits are keyed per checkout and caller.** Previously one caller could exhaust a specific shopper's onramp budget. [See rate limits](/rate-limits)
+
+### Corrections
+
+- The agentic limit was documented as 120 per minute across all agentic paths. Each agentic endpoint in fact kept its own counter, so the effective limit was far higher. It is now genuinely one shared budget per credential, at 600 per minute.
+
+- This page previously listed throttles on sign-in, sign-up and session refresh endpoints. Those endpoints are not part of this API and the entries have been removed.
+
+</Update>
+
 <Update label="July 16, 2026" description="Subscriptions gain items, trials, plan changes, and scheduled cancellation" tags={["Feature"]}>
 ## Week of July 14
 

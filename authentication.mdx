@@ -265,7 +265,7 @@ sequenceDiagram
 
 `spa_live_` and `spa_test_` credentials authenticate the `/api/v2/agentic/*` surface and nothing else. A regular API key is rejected there, and an agent credential is rejected everywhere else.
 
-Their scope set is different and smaller: `payments:read`, `payments:write`, `payouts:read`, `payouts:write`, `assets:read`, `assets:write`, `x402:read`, `x402:write`. The agentic API is also rate limited at 120 requests per minute per credential. See [Rate limits](/rate-limits).
+Their scope set is different and smaller: `payments:read`, `payments:write`, `payouts:read`, `payouts:write`, `assets:read`, `assets:write`, `x402:read`, `x402:write`. The agentic API is also rate limited at 600 requests per minute per credential in live mode, shared across every agentic path. See [Rate limits](/rate-limits).
 
 An agent only ever sees records it created. See [Agent credentials](/agentic/agent-credentials).
 

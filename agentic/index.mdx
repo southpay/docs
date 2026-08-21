@@ -53,7 +53,7 @@ Credentials are mode-locked by their prefix. A `spa_test_` credential sees only 
 
 ## Rate limits
 
-Agentic endpoints allow **120 requests per minute per credential**, returning `429` with code `rate_limited` when exceeded. No `Retry-After` header is set, so back off on your own schedule.
+Agentic endpoints allow **600 requests per minute per credential** in live mode, with a burst of 100, returning `429` with code `rate_limited` when exceeded. Every `429` carries a `Retry-After` header in seconds. The budget is shared across every agentic path, so payments, payouts and refunds all draw from it.
 
 `GET /api/v2/agentic/market_data` is the exception: it is deliberately unauthenticated and limited to 30 requests per minute per IP. See [Rate limits](/rate-limits) for every throttled path on the API.
 

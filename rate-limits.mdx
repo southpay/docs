@@ -1,60 +1,83 @@
 ---
 title: "Rate limits"
-description: "Every throttled path on the SouthPay API, how each limit is keyed, when the counters reset, the two 429 body shapes, and how to back off safely."
+description: "Every throttled path on the SouthPay API, how each limit is keyed, the token bucket that governs them, the 429 response headers, and how to back off safely."
 ---
 
-Most of the SouthPay API is not rate limited. The paths below are, and they are the ones a payment integration actually calls, so read this before you build a retry loop or a polling loop.
+Most of the SouthPay API is not rate limited today. The paths below are, and they are the ones a payment integration actually calls, so read this before you build a retry loop or a polling loop.
 
 ## What is limited
 
-| Path | Limit | Counted per |
-| --- | --- | --- |
-| `POST /api/v2/payments` | 120 / min | Credential, falling back to caller IP |
-| Any `GET` under `/api/v2/checkout/` | 600 / min | Caller IP |
-| `GET /api/v2/checkout/{reference}/onramp/payment_methods` | 20 / min | The checkout |
-| `POST /api/v2/checkout/{reference}/onramp_sessions` | 12 / min | The checkout |
-| `POST /api/v2/oauth/token`, `POST /api/v2/oauth/revoke` | 60 / min | Caller IP |
-| `GET` and `POST /api/v2/oauth/authorize` | 30 / min | Caller IP |
-| Every `/api/v2/agentic/` path except market data | 120 / min | Agent credential, falling back to caller IP |
-| `GET /api/v2/agentic/market_data` | 30 / min | Caller IP |
+Live mode. Test mode gets a quarter of the sustained rate on the credential-keyed policies, so a load test cannot spend your production budget.
 
-Nothing else has a limit. Reading payments, creating refunds, listing balances, running payouts, managing subscriptions and invoices, registering webhook endpoints, and the platform account endpoints are all unthrottled today. Do not treat that as a guarantee to design against. Build the backoff described below once and apply it everywhere, so a limit added later does not become an outage.
+| Path | Sustained | Burst | Counted per |
+| --- | --- | --- | --- |
+| `POST /api/v2/payments` | 1,200 / min | 200 | Store |
+| Every `/api/v2/agentic/` path except market data | 600 / min | 100 | Agent credential |
+| `GET /api/v2/agentic/market_data` | 30 / min | 10 | Caller IP |
+| `POST /api/v2/oauth/token`, `POST /api/v2/oauth/revoke` | 300 / min | 60 | Caller IP |
+| `GET` and `POST /api/v2/oauth/authorize` | 60 / min | 20 | Caller IP |
+| Any `GET` under `/api/v2/checkout/` | 3,000 / min | 300 | Caller IP |
+| `GET /api/v2/checkout/{reference}/onramp/payment_methods` | 20 / min | 10 | Checkout and caller |
+| | 120 / min | 40 | The checkout |
+| `POST /api/v2/checkout/{reference}/onramp_sessions` | 12 / min | 6 | Checkout and caller |
+| | 60 / min | 20 | The checkout |
+| Inbound provider webhooks | 6,000 / min | 1,000 | Caller IP |
 
-The dashboard sign-in, sign-up and session refresh endpoints are throttled per IP as well. An integration never calls those.
+Reading payments, creating refunds, listing balances, running payouts, managing subscriptions and invoices, registering webhook endpoints, and the platform account endpoints have **no enforced limit today**. We are measuring them, and limits will be introduced there. Exact numbers will be published here, and announced in the [changelog](/changelog), at least 60 days before they are enforced. Build the backoff described below once and apply it everywhere so that change is a non-event for you.
 
-## Two limits can apply to one request
+## The budget belongs to the store
 
-The onramp payment methods read sits under `/api/v2/checkout/`, so both the 600 per minute IP limit and its own 20 per minute limit apply to it. At 20 per minute, its own limit is the one you reach first.
+The credential-keyed limits are counted against your **store**, not against the individual key. Issuing a second API key does not buy a second budget, and rotating a key does not reset the one you have. This is the same model Stripe and Modern Treasury use, and it is what lets us publish a number that means something.
 
-<Warning>
-**The two onramp limits are counted per checkout, not per caller.** Everyone touching the same checkout draws down the same 20 and 12 requests per minute: a customer with two browser tabs open, your retry loop, and your server all share one budget. Read the payment methods once per checkout and cache the result. Do not re-read them on every render.
-</Warning>
+Two consequences worth designing around:
 
-## When the counter resets
+**Platforms are budgeted per sub-merchant.** When you send `X-Southpay-Account`, the request is counted against that sub-merchant, not against your platform credential. One busy sub-merchant cannot exhaust the budget your other sub-merchants depend on.
 
-The payments, checkout, onramp and OAuth limits are counted in fixed one minute windows aligned to the clock, so every counter resets at the top of each UTC minute. A burst that straddles a boundary can therefore spend two windows of budget in a few seconds, and waiting until the next boundary always clears the throttle.
+**Test and live are separate buckets.** They are different stores' worth of budget in practice, so a load test in test mode never touches live traffic.
 
-The agentic limits anchor to your traffic instead: the window opens on your first request and closes sixty seconds later.
+## How the limits behave
 
-In both cases the number in the table is how many requests are allowed. The first request past it gets the `429`.
+Each limit is a token bucket. The bucket refills continuously at the sustained rate, and the burst column is how many requests you can spend at once from a full bucket.
 
-Counters are shared across the whole API rather than kept per connection, so opening more connections does not buy headroom on a limit keyed to your credential.
+There are no window boundaries and no clock alignment. A request is admitted the moment the bucket has a token for it, so you never need to guess when a window rolls over. Sustained traffic below the rate in the table never throttles, however it is distributed.
 
-## Test and live mode count separately
+<Note>
+This replaced a fixed one minute window in August 2026. If you built against the old behaviour, the guidance to "wait until the top of the minute" no longer applies. Read `Retry-After` instead.
+</Note>
 
-The credential-keyed limits are counted against the key you send. A test key and a live key are different keys, so load tests in test mode do not eat into your live budget.
+## Reading your headroom
+
+Every authenticated response carries your current budget, so you can pace yourself without waiting to be throttled.
+
+```http
+X-RateLimit-Limit: 1200
+X-RateLimit-Remaining: 1187
+X-RateLimit-Reset: 3
+RateLimit-Policy: "payment_create";q=1200;w=60
+RateLimit: "payment_create";r=1187;t=3
+```
+
+| Header | Meaning |
+| --- | --- |
+| `X-RateLimit-Limit` | The sustained allowance for this policy |
+| `X-RateLimit-Remaining` | Tokens left in your bucket right now |
+| `X-RateLimit-Reset` | Seconds until the bucket is full again |
+| `RateLimit-Policy` | The policy name, its quota `q` and window `w`, per the IETF draft |
+| `RateLimit` | The same policy's remaining `r` and reset `t` |
+
+`X-RateLimit-Reset` is **delta-seconds**, not a Unix timestamp. The `RateLimit` and `RateLimit-Policy` pair follows [draft-ietf-httpapi-ratelimit-headers](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/). That draft is not yet an RFC and its syntax has changed between revisions, so treat the `X-` headers as the stable contract and the draft pair as additive.
 
 ## What a 429 looks like
 
-There are two shapes. The general throttle returns a bare string:
+Every throttled request returns the same envelope as the rest of the API, and always carries `Retry-After`.
 
-```json Response 429
-{
-  "error": "Too many requests. Please try again later."
-}
+```http
+HTTP/1.1 429 Too Many Requests
+Retry-After: 3
+X-RateLimit-Limit: 1200
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 3
 ```
-
-The agentic throttle returns the standard [error envelope](/errors):
 
 ```json Response 429
 {
@@ -65,19 +88,19 @@ The agentic throttle returns the standard [error envelope](/errors):
 }
 ```
 
-Parse defensively. Branch on the `429` status, not on the body.
+`Retry-After` is in seconds and is never less than 1. Waiting exactly that long is enough; you do not need to guess.
 
-<Note>
-**No `Retry-After` header is set on any `429`, and there are no `RateLimit-*` headers.** You cannot read your remaining budget from a response. Track your own send rate, and back off on a fixed schedule.
-</Note>
+<Warning>
+**A `429` with `code: "upstream_rate_limited"` is not your limit.** It means a market data provider throttled SouthPay. Branch on the code, not on the status alone, or your client will back off against a budget it never spent.
+</Warning>
 
 ## Backing off
 
-A throttled request is rejected before any of it runs, so it changes nothing on our side. It creates no payment intent and consumes no idempotency key. Retrying is always safe.
-
-Because every window is one minute, a flat sixty-second wait clears every limit on this page. Exponential backoff also works and is the better default if the same code path also handles `500` and `502`, which need it.
+A throttled request is rejected before it runs, so it changes nothing on our side. It creates no payment intent and consumes no idempotency key. Retrying is always safe.
 
 ```typescript southpay/retry.ts
+const RETRY_AFTER_FALLBACK_SECONDS = 5;
+
 export async function withRateLimitRetry<T>(
   send: () => Promise<Response>,
   parse: (r: Response) => Promise<T>,
@@ -94,7 +117,10 @@ export async function withRateLimitRetry<T>(
       throw new Error("Rate limited by SouthPay after retries");
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 60_000));
+    const header = Number(response.headers.get("Retry-After"));
+    const seconds = Number.isFinite(header) && header > 0 ? header : RETRY_AFTER_FALLBACK_SECONDS;
+
+    await new Promise((resolve) => setTimeout(resolve, seconds * 1000));
   }
 }
 ```
@@ -103,18 +129,16 @@ Send the same `Idempotency-Key` on the retry. See [Idempotency](/idempotency) fo
 
 ## Staying under the limits
 
-The limits are generous for normal traffic. Integrations that reach them are usually doing one of these.
+**Watch `X-RateLimit-Remaining` in batch jobs.** It is the cheapest way to pace a migration or a nightly run. Slow down as it approaches zero rather than sprinting into a `429`.
 
-**Creating payment intents in bulk.** A migration or a nightly import can clear 120 in a few seconds. Spread the work, or cap your own send rate at two per second, and the limit never comes up.
+**Read onramp payment methods once per checkout and cache the result.** That limit is shared with every other caller on the same checkout, so it is the easiest one to trip, and a `429` there interrupts a paying customer.
 
-**Reading onramp payment methods on every render of a checkout page.** Read them once when the checkout opens and hold the result. This limit is shared with every other caller on that checkout, so it is the easiest one to trip.
+**Cache your OAuth access token.** Tokens are reusable until they expire. Refresh as expiry approaches, not on every call.
 
-**Requesting a fresh OAuth access token per API call.** Access tokens are reusable until they expire. Cache the token and refresh it as it approaches expiry, not on every request.
+**Do not retry a `429` immediately.** Read `Retry-After` and wait.
 
-**Retrying a `429` immediately.** That spends the next window as soon as it opens and keeps you throttled.
-
-Polling a payment for its status is not throttled today, so it will not produce a `429`. It is still the wrong pattern. Subscribe with [webhooks](/webhooks) and you learn about the state change sooner and stay unaffected if that path ever gains a limit.
+Polling a payment for its status is not throttled today, so it will not produce a `429`. It is still the wrong pattern. Subscribe with [webhooks](/webhooks) and you learn about the state change sooner.
 
 ## Raising a limit
 
-The limits are the same for every store and are not configurable per account. If your integration has a legitimate pattern that does not fit, contact support with the path, the rate you need and what drives it.
+The limits are the same for every store. If your integration has a legitimate pattern that does not fit, contact support with the path, the rate you need and what drives it. Raising a limit is free.

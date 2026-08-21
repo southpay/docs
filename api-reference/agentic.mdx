@@ -32,7 +32,7 @@ Eight agent scopes exist: `payments:read`, `payments:write`, `payouts:read`, `pa
 
 ### Rate limit
 
-120 requests per minute per credential across all agentic paths except market data. Over the limit you get `429` `{"error": {"message": "Too many requests", "code": "rate_limited"}}`. No `Retry-After` header is set, so back off on your own schedule. See [Rate limits](/rate-limits) for every throttled path.
+600 requests per minute per credential in live mode (120 in test), shared across all agentic paths except market data. Over the limit you get `429` `{"error": {"message": "Too many requests", "code": "rate_limited"}}` with a `Retry-After` header in seconds. See [Rate limits](/rate-limits) for every throttled path.
 
 ## What the default authorization provider blocks
 

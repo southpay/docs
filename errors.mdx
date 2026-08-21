@@ -188,7 +188,7 @@ The report endpoints are a special case: they return `422` with a bare string in
 
 ## Rate limits
 
-Most of the API is not throttled. `POST /api/v2/payments`, the checkout and onramp reads, the OAuth endpoints and the agentic surface are. Every limit is per minute, no `Retry-After` header is set on any `429`, and a flat sixty second wait clears all of them.
+Most of the API is not throttled today. `POST /api/v2/payments`, the checkout and onramp reads, the OAuth endpoints and the agentic surface are. Each is a token bucket, every `429` carries `Retry-After` in seconds, and authenticated responses carry your remaining budget.
 
 See [Rate limits](/rate-limits) for the full table, how each limit is keyed, and the two `429` body shapes.
 
@@ -196,7 +196,7 @@ See [Rate limits](/rate-limits) for the full table, how each limit is keyed, and
 
 | Status | Retry | Notes |
 | --- | --- | --- |
-| `429` | Yes | Wait out the minute window. No `Retry-After` to read. |
+| `429` | Yes | Wait the number of seconds in `Retry-After`. |
 | `500` | Yes | Exponential backoff, same `Idempotency-Key` |
 | `502` | Yes | Provider hiccup. Exponential backoff, same `Idempotency-Key`. |
 | `503` | Yes | Quote or identity check unavailable. Backoff. |
