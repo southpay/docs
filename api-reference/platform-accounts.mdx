@@ -14,11 +14,11 @@ Platform mode is not self-serve. It is not enabled by default, and only SouthPay
 
 ## Authentication and scope
 
-Reads require `accounts:read`, writes require `accounts:write`, and acting on a sub-merchant requires `accounts:act`. None of the three are in the default API key scope set — a key created before your store became a platform will not hold them. Issue a new key with the platform scopes.
+Reads require `accounts:read`, writes require `accounts:write`, and acting on a sub-merchant requires `accounts:act`. None of the three are in the default API key scope set. A key created before your store became a platform will not hold them. Issue a new key with the platform scopes.
 
 ## Create a sub-merchant
 
-**`POST /platform/accounts`** — scope `accounts:write`.
+**`POST /platform/accounts`**. Scope `accounts:write`.
 
 All fields go inside a required `account` object.
 
@@ -27,7 +27,7 @@ All fields go inside a required `account` object.
 </ParamField>
 
 <ParamField body="account.external_id" type="string">
-  Your own identifier for this merchant. Creation is **idempotent on this value** — posting the same `external_id` twice returns the existing account rather than creating a second one.
+  Your own identifier for this merchant. Creation is **idempotent on this value**. Posting the same `external_id` twice returns the existing account rather than creating a second one.
 </ParamField>
 
 <ParamField body="account.platform_fee_percentage" type="string">
@@ -97,7 +97,7 @@ curl -X POST https://api.southpay.io/api/v2/platform/accounts \
 
 ## List sub-merchants
 
-**`GET /platform/accounts`** — scope `accounts:read`.
+**`GET /platform/accounts`**. Scope `accounts:read`.
 
 Returns a **bare array** of active sub-merchants, newest first. No envelope, no pagination.
 
@@ -107,13 +107,13 @@ Returns a **bare array** of active sub-merchants, newest first. No envelope, no 
 
 ## Retrieve a sub-merchant
 
-**`GET /platform/accounts/{id}`** — scope `accounts:read`. Returns a bare account object.
+**`GET /platform/accounts/{id}`**. Scope `accounts:read`. Returns a bare account object.
 
 An unknown id returns `404` with a machine code: `{"error": {"message": "Unknown sub-merchant account", "code": "account_not_found"}}`.
 
 ## Update a sub-merchant
 
-**`PATCH /platform/accounts/{id}`** — scope `accounts:write`.
+**`PATCH /platform/accounts/{id}`**. Scope `accounts:write`.
 
 Applies `name`, `platform_fee_percentage` and `external_id`. Re-using an `external_id` that another of your sub-merchants already holds is refused with `422`, and the account keeps its previous value.
 
@@ -145,7 +145,7 @@ curl -X PATCH https://api.southpay.io/api/v2/platform/accounts/c7d8e9f0-a1b2-4c3
 
 ## Delete a sub-merchant
 
-**`DELETE /platform/accounts/{id}`** — scope `accounts:write`.
+**`DELETE /platform/accounts/{id}`**. Scope `accounts:write`.
 
 Retires a sub-merchant you own. The account is soft-deleted, its API keys and agent credentials are revoked, and its webhook endpoints are disabled. Ledger history is preserved, and a `store.deleted` platform event is emitted. Returns `204` with no body.
 
@@ -168,11 +168,11 @@ curl -X DELETE https://api.southpay.io/api/v2/platform/accounts/c7d8e9f0-a1b2-4c
 ```
 </CodeGroup>
 
-An account still holding money is refused with `409` and a `blockers` list naming what is in the way: `store_balance`, `pending_payout`, `in_flight_payment_intent` or `pending_refund`. Settle or pay out those first, then retry. There is no force flag on this endpoint — funds are never stranded by a platform call.
+An account still holding money is refused with `409` and a `blockers` list naming what is in the way: `store_balance`, `pending_payout`, `in_flight_payment_intent` or `pending_refund`. Settle or pay out those first, then retry. There is no force flag on this endpoint. Funds are never stranded by a platform call.
 
 ## Restore a sub-merchant
 
-**`POST /platform/accounts/{id}/restore`** — scope `accounts:write`.
+**`POST /platform/accounts/{id}/restore`**. Scope `accounts:write`.
 
 Reverses a delete and returns the account object. Revoked API keys are **not** reissued and disabled webhook endpoints stay disabled; re-create those as needed.
 
@@ -180,7 +180,7 @@ Restoring an account that was never deleted returns `422` with code `account_not
 
 ## Attest verification
 
-**`POST /platform/accounts/{account_id}/verification`** — scope `accounts:write`.
+**`POST /platform/accounts/{account_id}/verification`**. Scope `accounts:write`.
 
 Submits KYB details you have already collected, so the sub-merchant does not have to re-enter them. Fields may be sent inside a `verification_request` object or at the top level.
 
@@ -195,7 +195,7 @@ Submits KYB details you have already collected, so the sub-merchant does not hav
 
 Returns `201` with the verification request: `id`, `status`, the submitted fields, plus `rejection_reason`, `submitted_at`, `reviewed_at`, `created_at`, `updated_at`.
 
-`status` is `pending`, `approved` or `rejected`. Approval is a human review — attesting does not approve anything by itself. Subscribe to `store.verification.approved` and `store.verification.rejected` to learn the outcome; both fan out to the platform's own [webhook endpoints](/api-reference/webhook-endpoints).
+`status` is `pending`, `approved` or `rejected`. Approval is a human review. Attesting does not approve anything by itself. Subscribe to `store.verification.approved` and `store.verification.rejected` to learn the outcome; both fan out to the platform's own [webhook endpoints](/api-reference/webhook-endpoints).
 
 | Status | Body | Cause |
 | --- | --- | --- |
@@ -205,12 +205,12 @@ Returns `201` with the verification request: `id`, `status`, the submitted field
 
 ## Issue an onboarding link
 
-**`POST /platform/accounts/{account_id}/onboarding_links`** — scope `accounts:write`.
+**`POST /platform/accounts/{account_id}/onboarding_links`**. Scope `accounts:write`.
 
 Creates a single-use dashboard link the sub-merchant opens to complete a step themselves. Fields may be sent inside an `onboarding_link` object or at the top level.
 
 <ParamField body="purpose" type="string">
-  `onboarding`, `kyb` or `payout_destination`. Pick `payout_destination` when the only thing missing is where their money goes — a platform is not allowed to set that itself.
+  `onboarding`, `kyb` or `payout_destination`. Pick `payout_destination` when the only thing missing is where their money goes. A platform is not allowed to set that itself.
 </ParamField>
 
 <ParamField body="return_url" type="string">
@@ -244,7 +244,7 @@ A validation failure returns `422` `{"error": {"message": "…", "code": "invali
 
 ## Platform overview
 
-**`GET /platform/overview`** — scope `accounts:read`.
+**`GET /platform/overview`**. Scope `accounts:read`.
 
 Aggregate figures across your sub-merchants for a date range.
 
@@ -283,9 +283,9 @@ Ranges longer than 365 days are clamped. Unparseable dates fall back to the defa
 
 ## Platform payments
 
-**`GET /platform/payments`** — scope `accounts:read`.
+**`GET /platform/payments`**. Scope `accounts:read`.
 
-Payments across every sub-merchant, newest first. This is a purpose-built summary, not the [payment intent](/api-reference/payments) shape — there is no `reference` lookup, no addresses and no metadata.
+Payments across every sub-merchant, newest first. This is a purpose-built summary, not the [payment intent](/api-reference/payments) shape. There is no `reference` lookup, no addresses and no metadata.
 
 <ParamField query="account_id" type="string">
   Limit to one sub-merchant.
@@ -332,7 +332,7 @@ To call any other endpoint as a sub-merchant, add the header:
 X-Southpay-Account: c7d8e9f0-a1b2-4c3d-8e4f-506172839405
 ```
 
-Your credential must hold `accounts:act` in addition to the scope the target endpoint needs. Everything then behaves as if the sub-merchant made the call — their balances, their payments, their webhooks.
+Your credential must hold `accounts:act` in addition to the scope the target endpoint needs. Everything then behaves as if the sub-merchant made the call, against their balances, their payments and their webhooks.
 
 ```bash Request
 curl -X POST https://api.southpay.io/api/v2/payments \

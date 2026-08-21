@@ -11,7 +11,7 @@ https://mcp.southpay.io/mcp
 
 It speaks the Streamable HTTP transport at `/mcp`. Each session is backed by its own isolated state, which is where a key set through the `login` tool is held.
 
-The server is a thin proxy over the [agentic REST API](/api-reference/agentic) with no business logic of its own. It holds no secrets: the only credential is the merchant's `spa_` agent key, validated by SouthPay on every call. Anything gated on the REST side is gated identically here, and session mandates and x402 settlements are not exposed as tools at all — those are [REST-only](/agentic/x402).
+The server is a thin proxy over the [agentic REST API](/api-reference/agentic) with no business logic of its own. It holds no secrets: the only credential is the merchant's `spa_` agent key, validated by SouthPay on every call. Anything gated on the REST side is gated identically here, and session mandates and x402 settlements are not exposed as tools at all. Those are [REST-only](/agentic/x402).
 
 ## Connecting
 
@@ -43,7 +43,7 @@ claude mcp add --transport http southpay https://mcp.southpay.io/mcp \
 
 ### Browser login (OAuth)
 
-Connect a client with no token and the server runs an OAuth flow instead. It serves its own metadata discovery, dynamic client registration and token endpoint — which clients like claude.ai require — then forwards you to the SouthPay dashboard consent screen, where you pick the store and whether the session is live or test.
+Connect a client with no token and the server runs an OAuth flow instead. It serves its own metadata discovery, dynamic client registration and token endpoint, which clients like claude.ai require, then forwards you to the SouthPay dashboard consent screen, where you pick the store and whether the session is live or test.
 
 On the way back it exchanges the code for an OAuth access token and calls [`POST /api/v2/oauth/agent_credentials`](/agentic/agent-credentials#minting-a-credential-from-an-oauth-token) to mint a scoped `spa_` credential. That credential stays server-side; the MCP client only ever sees tokens issued by the SouthPay MCP server.
 
@@ -59,7 +59,7 @@ Prefer the bearer header for a live key. A key pasted into `login` passes throug
 
 ## Results and errors
 
-Every tool returns plain JSON as structured content, plus a short human-readable `message`. Failures never raise a protocol error — they come back as data under an `error` key so the agent can read the denial and respond to it:
+Every tool returns plain JSON as structured content, plus a short human-readable `message`. Failures never raise a protocol error. They come back as data under an `error` key so the agent can read the denial and respond to it:
 
 ```json
 {
@@ -80,14 +80,14 @@ Authorization denials (`mandate_required`, `payout_controls_required`, `authoriz
 
 ## Tools
 
-Nineteen tools. Scopes are the agent credential scopes required; a credential limited to `payments:*` is rejected on the token and payout tools. Tools marked **gated** are refused server-side unless a spend limit or an authorization provider permits the action — see [agent authorization](/agentic/authorization).
+Nineteen tools. Scopes are the agent credential scopes required; a credential limited to `payments:*` is rejected on the token and payout tools. Tools marked **gated** are refused server-side unless a spend limit or an authorization provider permits the action. See [agent authorization](/agentic/authorization).
 
 ### Session
 
 | Tool | Parameters | Returns |
 | --- | --- | --- |
 | `login` | `api_key` | `{logged_in: true, account}`, or `{error: "invalid_key"}` if it does not start with `spa_live_` / `spa_test_` |
-| `logout` | none | `{logged_out}` — `true` if a pasted key existed |
+| `logout` | none | `{logged_out}`, `true` if a pasted key existed |
 
 ### Account
 
@@ -104,7 +104,7 @@ Call this first. `authorization.mandates` tells you whether the gated tools can 
 | `create_payment` | `amount` (decimal string, ≤ 2 places), `currency` (default `"USD"`), `order_id?`, `metadata?` (≤ 50 keys, string values) | `payments:write` | `{id, status, reference, settlement_amount, settlement_currency, order_id, hosted_url, expires_at, deposit_addresses[]}` |
 | `get_payment` | `payment_id` | `payments:read` | Same summarized shape |
 | `list_payments` | `page` (default 1), `per_page` (default 10, max 100), `reference?` | `payments:read` | `{payments[], meta}` |
-| `wait_for_payment` | `payment` (id or reference), `timeout_seconds` (default 60, clamped 1–240), `poll_interval_seconds` (default 3, minimum 2) | `payments:read` | `{done: true, status, polls, payment}` or `{done: false, timed_out: true, status, polls, hint, payment}` |
+| `wait_for_payment` | `payment` (id or reference), `timeout_seconds` (default 60, clamped 1-240), `poll_interval_seconds` (default 3, minimum 2) | `payments:read` | `{done: true, status, polls, payment}` or `{done: false, timed_out: true, status, polls, hint, payment}` |
 | `cancel_payment` | `payment_id` | `payments:write` | The canceled payment |
 | `refund_payment` | `payment_id`, `amount?`, `asset_id?` | `payments:write` | The created refunds. **Gated** |
 | `list_refunds` | `payment_id` | `payments:read` | Refunds for the payment, newest first |
@@ -140,7 +140,7 @@ The accepted and available lists are filtered to the credential's mode, so a tes
 
 Each row in `limits[]` carries `asset_id`, `coin_symbol`, `chain_symbol`, `atomic_decimals`, `per_tx_cap_atomic`, `daily_cap_atomic`, `daily_spent_atomic`, `daily_remaining_atomic` and `controls_configured`, plus decimal renderings as `per_tx_cap`, `daily_cap`, `daily_spent` and `daily_remaining`.
 
-Call `get_payout_limits` before `create_payout`. `controls_configured: false` on an asset means a payout in it will be denied with `payout_controls_required`, and staying inside `daily_remaining` avoids a `daily_cap_exceeded` denial. `amount_atomic` is base units — wei for ETH — so confirm the figure with a human before spending it.
+Call `get_payout_limits` before `create_payout`. `controls_configured: false` on an asset means a payout in it will be denied with `payout_controls_required`, and staying inside `daily_remaining` avoids a `daily_cap_exceeded` denial. `amount_atomic` is base units, wei for ETH, so confirm the figure with a human before spending it.
 
 ### Rates and market data
 

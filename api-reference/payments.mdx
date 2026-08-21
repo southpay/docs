@@ -12,11 +12,11 @@ Every path below is relative to `https://api.southpay.io/api/v2`. All amounts yo
 
 ## Authentication and scope
 
-Reads require `payments:read`, writes require `payments:write`. A secret API key (`sp_sk_…`), an OAuth token, or a dashboard session all work. A publishable key (`sp_pk_…`) can call `POST /payments` and nothing else — any other path returns `403` `publishable_key_forbidden`.
+Reads require `payments:read`, writes require `payments:write`. A secret API key (`sp_sk_…`), an OAuth token, or a dashboard session all work. A publishable key (`sp_pk_…`) can call `POST /payments` and nothing else. Any other path returns `403` `publishable_key_forbidden`.
 
 ## Create a payment intent
 
-**`POST /payments`** — scope `payments:write`. Publishable keys allowed. `Idempotency-Key` optional.
+**`POST /payments`**. Scope `payments:write`. Publishable keys allowed. `Idempotency-Key` optional.
 
 All fields go inside a required `payment_intent` object.
 
@@ -53,7 +53,7 @@ All fields go inside a required `payment_intent` object.
 </ParamField>
 
 <ParamField body="payment_intent.metadata" type="object">
-  Key-value pairs echoed back on the intent and in every payment webhook. At most 50 keys, and **every value must be a string** — numbers and booleans are rejected.
+  Key-value pairs echoed back on the intent and in every payment webhook. At most 50 keys, and **every value must be a string**. Numbers and booleans are rejected.
 </ParamField>
 
 <ParamField body="payment_intent.line_items" type="object[]">
@@ -181,7 +181,7 @@ An intent expires 60 minutes after creation. That window is fixed and cannot be 
 </ResponseField>
 
 <ResponseField name="terminal" type="boolean" required>
-  True when `status` is `completed`, `expired`, `refunded` or `failed` — the intent will not change again.
+  True when `status` is `completed`, `expired`, `refunded` or `failed`. The intent will not change again.
 </ResponseField>
 
 <ResponseField name="expires_at" type="string" required>
@@ -243,11 +243,11 @@ An unsupported `currency` also returns `422`, but through the global handler, so
 Omitting `currency` entirely, or omitting the `payment_intent` wrapper, currently returns `500` rather than a validation error. Always send both.
 </Note>
 
-`POST /payments` is rate limited to 120 requests per minute, keyed on your credential. Over the limit you get `429` with `{"error": "Too many requests. Please try again later."}` and no `Retry-After` header.
+`POST /payments` is rate limited to 120 requests per minute, keyed on your credential. Over the limit you get `429` with `{"error": "Too many requests. Please try again later."}` and no `Retry-After` header. See [Rate limits](/rate-limits) for every throttled path.
 
 ## Retrieve a payment intent
 
-**`GET /payments/{id}`** — scope `payments:read`.
+**`GET /payments/{id}`**. Scope `payments:read`.
 
 `{id}` is the intent UUID, not the reference. Returns the detail view: everything from create, plus ledger-derived financials, the on-chain transaction, and the full event history.
 
@@ -445,9 +445,9 @@ An unknown or out-of-mode id returns `404` with `{"error": {"message": "…", "c
 
 ## List payment intents
 
-**`GET /payments`** — scope `payments:read`.
+**`GET /payments`**. Scope `payments:read`.
 
-Returns the list view — the create fields plus `settlement_status` and `auto_swap_status`, without `payment_addresses`. Ordered newest first.
+Returns the list view: the create fields plus `settlement_status` and `auto_swap_status`, without `payment_addresses`. Ordered newest first.
 
 <ParamField query="status" type="string">
   Filter by status. Unrecognized values are ignored rather than rejected.
@@ -525,7 +525,7 @@ Pagination is not uniform across this API. Payments, billing, agentic payments a
 
 ## Summarize payments
 
-**`GET /payments/summary`** — scope `payments:read`.
+**`GET /payments/summary`**. Scope `payments:read`.
 
 Aggregates order counts, volume and success rate over a date range, bucketed by day. Useful for dashboards; it is not a substitute for [reports](/api-reference/reports), which are ledger-accurate PDFs.
 
@@ -575,7 +575,7 @@ curl "https://api.southpay.io/api/v2/payments/summary?from=2026-04-01&to=2026-04
 
 ## List payment events
 
-**`GET /payments/{payment_intent_id}/events`** — scope `payments:read`.
+**`GET /payments/{payment_intent_id}/events`**. Scope `payments:read`.
 
 The immutable transition log behind your webhook deliveries. Use it to backfill history or to reconcile after a webhook outage. Returns a **bare array**, oldest first, with no pagination.
 
@@ -615,9 +615,9 @@ curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6
 
 ## Download the invoice PDF
 
-**`GET /payments/{id}/invoice`** — scope `payments:read`.
+**`GET /payments/{id}/invoice`**. Scope `payments:read`.
 
-Returns `application/pdf` as an attachment named `invoice-{reference}.pdf`. There is no JSON variant, and no status check — an unpaid intent still renders. The only failure is `404` for an unknown id.
+Returns `application/pdf` as an attachment named `invoice-{reference}.pdf`. There is no JSON variant, and no status check. An unpaid intent still renders. The only failure is `404` for an unknown id.
 
 ```bash Request
 curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6f/invoice \
@@ -644,5 +644,5 @@ For the allowed transitions, all ten `state_reason` values and how statuses map 
 
 ## Sub-resources
 
-- [Refunds](/api-reference/refunds) — `GET` and `POST /payments/{id}/refunds`.
-- [Reconciliation](/api-reference/reconciliation) — `GET /payment_intents/{id}/reconciliation`. Note the path segment is `payment_intents`, not `payments`, for that route only.
+- [Refunds](/api-reference/refunds): `GET` and `POST /payments/{id}/refunds`.
+- [Reconciliation](/api-reference/reconciliation): `GET /payment_intents/{id}/reconciliation`. Note the path segment is `payment_intents`, not `payments`, for that route only.

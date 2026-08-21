@@ -7,7 +7,7 @@ Everything here comes from a failure mode this API actually has. Each item says 
 
 ## Parse errors before you parse anything else
 
-The API returns three different error bodies, and `error` is a string more often than it is an object. A client that does `body.error.message` throws on the majority of 4xx responses — and it throws inside your error handler, which is where you are least likely to have coverage.
+The API returns three different error bodies, and `error` is a string more often than it is an object. A client that does `body.error.message` throws on the majority of 4xx responses, and it throws inside your error handler, which is where you are least likely to have coverage.
 
 Write the normalizer from [Errors](/errors#normalizing-all-three) on day one. Log `status`, `code` and `message` together; `code` is `null` on every framework-rescued failure, so it is never enough on its own.
 
@@ -56,7 +56,7 @@ Use a timing-safe comparison, never `===`. SouthPay does not enforce a timestamp
 
 ## Claim the event id before doing the work
 
-Delivery is at-least-once. Deduplicate on the envelope `id`, and claim it atomically **before** fulfilment, not after — two concurrent retries can otherwise both pass a read-then-write check.
+Delivery is at-least-once. Deduplicate on the envelope `id`, and claim it atomically **before** fulfilment, not after. Two concurrent retries can otherwise both pass a read-then-write check.
 
 ```typescript
 const claimed = await db.processedEvents.insertIfAbsent(event.id);
@@ -67,13 +67,13 @@ await fulfill(event);
 
 ## Do not treat `terminal: true` as immutable
 
-`terminal` covers `completed`, `expired`, `failed` and `refunded`. It means the outcome is settled. It does **not** mean the record is frozen — all four can still move to `refunded`, and an underpaid intent that failed is refunded automatically.
+`terminal` covers `completed`, `expired`, `failed` and `refunded`. It means the outcome is settled. It does **not** mean the record is frozen. All four can still move to `refunded`, and an underpaid intent that failed is refunded automatically.
 
 Handle `payment_intent.refunded` as an update to an order you already shipped. If your fulfilment is irreversible, that event needs a human in the loop, not a silent status write.
 
 ## Branch on `state_reason`, not just `status`
 
-An overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`. So is an exact payment, minus the reason. If you only read `status`, you ship the order and never notice you owe the customer money — the excess is on the intent's detail view under `overpayment`.
+An overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`. So is an exact payment, minus the reason. If you only read `status`, you ship the order and never notice you owe the customer money. The excess is on the intent's detail view under `overpayment`.
 
 The same applies to `completed_underpaid`, which is a completion your store opted into, and to `canceled_by_agent`, which arrives as `expired`. The full table is on [Payment lifecycle](/payment-lifecycle).
 
@@ -88,7 +88,7 @@ The same applies to `completed_underpaid`, which is a completion your store opte
 
 ## Poll for payouts
 
-Five webhook event names — `payout.created`, `payout.confirmed`, `payout.failed`, `fee_sweep.confirmed`, `fee_sweep.failed` — pass subscription validation and are never emitted. Subscribing to them is silent and permanent failure.
+Five webhook event names (`payout.created`, `payout.confirmed`, `payout.failed`, `fee_sweep.confirmed`, `fee_sweep.failed`) pass subscription validation and are never emitted. Subscribing to them is silent and permanent failure.
 
 Poll `GET /api/v2/payouts/{id}` and read `status`, `failure_code` and `state_transitions` instead. See [Webhooks](/webhooks#events-that-never-arrive).
 
@@ -108,7 +108,7 @@ Trust `expires_at` over `status`. Expiry is applied lazily, so a `pending` inten
 
 ## Use metadata for correlation, and keep the values strings
 
-Metadata is returned on the intent and in every webhook, which makes it the cheapest way to get from an event back to your order. It takes up to 50 keys and **every value must be a string** — a number or a nested object is a `422`.
+Metadata is returned on the intent and in every webhook, which makes it the cheapest way to get from an event back to your order. It takes up to 50 keys and **every value must be a string**. A number or a nested object is a `422`.
 
 ```json
 { "metadata": { "order_id": "8721", "customer_id": "4421", "sku": "SKU-001" } }
@@ -118,7 +118,7 @@ If you need to filter on it later, use the top-level `order_id` field instead. T
 
 ## Scope keys down, and never ship a secret key to a browser
 
-A new secret key gets every scope. Restrict it when you create it — a key that only creates payments cannot issue a payout if it leaks.
+A new secret key gets every scope. Restrict it when you create it. A key that only creates payments cannot issue a payout if it leaks.
 
 For anything client-side, use a publishable key. It can call exactly one endpoint, `POST /api/v2/payments`, and returns `403 publishable_key_forbidden` everywhere else. That restriction is the entire reason it is safe to embed.
 
@@ -126,7 +126,7 @@ For anything client-side, use a publishable key. It can call exactly one endpoin
 
 Rotation is an immediate hard cutover with no overlap window. The old secret verifies nothing the moment the request returns, including retries of events already queued.
 
-Deploy so your running processes can pick up a new secret, rotate, then confirm. Rotating first guarantees a window of failed verifications, and those count as non-`2xx` — so they get retried for eighteen hours.
+Deploy so your running processes can pick up a new secret, rotate, then confirm. Rotating first guarantees a window of failed verifications, and those count as non-`2xx`, so they get retried for eighteen hours.
 
 ## Test what test mode can actually test
 

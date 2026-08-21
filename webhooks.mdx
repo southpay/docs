@@ -49,7 +49,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
 `signing_secret` appears **only** in the create response and in the response to `rotate_secret`. Every other read returns `signing_secret_preview`, the first twelve characters. Store the full value before you close the terminal.
 </Warning>
 
-Requires the `webhooks:write` scope. The endpoint id is a bare UUID — there is no `we_` prefix scheme anywhere in this API.
+Requires the `webhooks:write` scope. The endpoint id is a bare UUID. There is no `we_` prefix scheme anywhere in this API.
 
 ### subscribed_events is required, and literal
 
@@ -99,7 +99,7 @@ There is no top-level `"object": "event"` key.
 <Warning>
 For payment and transaction events, `data.object` has exactly seven keys: `id`, `status`, `settlement_amount_cents`, `settlement_currency`, `from_status`, `to_status`, `metadata`.
 
-**`id` holds the payment intent's `reference`, not its UUID.** There is no `reference` key. There is no `settlement_amount` key — the amount is an integer in minor units under `settlement_amount_cents`.
+**`id` holds the payment intent's `reference`, not its UUID.** There is no `reference` key. There is no `settlement_amount` key. The amount is an integer in minor units under `settlement_amount_cents`.
 </Warning>
 
 Billing events are different. `invoice.*` and `subscription.*` serialize the full detail view of the invoice or subscription into `data.object`, so you get line items, customer, period boundaries and every other field rather than the seven-key summary. `store.verification.*` events use a freshly generated UUID as the envelope `id` and carry the store's verification state.
@@ -132,7 +132,7 @@ Two details break most first attempts.
 **Use the secret exactly as issued, `whsec_` prefix included.** It is the literal UTF-8 string that keys the HMAC. Do not strip the prefix and do not base64-decode it.
 </Warning>
 
-SouthPay does **not** enforce a timestamp tolerance on outbound deliveries — it only stamps `t`. If you want replay protection, reject deliveries whose `t` is more than a few minutes old. That is your decision to make, not something the API does for you.
+SouthPay does **not** enforce a timestamp tolerance on outbound deliveries. It only stamps `t`. If you want replay protection, reject deliveries whose `t` is more than a few minutes old. That is your decision to make, not something the API does for you.
 
 <CodeGroup>
 ```typescript server/webhook.ts
@@ -343,7 +343,7 @@ The catalogue above lists eighteen events. Five more pass validation and do noth
 - `fee_sweep.confirmed`
 - `fee_sweep.failed`
 
-Payout lifecycle is not published over webhooks today. **Poll `GET /api/v2/payouts` or `GET /api/v2/payouts/{id}`** and read `status` and `state_transitions`. If you already have a subscription to any of these names, it is safe to leave in place and safe to remove — it has never delivered anything either way.
+Payout lifecycle is not published over webhooks today. **Poll `GET /api/v2/payouts` or `GET /api/v2/payouts/{id}`** and read `status` and `state_transitions`. If you already have a subscription to any of these names, it is safe to leave in place and safe to remove. It has never delivered anything either way.
 </Warning>
 
 ## Events you cannot receive
@@ -373,7 +373,7 @@ Return `2xx` for events you choose to ignore. Reserve non-`2xx` for "I could not
 Retries back off on this schedule: 30 seconds, 2 minutes, 5 minutes, 10 minutes, 30 minutes, 1 hour, 2 hours, 5 hours, 10 hours. After the tenth failed attempt the endpoint flips to `status: "error"` and the store owner is emailed.
 
 <Note>
-While an endpoint is not `active` — disabled by you, or flipped to `error` — queued deliveries are dropped rather than held. Re-enabling the endpoint does not replay them. Use `redeliver` for anything you need back.
+While an endpoint is not `active`, whether disabled by you or flipped to `error`, queued deliveries are dropped rather than held. Re-enabling the endpoint does not replay them. Use `redeliver` for anything you need back.
 </Note>
 
 Deliveries are also refused before they leave if the URL resolves to a private, loopback, link-local or unique-local address. The delivery is marked `failed` and the endpoint flips to `error`. Tunnel to a public hostname when testing locally.
@@ -420,7 +420,7 @@ curl -X POST "https://api.southpay.io/api/v2/webhook_endpoints/{id}/redeliver" \
 `POST /api/v2/webhook_endpoints/{id}/rotate_secret` returns the endpoint with a new `signing_secret`.
 
 <Danger>
-Rotation is an immediate hard cutover. **There is no overlap window and no dual-signing period.** The moment the request returns, every delivery is signed with the new secret and the old one verifies nothing — including deliveries already queued and retries of older events.
+Rotation is an immediate hard cutover. **There is no overlap window and no dual-signing period.** The moment the request returns, every delivery is signed with the new secret and the old one verifies nothing, including deliveries already queued and retries of older events.
 
 Deploy so that the new secret is live before you rotate: read the secret from a store your running processes re-read, rotate, then confirm. Rotating first and deploying second guarantees a gap of failed verifications, and those failures are retried as non-`2xx` for eighteen hours.
 </Danger>

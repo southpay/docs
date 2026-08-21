@@ -30,9 +30,9 @@ On n8n Cloud, once the node is verified it appears in the nodes panel with no in
 
 The node authenticates with OAuth 2.0, authorization code plus PKCE. SouthPay requires PKCE with `S256` on every authorization request, so a client that cannot do PKCE cannot connect at all.
 
-Click **Connect my account** and approve the consent screen. The resulting access token is bound to one store and one mode, so you never pass a store id and never set a mode header — the grant carries both. Live mode works: the mode is chosen when you authorize, not fixed to test.
+Click **Connect my account** and approve the consent screen. The resulting access token is bound to one store and one mode, so you never pass a store id and never set a mode header. The grant carries both. Live mode works: the mode is chosen when you authorize, not fixed to test.
 
-An access token issued alongside a refresh token lives for **1 hour**, so the credential relies on the refresh token to stay connected; a connection that stops working after an hour is a refresh problem, not a scope problem. You can revoke the connection from either side — n8n's credential screen, or the connected apps list in the SouthPay dashboard.
+An access token issued alongside a refresh token lives for **1 hour**, so the credential relies on the refresh token to stay connected; a connection that stops working after an hour is a refresh problem, not a scope problem. You can revoke the connection from either side: n8n's credential screen, or the connected apps list in the SouthPay dashboard.
 
 If you would rather use your own OAuth client than the first-party one, [register an OAuth app](/oauth-apps) and set its client id on the n8n credential.
 
@@ -63,7 +63,7 @@ See [webhooks](/webhooks) for the full envelope, the signature scheme and the re
 
 The **Wait for a Payment** operation polls until the payment reaches a terminal status or the timeout elapses, so a single node can block a workflow until the customer pays. The terminal statuses are `completed`, `expired`, `failed` and `refunded`.
 
-There is no `overpaid` status. An overpayment arrives as `completed` with `state_reason: "completed_overpaid"`, so a check for `status === "completed"` catches it — read `state_reason` if you need to treat it differently.
+There is no `overpaid` status. An overpayment arrives as `completed` with `state_reason: "completed_overpaid"`, so a check for `status === "completed"` catches it. Read `state_reason` if you need to treat it differently.
 
 Intents expire 60 minutes after creation and that window is not configurable, so a timeout longer than an hour buys you nothing. For production, prefer the trigger over polling.
 
@@ -82,14 +82,14 @@ Intents expire 60 minutes after creation and that window is not configurable, so
 
 ## When an operation fails
 
-Every operation is limited by the scopes granted at consent. A call outside them returns `403 insufficient_scope`, and the fix is to reconnect the credential with the scope included — n8n cannot widen a token in place.
+Every operation is limited by the scopes granted at consent. A call outside them returns `403 insufficient_scope`, and the fix is to reconnect the credential with the scope included, since n8n cannot widen a token in place.
 
 Two other refusals catch people out:
 
 - **Fiat payouts need a verified store.** `403` until KYC is confirmed on the store, and only `USDT` and `USDC` are eligible for the fiat rail.
 - **Payouts and refunds require an `Idempotency-Key`.** The node sends one; if you are calling the API directly alongside the node, omitting it returns `422`.
 
-SouthPay does not use one error shape. Most endpoints return `{"error": "<string>"}`, some return `{"error": {"message": "...", "code": "..."}}`, and validation failures return `{"errors": ["...", "..."]}`. If you parse an error message inside a Function node, handle all three — see [errors](/errors).
+SouthPay does not use one error shape. Most endpoints return `{"error": "<string>"}`, some return `{"error": {"message": "...", "code": "..."}}`, and validation failures return `{"errors": ["...", "..."]}`. If you parse an error message inside a Function node, handle all three. See [errors](/errors).
 
 <Note>
   The mandate and spend-limit controls described under [agent authorization](/agentic/authorization) apply to `spa_` agent credentials only. They do not apply to an OAuth connection, and neither does step-up MFA, which is raised for dashboard sessions and never for a bearer token.

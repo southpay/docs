@@ -5,8 +5,8 @@ description: "Bank accounts and wallet addresses money can be paid out to. What 
 
 Before you can move a balance out of SouthPay you need somewhere to send it. That "somewhere" is a **payout destination**, and it comes in two kinds:
 
-- A **crypto payout detail** — a wallet address on a specific network.
-- A **fiat payout detail** — a bank account, IBAN or SWIFT.
+- A **crypto payout detail** is a wallet address on a specific network.
+- A **fiat payout detail** is a bank account, IBAN or SWIFT.
 
 Every payout and every payout schedule references one by id. If you have looked at `POST /api/v2/payouts` and wondered where `crypto_payout_detail_id` and `fiat_payout_detail_id` come from, this is the page.
 
@@ -58,7 +58,7 @@ curl -X POST https://api.southpay.io/api/v2/payouts \
 ```
 </CodeGroup>
 
-The body is **not** nested under a key, unlike payment intents. `Idempotency-Key` is required; without it you get `422`. See [Idempotency](/idempotency) — payout keys are not scoped to your store, so make them globally unique.
+The body is **not** nested under a key, unlike payment intents. `Idempotency-Key` is required; without it you get `422`. See [Idempotency](/idempotency). Payout keys are not scoped to your store, so make them globally unique.
 
 Sending none of the three returns `422` `destination_required`.
 
@@ -80,7 +80,7 @@ A saved wallet address, pinned to one network.
 | Address format | Validated per network before the record is saved |
 
 <Warning>
-**Payout networks are not the same list as deposit chains.** You can be paid out on Polygon, Base, Arbitrum, Optimism and BNB Smart Chain, but customers cannot pay you on any of them — those five are payout-only. Going the other way, Ethereum Classic, TON, SUI and Stellar accept deposits but are not payout networks.
+**Payout networks are not the same list as deposit chains.** You can be paid out on Polygon, Base, Arbitrum, Optimism and BNB Smart Chain, but customers cannot pay you on any of them. Those five are payout-only. Going the other way, Ethereum Classic, TON, SUI and Stellar accept deposits but are not payout networks.
 
 See [Supported currencies and assets](/currencies) for the deposit side.
 </Warning>
@@ -104,7 +104,7 @@ A bank account. SouthPay converts a stablecoin balance to fiat and sends it by t
 | Required for SWIFT accounts | `account_number`, plus a BIC or a routing number |
 | Selected accounts | One per currency |
 
-IBANs are checksum-validated, and the currency must be plausible for the IBAN's country — a `DE` IBAN accepts `EUR` only, a `GB` IBAN accepts `GBP` or `EUR`, a `US` account accepts `USD`. US routing numbers are checksum-validated too. Getting any of this wrong returns `422` with a `{"errors": [...]}` list.
+IBANs are checksum-validated, and the currency must be plausible for the IBAN's country: a `DE` IBAN accepts `EUR` only, a `GB` IBAN accepts `GBP` or `EUR`, a `US` account accepts `USD`. US routing numbers are checksum-validated too. Getting any of this wrong returns `422` with a `{"errors": [...]}` list.
 
 As with crypto details, core fields freeze once the account has processed a payout, and the currently selected account cannot be archived until you deselect it.
 
@@ -119,14 +119,14 @@ Three conditions, each with its own failure:
 Quote before you commit, with `POST /api/v2/payouts/quote`. It returns `estimated_fiat_cents`, `estimated_fee_cents`, `exchange_rate`, `minimum_atomic`, `meets_minimum` and an `expires_at`. Checking `meets_minimum` is cheaper than handling the rejection.
 
 <Note>
-The ten fiat currencies above are the ones a bank account can be denominated in, and the same ten you can price a payment intent in. A **payout schedule's** `minimum_fiat_currency` is narrower — only `USD`, `EUR`, `GBP`, `HKD`, `SGD` and `JPY`. Anything else falls back to `USD`.
+The ten fiat currencies above are the ones a bank account can be denominated in, and the same ten you can price a payment intent in. A **payout schedule's** `minimum_fiat_currency` is narrower: only `USD`, `EUR`, `GBP`, `HKD`, `SGD` and `JPY`. Anything else falls back to `USD`.
 </Note>
 
 ## Selected destinations
 
 Both kinds carry a "selected" flag: one selected crypto address per network, one selected fiat account per currency. Selecting a new one deselects the previous one for that network or currency.
 
-Selection is what the dashboard and automatic payouts use as the default target. It has no effect on an API payout that names an id explicitly — if you pass `crypto_payout_detail_id`, that is where the money goes, selected or not.
+Selection is what the dashboard and automatic payouts use as the default target. It has no effect on an API payout that names an id explicitly. If you pass `crypto_payout_detail_id`, that is where the money goes, selected or not.
 
 ## Platforms and sub-merchants
 

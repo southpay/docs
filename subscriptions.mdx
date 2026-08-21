@@ -16,7 +16,7 @@ You compose a subscription from four resources. See the [Recurring API reference
 | **Price** | An amount, currency, and interval attached to a product. A price is reusable across any number of customers. |
 | **Subscription** | Bills one customer on a price's interval. Made of one or more **items**. |
 
-A price sets `interval` (`daily`, `weekly`, `monthly`, or `yearly`) and `interval_count` — set `interval_count: 3` on a monthly price for quarterly billing. Money fields are immutable once a price exists; archive and create a new one to change them.
+A price sets `interval` (`daily`, `weekly`, `monthly`, or `yearly`) and `interval_count`. Set `interval_count: 3` on a monthly price for quarterly billing. Money fields are immutable once a price exists; archive and create a new one to change them.
 
 ## Items
 
@@ -65,7 +65,7 @@ Every id is a bare UUID. For a single price, use the shorthand `"price_id"` (wit
 Billing endpoints **ignore the `Idempotency-Key` header entirely.** Retrying a subscription or customer create after a timeout can produce a duplicate. Deduplicate on your side, or check for an existing record before retrying. See [Idempotency](/idempotency#where-the-header-applies).
 </Warning>
 
-To subscribe several customers to the same plan, create one subscription per customer with the same `items` — a price is shared, a subscription is per-customer.
+To subscribe several customers to the same plan, create one subscription per customer with the same `items`. A price is shared, a subscription is per-customer.
 
 ## Trials
 
@@ -91,9 +91,9 @@ You can list a subscription's invoices with `GET /billing/invoices?subscription_
 | `paused` | Billing suspended; resume to continue. |
 | `canceled` | Ended (terminal). |
 
-- **Change the plan** — `PATCH /billing/subscriptions/:id` with a new `items` set. The change applies from the next cycle; there is no mid-cycle proration.
-- **Cancel** — `POST .../cancel` ends it immediately, or pass `{ "at_period_end": true }` to let the current cycle finish first. Undo a scheduled cancellation with `POST .../uncancel`.
-- **Pause / resume** — `POST .../pause` suspends billing; `POST .../resume` restarts it from a fresh period.
+- **Change the plan** with `PATCH /billing/subscriptions/:id` and a new `items` set. The change applies from the next cycle; there is no mid-cycle proration.
+- **Cancel** with `POST .../cancel`. It ends immediately, or pass `{ "at_period_end": true }` to let the current cycle finish first. Undo a scheduled cancellation with `POST .../uncancel`.
+- **Pause and resume**. `POST .../pause` suspends billing; `POST .../resume` restarts it from a fresh period.
 
 If a cycle goes unpaid, the subscription moves to `past_due` and SouthPay emits `subscription.past_due`. Once the grace window (about `grace_cycles` × the interval) is exhausted, the invoice is marked uncollectible and the subscription is canceled for non-payment.
 

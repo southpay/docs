@@ -61,7 +61,7 @@ Every payment intent expires 60 minutes after it is created. The exact moment is
 
 There is no parameter to lengthen or shorten the window, and no endpoint to extend a live intent. If a customer needs longer, create a second intent with a new [idempotency key](/idempotency).
 
-Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `expired` the next time it is loaded — including when the customer opens the hosted checkout page — so a stale `pending` in your database may already be dead. Trust `expires_at` over `status`.
+Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `expired` the next time it is loaded, including when the customer opens the hosted checkout page, so a stale `pending` in your database may already be dead. Trust `expires_at` over `status`.
 
 ## State reasons
 
@@ -80,7 +80,7 @@ Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `exp
 | `canceled_by_agent` | `expired` | An [agent](/agentic/index) canceled a `pending` intent |
 | `refund_completed` | `refunded` | A refund confirmed on-chain |
 
-**Overpayment is not a status.** An accepted overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the `:detail` view of the intent carries an `overpayment` object with the excess. If you branch on `status === "completed"` and ignore `state_reason`, you will fulfil overpaid and underpaid orders identically — which may or may not be what you want.
+**Overpayment is not a status.** An accepted overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the `:detail` view of the intent carries an `overpayment` object with the excess. If you branch on `status === "completed"` and ignore `state_reason`, you will fulfil overpaid and underpaid orders identically, which may or may not be what you want.
 
 **`canceled_by_agent` lands in `expired`, not in a cancel status.** There is no `canceled` status. An agentic cancel is modelled as an early expiry.
 
@@ -112,4 +112,4 @@ Transactions have their own statuses (`pending`, `confirming`, `confirmed`, `sub
 | → `failed` | `payment_intent.failed` |
 | → `refunded` | `payment_intent.refunded` |
 
-The agentic cancel path emits `payment_intent.canceled`, which **cannot be subscribed to** — see [Webhooks](/webhooks#events-you-cannot-receive). Watch for `payment_intent.expired` with `state_reason: "canceled_by_agent"` instead.
+The agentic cancel path emits `payment_intent.canceled`, which **cannot be subscribed to**. See [Webhooks](/webhooks#events-you-cannot-receive). Watch for `payment_intent.expired` with `state_reason: "canceled_by_agent"` instead.

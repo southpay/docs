@@ -4,7 +4,7 @@ description: "Return crypto to a customer for a completed, failed or expired pay
 sidebarTitle: "Refunds"
 ---
 
-A refund sends crypto back on-chain, by default to the address the customer paid from. Refunds always belong to a payment intent. One request can produce several refund records — one per asset the intent received — so both endpoints return an array.
+A refund sends crypto back on-chain, by default to the address the customer paid from. Refunds always belong to a payment intent. One request can produce several refund records, one per asset the intent received, so both endpoints return an array.
 
 Amounts you send are decimal major units of the crypto asset. Amounts you read back are atomic-unit strings: `decimal = atomic / 10^atomic_decimals`.
 
@@ -12,19 +12,19 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Authentication and scope
 
-`GET` requires `refunds:read`, `POST` requires `refunds:write`. Note that this is a different resource from `payments`, even though the path is nested under a payment intent — a key holding only `payments:write` cannot refund.
+`GET` requires `refunds:read`, `POST` requires `refunds:write`. Note that this is a different resource from `payments`, even though the path is nested under a payment intent. A key holding only `payments:write` cannot refund.
 
 Agents use a separate endpoint with different error semantics. See [Agentic API](/api-reference/agentic#refund-a-payment).
 
 ## Where refunds come from
 
-**Automatic.** When a payment is rejected — overpaid on a store that does not accept overpayments, or underpaid past expiry on a store that does not accept underpayments — SouthPay refunds the confirmed funds itself. These carry `reason` `failed_overpaid` or `failed_underpaid`.
+**Automatic.** When a payment is rejected, either overpaid on a store that does not accept overpayments or underpaid past expiry on a store that does not accept underpayments, SouthPay refunds the confirmed funds itself. These carry `reason` `failed_overpaid` or `failed_underpaid`.
 
 **Requested.** You call `POST /payments/{id}/refunds`. These carry `reason` `merchant_requested`.
 
 ## List refunds for a payment intent
 
-**`GET /payments/{payment_intent_id}/refunds`** — scope `refunds:read`.
+**`GET /payments/{payment_intent_id}/refunds`**. Scope `refunds:read`.
 
 Returns a **bare array**, newest first. No envelope, no pagination.
 
@@ -57,7 +57,7 @@ curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6
 
 ## Request a refund
 
-**`POST /payments/{payment_intent_id}/refunds`** — scope `refunds:write`. `Idempotency-Key` is **required**.
+**`POST /payments/{payment_intent_id}/refunds`**. Scope `refunds:write`. `Idempotency-Key` is **required**.
 
 An intent is refundable while its status is `completed`, `failed` or `expired` and it still holds confirmed funds that have not already been refunded.
 
@@ -115,7 +115,7 @@ curl -X POST https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2
 
 ### Idempotency behaviour
 
-Your `Idempotency-Key` is not used verbatim. SouthPay derives a per-asset key from it, so a payment that received two assets produces two refund records under one key you sent. Replaying the same key returns the existing refunds — still with status `201`, not `200`.
+Your `Idempotency-Key` is not used verbatim. SouthPay derives a per-asset key from it, so a payment that received two assets produces two refund records under one key you sent. Replaying the same key returns the existing refunds, still with status `201`, not `200`.
 
 For `failed` and `expired` intents the response contains **every** refund on the intent, not only the ones this call created.
 
@@ -171,7 +171,7 @@ When a refund reaches `confirmed`, its payment intent moves to `refunded` with `
 
 ## Errors
 
-Every failure on this endpoint returns `422` with the flat envelope `{"error": "<message>"}`. The value is the human-readable sentence below — **not** a machine-readable code and **not** an internal identifier.
+Every failure on this endpoint returns `422` with the flat envelope `{"error": "<message>"}`. The value is the human-readable sentence below. It is **not** a machine-readable code and **not** an internal identifier.
 
 | Message | Cause |
 | --- | --- |
@@ -194,5 +194,5 @@ Every failure on this endpoint returns `422` with the flat envelope `{"error": "
 A `404` for an unknown payment intent comes from the global handler and uses the *structured* envelope instead: `{"error": {"message": "…", "code": null}}`. Handle both shapes.
 
 <Note>
-Only the agentic refund endpoint returns machine-readable codes — `not_refundable`, `nothing_to_refund`, `invalid_amount`, `asset_not_found`, `ambiguous_asset`, `invalid_destination`, `insufficient_balance`. This endpoint returns the message text only, so match on status code and endpoint, never on the string.
+Only the agentic refund endpoint returns machine-readable codes: `not_refundable`, `nothing_to_refund`, `invalid_amount`, `asset_not_found`, `ambiguous_asset`, `invalid_destination`, `insufficient_balance`. This endpoint returns the message text only, so match on status code and endpoint, never on the string.
 </Note>

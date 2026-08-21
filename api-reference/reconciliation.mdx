@@ -12,7 +12,7 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Get the reconciliation snapshot
 
-**`GET /payment_intents/{payment_intent_id}/reconciliation`** — scope `payments:read`.
+**`GET /payment_intents/{payment_intent_id}/reconciliation`**. Scope `payments:read`.
 
 <Note>
 This is the only payment route that uses the `payment_intents` path segment. Every other payment route uses `payments`. The `reconciliation_status` field on a payment intent is a shortcut to the `status` returned here.
@@ -79,7 +79,7 @@ curl https://api.southpay.io/api/v2/payment_intents/7b1f0c2e-2b0a-4c31-9f0e-1d2c
 
 ## Before the first check
 
-An intent that has never been reconciled — because it is unpaid, or because the checker has not run yet — still returns `200`, not `404`. You get a placeholder:
+An intent that has never been reconciled, because it is unpaid or because the checker has not run yet, still returns `200`, not `404`. You get a placeholder:
 
 ```json Response 200
 {

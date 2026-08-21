@@ -141,6 +141,7 @@
             "pages": [
               "idempotency",
               "errors",
+              "rate-limits",
               "best-practices"
             ]
           },

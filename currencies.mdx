@@ -70,7 +70,7 @@ These ten are the values accepted for `currency` on a payment intent. The intent
 | `NOK` | Norwegian Krone | No |
 
 <Warning>
-**The two lists are not the same length, and nothing warns you.** A payout schedule's `minimum_fiat_currency` accepts only the first six. Set it to `DKK`, `CHF`, `SEK` or `NOK` and it falls back to `USD` — your threshold is then interpreted as US dollars, silently.
+**The two lists are not the same length, and nothing warns you.** A payout schedule's `minimum_fiat_currency` accepts only the first six. Set it to `DKK`, `CHF`, `SEK` or `NOK` and it falls back to `USD`. Your threshold is then interpreted as US dollars, silently.
 
 A bank account on a [fiat payout destination](/payout-destinations) can be denominated in any of the ten.
 </Warning>
@@ -109,7 +109,7 @@ Customers can pay with any of the assets below that your store has enabled. The 
 | ETC | Ethereum Classic | Native | `ETC` | 18 |
 
 <Warning>
-Native ether is `ETH`. There is no `ETH_ETH` and no `ETH_ETH_ERC20`. There is no deposit asset on BNB Smart Chain, Arbitrum, Base, Optimism or Algorand — a customer cannot pay you on any of those.
+Native ether is `ETH`. There is no `ETH_ETH` and no `ETH_ETH_ERC20`. There is no deposit asset on BNB Smart Chain, Arbitrum, Base, Optimism or Algorand. A customer cannot pay you on any of those.
 </Warning>
 
 `USDC` on Stellar carries **7** decimals, not 6 like every other USDC. Read `atomic_decimals` off the asset rather than assuming a value per token.

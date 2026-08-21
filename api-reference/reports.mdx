@@ -6,8 +6,8 @@ sidebarTitle: "Reports"
 
 Reports are PDFs covering a closed date range, generated from the ledger. Two types exist:
 
-- `accounting_transactions` — a ledger-level listing of every entry in the period.
-- `merchant_statement` — a summarized statement for the period.
+- `accounting_transactions` is a ledger-level listing of every entry in the period.
+- `merchant_statement` is a summarized statement for the period.
 
 Generation is asynchronous and cached. The first request for a given type, range and currency queues a job and returns `202`. Once the job finishes, the same request returns `200` with a download link. Repeating the request reuses the existing report rather than regenerating it.
 
@@ -15,7 +15,7 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Authentication and scope
 
-Reports map to the `balances` resource, so `GET` requires **`balances:read`** — not a `reports` scope, which does not exist. Publishable keys are rejected.
+Reports map to the `balances` resource, so `GET` requires **`balances:read`**, not a `reports` scope, which does not exist. Publishable keys are rejected.
 
 ## Data availability
 
@@ -28,7 +28,7 @@ Read the current boundary from `available_through` on the [index endpoint](#list
 
 ## Request a report
 
-**`GET /reports/accounting_transactions`** and **`GET /reports/merchant_statement`** — scope `balances:read`.
+**`GET /reports/accounting_transactions`** and **`GET /reports/merchant_statement`**. Scope `balances:read`.
 
 Both take the same parameters and return the same body shapes.
 
@@ -101,7 +101,7 @@ A `failed` report is retried automatically on your next request. So is a `pendin
 
 ## List recent reports
 
-**`GET /reports`** — scope `balances:read`. No parameters.
+**`GET /reports`**. Scope `balances:read`. No parameters.
 
 Returns the 50 most recent reports for the store, newest first, plus the current availability boundary.
 
@@ -144,14 +144,14 @@ curl https://api.southpay.io/api/v2/reports \
 
 <ResponseField name="reports" type="object[]" required>
   <Expandable title="properties">
-    <ResponseField name="id" type="integer">Report id. An integer, not a UUID — reports are the exception in this API.</ResponseField>
+    <ResponseField name="id" type="integer">Report id. An integer, not a UUID. Reports are the exception in this API.</ResponseField>
     <ResponseField name="report_type" type="string">`accounting_transactions` or `merchant_statement`.</ResponseField>
     <ResponseField name="status" type="string">`pending`, `generated`, `failed` or `no_data`.</ResponseField>
     <ResponseField name="period_from" type="string">Start of the covered range.</ResponseField>
     <ResponseField name="period_to" type="string">End of the covered range.</ResponseField>
     <ResponseField name="currency" type="string | null">Null when the report covers all currencies.</ResponseField>
     <ResponseField name="generated_at" type="string | null">Null until generation finishes.</ResponseField>
-    <ResponseField name="error" type="string | null">Failure text. Free-form — do not match on it.</ResponseField>
+    <ResponseField name="error" type="string | null">Failure text. Free-form, so do not match on it.</ResponseField>
     <ResponseField name="url" type="string">Presigned link. Present only when `status` is `generated`.</ResponseField>
     <ResponseField name="expires_in" type="integer">Present only alongside `url`.</ResponseField>
   </Expandable>
@@ -161,7 +161,7 @@ curl https://api.southpay.io/api/v2/reports \
   The latest date a report may end on, as of now. Use it to build a valid `end_date`.
 </ResponseField>
 
-Reports are cached per store, type, date range and currency. Requesting the same combination twice returns the same record — there is no way to force regeneration other than changing a parameter.
+Reports are cached per store, type, date range and currency. Requesting the same combination twice returns the same record. There is no way to force regeneration other than changing a parameter.
 
 ## Errors
 

@@ -16,7 +16,7 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## List balances
 
-**`GET /balances`** — scope `balances:read`. No parameters.
+**`GET /balances`**. Scope `balances:read`. No parameters.
 
 <CodeGroup>
 ```bash Request
@@ -61,19 +61,19 @@ curl https://api.southpay.io/api/v2/balances \
 
   <Expandable title="properties">
     <ResponseField name="asset_id" type="string">
-      The canonical asset identifier used everywhere else in the API — payouts, refunds, swaps, schedules.
+      The canonical asset identifier used everywhere else in the API: payouts, refunds, swaps, schedules.
     </ResponseField>
     <ResponseField name="coin_symbol" type="string">For example `USDC`.</ResponseField>
     <ResponseField name="chain_symbol" type="string">For example `ETH`.</ResponseField>
     <ResponseField name="atomic_decimals" type="integer">Divisor exponent for `balance_atomic`.</ResponseField>
     <ResponseField name="balance_atomic" type="string">
-      Available balance in atomic units, as a string. Large values exceed the precision of a JavaScript number — parse it as a BigInt or decimal, not with `Number()`.
+      Available balance in atomic units, as a string. Large values exceed the precision of a JavaScript number. Parse it as a BigInt or decimal, not with `Number()`.
     </ResponseField>
   </Expandable>
 </ResponseField>
 
 <ResponseField name="stablecoin_summary" type="object[]" required>
-  Cross-chain totals for USDC and USDT. **Always exactly two entries in that order**, even when you hold none — a zero balance shows as `total_atomic: "0"` with `atomic_decimals: 6`.
+  Cross-chain totals for USDC and USDT. **Always exactly two entries in that order**, even when you hold none. A zero balance shows as `total_atomic: "0"` with `atomic_decimals: 6`.
 
   <Expandable title="properties">
     <ResponseField name="coin_symbol" type="string">`USDC` or `USDT`.</ResponseField>
@@ -88,7 +88,7 @@ curl https://api.southpay.io/api/v2/balances \
   <Expandable title="properties">
     <ResponseField name="currency" type="string">The store's settlement currency, for example `USD`.</ResponseField>
     <ResponseField name="amount_cents" type="integer | null">
-      Minor units. **Null when a conversion rate could not be resolved** — treat null as "unknown", never as zero.
+      Minor units. **Null when a conversion rate could not be resolved**. Treat null as "unknown", never as zero.
     </ResponseField>
   </Expandable>
 </ResponseField>
@@ -103,7 +103,7 @@ This endpoint returns everything in one response. There is no `data` wrapper, no
 
 ## Asset identifiers
 
-`asset_id` is the primary key for an asset across the whole API. It is not always `CHAIN_COIN` — native coins use a bare symbol.
+`asset_id` is the primary key for an asset across the whole API. It is not always `CHAIN_COIN`. Native coins use a bare symbol.
 
 | asset_id | Coin | Chain |
 | --- | --- | --- |
@@ -116,7 +116,7 @@ This endpoint returns everything in one response. There is no `data` wrapper, no
 | `SETH` | ETH | Ethereum Sepolia (test mode) |
 
 <Warning>
-`ETH_ETH` and `BSC_USDT` do not exist. Native Ethereum is `ETH`, and there is no BSC deposit asset at all — BSC appears only as a payout *destination* network. A request naming a non-existent `asset_id` returns `404` `Asset not found`.
+`ETH_ETH` and `BSC_USDT` do not exist. Native Ethereum is `ETH`, and there is no BSC deposit asset at all. BSC appears only as a payout *destination* network. A request naming a non-existent `asset_id` returns `404` `Asset not found`.
 </Warning>
 
 Test mode has exactly one usable asset, `SETH` on Ethereum Sepolia. The seeded `USDT_SETH` and `USDC_SETH` assets are inactive, so a test-mode store's balances list is `SETH` or empty. See [supported currencies and assets](/currencies) for the full live catalogue.

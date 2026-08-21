@@ -3,7 +3,7 @@ title: "Checkout widget"
 description: "Embed SouthPay hosted checkout in your page with the SouthPay.js browser SDK: create intents, mount inline or as a modal, and handle events."
 ---
 
-SouthPay.js renders SouthPay's hosted checkout inside your page, inline or as a modal. All payment UI — QR code, wallet connect, network picker, status, countdown — lives in an iframe served from the checkout origin, so the script itself is a thin DOM shell with no framework and no dependencies.
+SouthPay.js renders SouthPay's hosted checkout inside your page, inline or as a modal. All payment UI (QR code, wallet connect, network picker, status, countdown) lives in an iframe served from the checkout origin, so the script itself is a thin DOM shell with no framework and no dependencies.
 
 It does two things: create a payment intent from the browser with a publishable key, and mount the checkout for a reference you already have.
 
@@ -16,7 +16,7 @@ It does two things: create a payment intent from the browser with a publishable 
 The script defines a global `SouthPay`. Read the version it loaded from `SouthPay.VERSION`.
 
 <Note>
-  There is no npm package. SouthPay.js ships only as this hosted bundle — load it with a `<script>` tag rather than a bundler import.
+  There is no npm package. SouthPay.js ships only as this hosted bundle. Load it with a `<script>` tag rather than a bundler import.
 </Note>
 
 ## Create a client
@@ -27,7 +27,7 @@ The script defines a global `SouthPay`. Read the version it loaded from `SouthPa
 const southpay = SouthPay("sp_pk_live_...");
 ```
 
-The key must match `sp_pk_live_...` or `sp_pk_test_...`. Anything else — in particular a secret `sp_` key — throws `invalid_publishable_key` immediately. Publishable keys can only create checkouts, which is what makes them safe to ship to a browser.
+The key must match `sp_pk_live_...` or `sp_pk_test_...`. Anything else, in particular a secret `sp_` key, throws `invalid_publishable_key` immediately. Publishable keys can only create checkouts, which is what makes them safe to ship to a browser.
 
 A second argument overrides the endpoints:
 
@@ -67,7 +67,7 @@ const { reference } = await southpay.paymentIntents.create({
 ```
 
 <ParamField path="amount" type="string" required>
-  A positive decimal string in **major** units — `"49.99"`, not `4999`. See [Amount format](#amount-format).
+  A positive decimal string in **major** units: `"49.99"`, not `4999`. See [Amount format](#amount-format).
 </ParamField>
 
 <ParamField path="currency" type="string" required>
@@ -103,7 +103,7 @@ const { reference } = await southpay.paymentIntents.create({
 </ParamField>
 
 <ParamField path="idempotencyKey" type="string">
-  Sent as the `Idempotency-Key` header. If you omit it the SDK generates a UUID per call, so a retry you did not write is a *new* intent — supply your own to make retries safe. See [Idempotency](/idempotency).
+  Sent as the `Idempotency-Key` header. If you omit it the SDK generates a UUID per call, so a retry you did not write is a *new* intent. Supply your own to make retries safe. See [Idempotency](/idempotency).
 </ParamField>
 
 <ParamField path="timeoutMs" type="number" default="20000">
@@ -114,7 +114,7 @@ const { reference } = await southpay.paymentIntents.create({
   Cancel the request yourself. Aborting throws `network_error`.
 </ParamField>
 
-The call returns only `{ reference }`. To read the full intent — addresses, amounts, status — fetch it server-side with a secret key; a publishable key cannot.
+The call returns only `{ reference }`. To read the full intent, including addresses, amounts and status, fetch it server-side with a secret key; a publishable key cannot.
 
 ## Mount the checkout
 
@@ -135,7 +135,7 @@ const handle = southpay.checkout.mount({ reference, container: "#checkout" });
 </ParamField>
 
 <Warning>
-  Passing a `container` that matches nothing throws `container_not_found`. It does not silently fall back to a modal — only *omitting* `container` gives you a modal.
+  Passing a `container` that matches nothing throws `container_not_found`. It does not silently fall back to a modal. Only *omitting* `container` gives you a modal.
 </Warning>
 
 `mount` returns a handle:
@@ -188,7 +188,7 @@ Pass callbacks to `mount`.
 
 | Callback | Fires when | Receives |
 | --- | --- | --- |
-| `onReady` | The iframe has loaded and handshaked | — |
+| `onReady` | The iframe has loaded and handshaked | Nothing |
 | `onStatusChange` | Status changes on-chain | `{ reference, status }` |
 | `onCompleted` | Payment completed | `{ reference, successUrl }` |
 | `onFailed` | Payment failed | `{ reference, status }` |
@@ -196,15 +196,15 @@ Pass callbacks to `mount`.
 | `onError` | The widget could not load | `SouthpayError` |
 
 <Warning>
-  **If you do not pass `onCompleted`, the SDK navigates the buyer to `successUrl` itself.** Pass `onCompleted` whenever you want to stay on the page — providing it suppresses the automatic redirect entirely.
+  **If you do not pass `onCompleted`, the SDK navigates the buyer to `successUrl` itself.** Pass `onCompleted` whenever you want to stay on the page. Providing it suppresses the automatic redirect entirely.
 </Warning>
 
-`onError` covers loading failures only — the iframe erroring, or no handshake within 20 seconds. Errors from `paymentIntents.create` are thrown, not routed here, so wrap that call in `try/catch`.
+`onError` covers loading failures only: the iframe erroring, or no handshake within 20 seconds. Errors from `paymentIntents.create` are thrown, not routed here, so wrap that call in `try/catch`.
 
 Statuses are the six in the [payment lifecycle](/payment-lifecycle). SouthPay derives status from the chain; you read it, you never set it.
 
 <Warning>
-  Never fulfill an order on a browser callback alone. Any page can invoke `onCompleted` without a real payment. The only source of truth is the intent reaching `completed` server-side — confirm with a [webhook](/webhooks) or by fetching the payment with a secret key.
+  Never fulfill an order on a browser callback alone. Any page can invoke `onCompleted` without a real payment. The only source of truth is the intent reaching `completed` server-side. Confirm with a [webhook](/webhooks) or by fetching the payment with a secret key.
 </Warning>
 
 ## Amount format
@@ -239,7 +239,7 @@ try {
 }
 ```
 
-`SouthPay.isSouthpayError` is safer than `instanceof` — it also matches errors thrown by a differently-bundled copy of the SDK on the same page.
+`SouthPay.isSouthpayError` is safer than `instanceof` because it also matches errors thrown by a differently-bundled copy of the SDK on the same page.
 
 | Code | Raised by | Cause |
 | --- | --- | --- |
@@ -275,7 +275,7 @@ An older, smaller script is still served from the checkout origin:
 <script src="https://pay.southpay.io/embed.js"></script>
 ```
 
-It defines `window.Southpay` — note the lowercase `p`, unlike the `SouthPay` global above — with a single method:
+It defines `window.Southpay` (note the lowercase `p`, unlike the `SouthPay` global above) with a single method:
 
 ```javascript
 const handle = Southpay.mount({

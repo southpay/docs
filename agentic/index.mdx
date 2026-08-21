@@ -4,7 +4,7 @@ description: "Run a SouthPay store from an AI agent using scoped spa_ credential
 sidebarTitle: "Overview"
 ---
 
-SouthPay lets an AI agent operate a merchant store: create payments, watch them settle, read balances and rates, and — once a human has configured the controls — issue refunds and disburse payouts. Agents authenticate with an agent credential (`spa_live_…` / `spa_test_…`), which is a distinct credential type from an API key or an OAuth token.
+SouthPay lets an AI agent operate a merchant store: create payments, watch them settle, read balances and rates, and, once a human has configured the controls, issue refunds and disburse payouts. Agents authenticate with an agent credential (`spa_live_…` / `spa_test_…`), which is a distinct credential type from an API key or an OAuth token.
 
 There are two ways in, and they reach the same endpoints:
 
@@ -21,10 +21,10 @@ Money movement fails closed. On a store with no extra configuration:
 | --- | --- |
 | Read account, payments, payouts, balances, tokens, payout limits, exchange rates | Allowed, subject to credential scope |
 | Create a payment, cancel a pending payment | Allowed |
-| Refund a payment | Blocked — `403 mandate_required` |
-| Enable or disable an accepted token | Blocked — `403 mandate_required` |
-| Create a payout | Blocked — `403 payout_controls_required` until a spend limit exists for the asset |
-| Issue a session mandate, settle an x402 charge | Blocked — `403 mandate_required` |
+| Refund a payment | Blocked with `403 mandate_required` |
+| Enable or disable an accepted token | Blocked with `403 mandate_required` |
+| Create a payout | Blocked with `403 payout_controls_required` until a spend limit exists for the asset |
+| Issue a session mandate, settle an x402 charge | Blocked with `403 mandate_required` |
 | Read public token market data | Allowed, no credential required |
 
 Spend limits are configured by the merchant in the dashboard. The rest need an authorization provider, which SouthPay support enables per store. [Agent authorization](/agentic/authorization) covers exactly what unblocks what.
@@ -40,14 +40,14 @@ flowchart LR
   Controls --> Store[Store payments,<br/>balances, payouts]
 ```
 
-- **[Agent credentials](/agentic/agent-credentials)** — bearer tokens carrying up to eight scopes and an optional expiry, created by the merchant in the dashboard or minted through the OAuth exchange.
-- **[Authorization](/agentic/authorization)** — three controls that compose: credential scopes, per-asset spend limits with a daily counter, and mandates verified by an authorization provider.
-- **[MCP server](/agentic/mcp-server)** — connection, sessions, browser login, and the full tool reference.
-- **[x402 and session mandates](/agentic/x402)** — capped envelopes for pay-per-call machine-to-machine commerce. Ledger-only unless on-chain dispatch is enabled.
+- **[Agent credentials](/agentic/agent-credentials)**. Bearer tokens carrying up to eight scopes and an optional expiry, created by the merchant in the dashboard or minted through the OAuth exchange.
+- **[Authorization](/agentic/authorization)**. Three controls that compose: credential scopes, per-asset spend limits with a daily counter, and mandates verified by an authorization provider.
+- **[MCP server](/agentic/mcp-server)**. Connection, sessions, browser login, and the full tool reference.
+- **[x402 and session mandates](/agentic/x402)**. Capped envelopes for pay-per-call machine-to-machine commerce. Ledger-only unless on-chain dispatch is enabled.
 
 ## Isolation
 
-An agent sees only its own records. Every agentic query is filtered by the calling credential, so payments, payouts, refunds and settlements created by one credential are invisible to another on the same store. An agent also cannot manage credentials — not its own, and not any other.
+An agent sees only its own records. Every agentic query is filtered by the calling credential, so payments, payouts, refunds and settlements created by one credential are invisible to another on the same store. An agent also cannot manage credentials, neither its own nor any other.
 
 Credentials are mode-locked by their prefix. A `spa_test_` credential sees only test-mode data, where the single usable asset is `SETH` on Ethereum Sepolia. A `spa_live_` credential sees only live data. There is no mode header on the agentic API.
 
@@ -55,7 +55,7 @@ Credentials are mode-locked by their prefix. A `spa_test_` credential sees only 
 
 Agentic endpoints allow **120 requests per minute per credential**, returning `429` with code `rate_limited` when exceeded. No `Retry-After` header is set, so back off on your own schedule.
 
-`GET /api/v2/agentic/market_data` is the exception: it is deliberately unauthenticated and limited to 30 requests per minute per IP.
+`GET /api/v2/agentic/market_data` is the exception: it is deliberately unauthenticated and limited to 30 requests per minute per IP. See [Rate limits](/rate-limits) for every throttled path on the API.
 
 ## Get started
 

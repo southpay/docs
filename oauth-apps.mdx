@@ -4,7 +4,7 @@ description: "The client record behind the OAuth flow: public versus confidentia
 sidebarTitle: "OAuth apps"
 ---
 
-An **OAuth application** is the developer-side record — `client_id`, redirect URIs, requested scopes — that lets you run the Authorization Code with PKCE flow against a merchant's SouthPay account. Tokens issued through it look like `spo_…` and reach any public endpoint the granted scopes allow.
+An **OAuth application** is the developer-side record (`client_id`, redirect URIs, requested scopes) that lets you run the Authorization Code with PKCE flow against a merchant's SouthPay account. Tokens issued through it look like `spo_…` and reach any public endpoint the granted scopes allow.
 
 Register the app once, then implement the runtime flow described in [Authentication](/authentication#oauth-20).
 
@@ -59,7 +59,7 @@ An app declares the scopes it may ever request. Eighteen exist; the merchant app
 One rough edge in the consent flow to work around:
 
 <Note>
-The consent screen renders no description for `accounts:read`, `accounts:write`, `accounts:act` and `agents:write` — merchants see the scope name and nothing else. If your app requests any of them, explain what they do in your own UI before you send the merchant to the authorize page.
+The consent screen renders no description for `accounts:read`, `accounts:write`, `accounts:act` and `agents:write`. Merchants see the scope name and nothing else. If your app requests any of them, explain what they do in your own UI before you send the merchant to the authorize page.
 </Note>
 
 ## Creating an app
@@ -113,7 +113,7 @@ Content-Type: application/json
 | `website_url` | No | Public marketing URL |
 | `logo_url` | No | Shown on the consent screen |
 
-`id` is a bare UUID. `client_id` is `spo_app_dev_` followed by 24 hex characters. Validation failures come back as `{"errors": ["…"]}` with `422` — the list shape, not the object shape. See [Errors](/errors).
+`id` is a bare UUID. `client_id` is `spo_app_dev_` followed by 24 hex characters. Validation failures come back as `{"errors": ["…"]}` with `422`, the list shape rather than the object shape. See [Errors](/errors).
 
 ## Reading and updating
 

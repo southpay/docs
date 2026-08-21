@@ -47,7 +47,7 @@ Some support and staff tools can simulate deposits. Those are internal, not expo
 
 ## Testing webhooks
 
-Deliveries in test mode are real HTTP requests to a real URL. Your endpoint must be publicly reachable — outbound deliveries to private, loopback, link-local and unique-local addresses are blocked before the request is sent, and the block marks your endpoint `error`. Use a tunnel, not `localhost`.
+Deliveries in test mode are real HTTP requests to a real URL. Your endpoint must be publicly reachable. Outbound deliveries to private, loopback, link-local and unique-local addresses are blocked before the request is sent, and the block marks your endpoint `error`. Use a tunnel, not `localhost`.
 
 Fire a synthetic delivery without paying anything:
 
@@ -68,7 +68,7 @@ Test and live are separate in every dimension, so nothing carries over. Work thr
 Before switching to live mode, confirm:
 
 - [ ] A live secret key exists, created in the dashboard, stored in your secrets manager
-- [ ] A **live** webhook endpoint is registered — test endpoints do not receive live events
+- [ ] A **live** webhook endpoint is registered, since test endpoints do not receive live events
 - [ ] The live signing secret is deployed; it is a different value from the test one
 - [ ] Your handler verifies `Southpay-Signature` against the raw body with a timing-safe comparison
 - [ ] Your handler returns `2xx` for events it ignores, since [any non-2xx is retried ten times](/webhooks#delivery-and-retries)
@@ -76,7 +76,7 @@ Before switching to live mode, confirm:
 - [ ] `completed`, `failed`, `expired` and `refunded` all have a code path
 - [ ] Every money-moving `POST` sends an `Idempotency-Key`, and live keys cannot collide with test keys
 - [ ] A [payout destination](/payout-destinations) is configured and selected
-- [ ] The assets you expect are enabled on the store — test mode never showed you this
+- [ ] The assets you expect are enabled on the store, which test mode never showed you
 </Check>
 
 That last idempotency item is worth spelling out.

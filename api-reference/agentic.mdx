@@ -4,7 +4,7 @@ description: "REST reference for agent credentials: payments, refunds, payouts, 
 sidebarTitle: "Agentic API"
 ---
 
-The agentic API is a separate surface for autonomous agents acting on a store's behalf. It lives under `/api/v2/agentic`, accepts only `spa_` agent credentials, and returns records the calling credential created — an agent never sees another agent's payments or payouts.
+The agentic API is a separate surface for autonomous agents acting on a store's behalf. It lives under `/api/v2/agentic`, accepts only `spa_` agent credentials, and returns records the calling credential created. An agent never sees another agent's payments or payouts.
 
 For how credentials are issued and how authorization providers work, see [agent credentials](/agentic/agent-credentials) and [authorization](/agentic/authorization). This page is the endpoint reference.
 
@@ -32,13 +32,13 @@ Eight agent scopes exist: `payments:read`, `payments:write`, `payouts:read`, `pa
 
 ### Rate limit
 
-120 requests per minute per credential across all agentic paths except market data. Over the limit you get `429` `{"error": {"message": "Too many requests", "code": "rate_limited"}}`. No `Retry-After` header is set — back off on your own schedule.
+120 requests per minute per credential across all agentic paths except market data. Over the limit you get `429` `{"error": {"message": "Too many requests", "code": "rate_limited"}}`. No `Retry-After` header is set, so back off on your own schedule. See [Rate limits](/rate-limits) for every throttled path.
 
 ## What the default authorization provider blocks
 
 Read this before you write any agent that moves money.
 
-The authorization provider is configured per store, and only SouthPay staff can set it. With no provider — the default for every store — payments work and most other writes are **hard-blocked at `403`**.
+The authorization provider is configured per store, and only SouthPay staff can set it. With no provider, which is the default for every store, payments work and most other writes are **hard-blocked at `403`**.
 
 | Action | Default behaviour |
 | --- | --- |
@@ -56,7 +56,7 @@ Mandates are not optional hardening. Four write paths cannot be used at all with
 
 ## Read agent context
 
-**`GET /agentic/account`** — no scope required. Call this first: it tells you which store you are on, which mode, what you are allowed to do, and whether mandates are available.
+**`GET /agentic/account`**. No scope required. Call this first: it tells you which store you are on, which mode, what you are allowed to do, and whether mandates are available.
 
 <CodeGroup>
 ```bash Request
@@ -107,7 +107,7 @@ curl https://api.southpay.io/api/v2/agentic/account \
 
 ## Create a payment
 
-**`POST /agentic/payments`** — scope `payments:write`. `Idempotency-Key` optional.
+**`POST /agentic/payments`**. Scope `payments:write`. `Idempotency-Key` optional.
 
 The same `payment_intent` envelope as [the public endpoint](/api-reference/payments#create-a-payment-intent), but a smaller field set and stricter amount validation. `title`, `description`, `image_url` and `line_items` are **not** accepted here.
 
@@ -195,13 +195,13 @@ The intent expires 60 minutes after creation. Send the customer to `hosted_url` 
 
 ## Retrieve a payment
 
-**`GET /agentic/payments/{id}`** — scope `payments:read`. Returns the detail view, identical in shape to [the public retrieve endpoint](/api-reference/payments#retrieve-a-payment-intent): `financials`, `transaction`, `overpayment`, `merchant`, `payment_events`, `timeline` and the rest.
+**`GET /agentic/payments/{id}`**. Scope `payments:read`. Returns the detail view, identical in shape to [the public retrieve endpoint](/api-reference/payments#retrieve-a-payment-intent): `financials`, `transaction`, `overpayment`, `merchant`, `payment_events`, `timeline` and the rest.
 
 An id the credential did not create returns `404`.
 
 ## List payments
 
-**`GET /agentic/payments`** — scope `payments:read`. Only this credential's payments, newest first.
+**`GET /agentic/payments`**. Scope `payments:read`. Only this credential's payments, newest first.
 
 <ParamField query="reference" type="string">
   Exact match on the 16-character reference. Upcased before matching.
@@ -224,7 +224,7 @@ Agentic payments use the `meta` envelope. Agentic payouts and x402 settlements u
 
 ## Cancel a payment
 
-**`POST /agentic/payments/{id}/cancel`** — scope `payments:write`. No body.
+**`POST /agentic/payments/{id}/cancel`**. Scope `payments:write`. No body.
 
 Only a `pending` intent can be canceled. The intent moves to `status: "expired"` with `state_reason: "canceled_by_agent"`, and `200` returns the full detail view.
 
@@ -248,7 +248,7 @@ Cancellation emits `payment_intent.canceled`, but that event is not in the subsc
 
 ## Refund a payment
 
-**`POST /agentic/payments/{payment_intent_id}/refunds`** — scope `payments:write`. `Idempotency-Key` **required**.
+**`POST /agentic/payments/{payment_intent_id}/refunds`**. Scope `payments:write`. `Idempotency-Key` **required**.
 
 <ParamField body="refund.amount" type="string">
   Decimal major units of the asset. Omit for a full refund.
@@ -258,7 +258,7 @@ Cancellation emits `payment_intent.canceled`, but that event is not in the subsc
   Required when the payment received more than one asset.
 </ParamField>
 
-There is no `destination_address` here — an agent cannot redirect a refund. Funds go back to the paying address.
+There is no `destination_address` here. An agent cannot redirect a refund. Funds go back to the paying address.
 
 Returns `201` with `{"data": [ … ]}`, an array of [refund objects](/api-reference/refunds#response-fields), one per asset. `GET` on the same path lists existing refunds in the same wrapper, unpaginated.
 
@@ -279,7 +279,7 @@ Unlike the merchant refund endpoint, this one returns **machine-readable codes**
 
 ## Create a payout
 
-**`POST /agentic/payouts`** — scope `payouts:write`. `Idempotency-Key` **required**.
+**`POST /agentic/payouts`**. Scope `payouts:write`. `Idempotency-Key` **required**.
 
 Crypto only, to a raw address. Agents cannot use saved payout destinations and cannot off-ramp to fiat. Parameters are top-level.
 
@@ -350,9 +350,9 @@ Check headroom before you call, with [payout limits](#read-payout-limits).
 
 ## Retrieve and list payouts
 
-**`GET /agentic/payouts/{id}`** — scope `payouts:read`. Bare payout object. Unknown id returns `404` `not_found`.
+**`GET /agentic/payouts/{id}`**. Scope `payouts:read`. Bare payout object. Unknown id returns `404` `not_found`.
 
-**`GET /agentic/payouts`** — scope `payouts:read`. Accepts `page` (default 1) and `per_page` (default 25, max 100).
+**`GET /agentic/payouts`**. Scope `payouts:read`. Accepts `page` (default 1) and `per_page` (default 25, max 100).
 
 ```json Response 200
 {
@@ -363,7 +363,7 @@ Check headroom before you call, with [payout limits](#read-payout-limits).
 
 ## Read payout limits
 
-**`GET /agentic/payout_limits`** — scope `assets:read`.
+**`GET /agentic/payout_limits`**. Scope `assets:read`.
 
 Spend caps and remaining headroom for the current UTC day. Call this before a payout rather than discovering a cap through a `403`.
 
@@ -402,7 +402,7 @@ Counters reset at 00:00 UTC. `utc_day` tells you which day the figures belong to
 
 ## Read balances
 
-**`GET /agentic/balances`** — scope `assets:read`.
+**`GET /agentic/balances`**. Scope `assets:read`.
 
 <ParamField query="asset_id" type="string">
   Filter the `balances` array. `settlement_balance` is always computed across all assets regardless.
@@ -427,9 +427,9 @@ This differs from the merchant [balances endpoint](/api-reference/balances): the
 
 ## Read exchange rates
 
-**`GET /agentic/exchange_rates`** — scope `assets:read`.
+**`GET /agentic/exchange_rates`**. Scope `assets:read`.
 
-SouthPay's own rates — the ones applied when pricing a payment. For public market data, use [market data](#market-data) instead.
+SouthPay's own rates, the ones applied when pricing a payment. For public market data, use [market data](#market-data) instead.
 
 <ParamField query="currency" type="string">
   Fiat currency to quote against. Defaults to the store's settlement currency.
@@ -455,7 +455,7 @@ SouthPay's own rates — the ones applied when pricing a payment. For public mar
 }
 ```
 
-`rate` is a string. Assets whose rate cannot be resolved are omitted from the array rather than returned with a null rate — so a shorter list than you expected is a lookup failure, not an empty balance.
+`rate` is a string. Assets whose rate cannot be resolved are omitted from the array rather than returned with a null rate, so a shorter list than you expected is a lookup failure, not an empty balance.
 
 | Status | Code | Cause |
 | --- | --- | --- |
@@ -464,7 +464,7 @@ SouthPay's own rates — the ones applied when pricing a payment. For public mar
 
 ## Manage accepted tokens
 
-**`GET /agentic/tokens`** — scope `assets:read`.
+**`GET /agentic/tokens`**. Scope `assets:read`.
 
 ```json Response 200
 {
@@ -479,7 +479,7 @@ SouthPay's own rates — the ones applied when pricing a payment. For public mar
 
 `accepted` is what customers can currently pay with. `available` is everything else active in this mode. The two arrays never overlap, and `active` mirrors which array the entry is in.
 
-**`PATCH /agentic/tokens/{asset_id}`** — scope `assets:write`.
+**`PATCH /agentic/tokens/{asset_id}`**. Scope `assets:write`.
 
 <ParamField body="active" type="boolean" required>
   True to accept the asset, false to stop accepting it.
@@ -505,7 +505,7 @@ SouthPay's own rates — the ones applied when pricing a payment. For public mar
 
 A mandate is a signed spending envelope an agent draws down against, used by x402 settlements. Concepts are covered in the [authorization guide](/agentic/authorization).
 
-**`POST /agentic/mandates`** — scope `x402:write`. Parameters are top-level.
+**`POST /agentic/mandates`**. Scope `x402:write`. Parameters are top-level.
 
 <ParamField body="asset_id" type="string" required>
   Asset the cap is denominated in.
@@ -553,9 +553,9 @@ A mandate is a signed spending envelope an agent draws down against, used by x40
 
 `status` is `active`, `revoked`, `expired` or `exhausted`. `remaining_atomic` is the figure to check before settling.
 
-**`GET /agentic/mandates`** — scope `x402:read`. Returns `{"data": [ … ]}`, capped at 100 and **not paginated** — there are no page parameters and no total.
+**`GET /agentic/mandates`**. Scope `x402:read`. Returns `{"data": [ … ]}`, capped at 100 and **not paginated**: there are no page parameters and no total.
 
-**`GET /agentic/mandates/{id}`** — scope `x402:read`. Bare mandate object. Unknown id returns `404` `not_found`.
+**`GET /agentic/mandates/{id}`**. Scope `x402:read`. Bare mandate object. Unknown id returns `404` `not_found`.
 
 | Status | Code | Cause |
 | --- | --- | --- |
@@ -567,12 +567,12 @@ A mandate is a signed spending envelope an agent draws down against, used by x40
 
 ## x402 settlements
 
-**`POST /agentic/x402/settlements`** — scope `x402:write`. `Idempotency-Key` **required**. Parameters are top-level.
+**`POST /agentic/x402/settlements`**. Scope `x402:write`. `Idempotency-Key` **required**. Parameters are top-level.
 
 <ParamField body="asset_id" type="string" required />
 
 <ParamField body="amount_atomic" type="string" required>
-  Atomic units. **Zero is accepted** — the check rejects negatives only.
+  Atomic units. **Zero is accepted**. The check rejects negatives only.
 </ParamField>
 
 <ParamField body="mandate_ref" type="string" required>
@@ -614,14 +614,14 @@ A mandate is a signed spending envelope an agent draws down against, used by x40
 ```
 
 <Warning>
-Settlements are ledger-only by default. On-chain dispatch is off unless SouthPay staff enable it for your store. A `confirmed` settlement without dispatch enabled means the internal ledger moved, not that a transaction was broadcast — `tx_ref` stays null.
+Settlements are ledger-only by default. On-chain dispatch is off unless SouthPay staff enable it for your store. A `confirmed` settlement without dispatch enabled means the internal ledger moved, not that a transaction was broadcast. `tx_ref` stays null.
 </Warning>
 
 `status` is `pending`, `submitted`, `confirmed` or `failed`.
 
-**`GET /agentic/x402/settlements`** — scope `x402:read`. Accepts `page` and `per_page` (default 25, max 100), and returns the `pagination` envelope.
+**`GET /agentic/x402/settlements`**. Scope `x402:read`. Accepts `page` and `per_page` (default 25, max 100), and returns the `pagination` envelope.
 
-**`GET /agentic/x402/settlements/{id}`** — scope `x402:read`. Unknown id returns `404` `not_found`.
+**`GET /agentic/x402/settlements/{id}`**. Scope `x402:read`. Unknown id returns `404` `not_found`.
 
 | Status | Code | Cause |
 | --- | --- | --- |
@@ -635,7 +635,7 @@ Settlements are ledger-only by default. On-chain dispatch is off unless SouthPay
 
 ## Market data
 
-**`GET /agentic/market_data`** — **unauthenticated**. No credential, no scope.
+**`GET /agentic/market_data`**. **Unauthenticated**. No credential, no scope.
 
 Public reference prices from CoinGecko. It touches no SouthPay funds and reads no store data, which is why it needs no credential.
 
@@ -676,6 +676,6 @@ These are public market prices, not the rates SouthPay applies. For the rate use
 
 ## Payment statuses
 
-Agentic payments use the same six statuses as merchant payments: `pending`, `processing`, `completed`, `expired`, `failed`, `refunded`. There is no `overpaid` status — an overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the excess is in the `overpayment` object on the detail view.
+Agentic payments use the same six statuses as merchant payments: `pending`, `processing`, `completed`, `expired`, `failed`, `refunded`. There is no `overpaid` status. An overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the excess is in the `overpayment` object on the detail view.
 
 `state_reason` has ten values, including `canceled_by_agent`, which only this API produces. See [payment lifecycle](/payment-lifecycle#state-reasons).

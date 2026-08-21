@@ -14,11 +14,11 @@ Reads require `webhooks:read`, writes require `webhooks:write`. Publishable keys
 
 ## Identifiers
 
-Endpoint and delivery ids are **bare UUIDs**. There is no `we_` or `del_` prefix — no resource in this API uses prefixed ids.
+Endpoint and delivery ids are **bare UUIDs**. There is no `we_` or `del_` prefix. No resource in this API uses prefixed ids.
 
 ## List endpoints
 
-**`GET /webhook_endpoints`** — scope `webhooks:read`.
+**`GET /webhook_endpoints`**. Scope `webhooks:read`.
 
 Returns a **bare array**, newest first. No envelope, no pagination. Soft-deleted endpoints are excluded.
 
@@ -62,12 +62,12 @@ curl https://api.southpay.io/api/v2/webhook_endpoints \
 
 ## Create an endpoint
 
-**`POST /webhook_endpoints`** — scope `webhooks:write`. Idempotency keys are not used here.
+**`POST /webhook_endpoints`**. Scope `webhooks:write`. Idempotency keys are not used here.
 
 All fields go inside a required `webhook_endpoint` object.
 
 <ParamField body="webhook_endpoint.url" type="string" required>
-  Where deliveries are posted. Must resolve to a public address — SouthPay rejects private, loopback and link-local hosts at delivery time.
+  Where deliveries are posted. Must resolve to a public address. SouthPay rejects private, loopback and link-local hosts at delivery time.
 </ParamField>
 
 <ParamField body="webhook_endpoint.subscribed_events" type="string[]" required>
@@ -79,7 +79,7 @@ All fields go inside a required `webhook_endpoint` object.
 </ParamField>
 
 <ParamField body="webhook_endpoint.platform" type="string">
-  Marks this as an e-commerce plugin integration: `woocommerce`, `prestashop`, `shopify`, `magento` or `custom`. Changes create behaviour — see [platform integrations](#platform-integrations). Cannot be changed after create.
+  Marks this as an e-commerce plugin integration: `woocommerce`, `prestashop`, `shopify`, `magento` or `custom`. Changes create behaviour. See [platform integrations](#platform-integrations). Cannot be changed after create.
 </ParamField>
 
 <ParamField body="webhook_endpoint.platform_store_url" type="string">
@@ -91,7 +91,7 @@ All fields go inside a required `webhook_endpoint` object.
 </ParamField>
 
 <Warning>
-Wildcards are not supported. `"*"` and `"payment_intent.*"` both fail validation — subscription matching is literal array containment. To receive everything you must enumerate all 23 event names.
+Wildcards are not supported. `"*"` and `"payment_intent.*"` both fail validation. Subscription matching is literal array containment. To receive everything you must enumerate all 23 event names.
 </Warning>
 
 <CodeGroup>
@@ -176,7 +176,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
 </ResponseField>
 
 <ResponseField name="api_version" type="string" required>
-  Stored as `"2026-04-14"`. It is informational — no payload builder reads it, so changing endpoints does not change payload shape.
+  Stored as `"2026-04-14"`. It is informational. No payload builder reads it, so changing endpoints does not change payload shape.
 </ResponseField>
 
 <ResponseField name="verified_at" type="string | null">
@@ -189,7 +189,7 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
 
 ## Retrieve an endpoint
 
-**`GET /webhook_endpoints/{id}`** — scope `webhooks:read`.
+**`GET /webhook_endpoints/{id}`**. Scope `webhooks:read`.
 
 Adds the last 25 deliveries and the full event catalogue. Note this view does **not** include `delivery_success_rate`.
 
@@ -233,7 +233,7 @@ Adds the last 25 deliveries and the full event catalogue. Note this view does **
 
 ## Update an endpoint
 
-**`PATCH /webhook_endpoints/{id}`** — scope `webhooks:write`.
+**`PATCH /webhook_endpoints/{id}`**. Scope `webhooks:write`.
 
 Accepts `url`, `description`, `subscribed_events` and `metadata` only. `platform` and `platform_store_url` are fixed at create time and are silently ignored here. Returns `200` with the endpoint, without a `signing_secret`.
 
@@ -246,16 +246,16 @@ Accepts `url`, `description`, `subscribed_events` and `metadata` only. `platform
 Both take no body and return `200` with the endpoint.
 
 <Warning>
-Deliveries queued while an endpoint is not `active` are dropped without being rescheduled. Re-enabling does not replay them — use [redelivery](#redeliver-an-event) or the [payment events endpoint](/api-reference/payments#list-payment-events) to backfill.
+Deliveries queued while an endpoint is not `active` are dropped without being rescheduled. Re-enabling does not replay them. Use [redelivery](#redeliver-an-event) or the [payment events endpoint](/api-reference/payments#list-payment-events) to backfill.
 </Warning>
 
 ## Delete an endpoint
 
-**`DELETE /webhook_endpoints/{id}`** — scope `webhooks:write`. Soft delete. Returns `204` with no body. The endpoint stops receiving deliveries and disappears from the list.
+**`DELETE /webhook_endpoints/{id}`**. Scope `webhooks:write`. Soft delete. Returns `204` with no body. The endpoint stops receiving deliveries and disappears from the list.
 
 ## Rotate the signing secret
 
-**`POST /webhook_endpoints/{id}/rotate_secret`** — scope `webhooks:write`. No body. Returns `200` with the endpoint including the new full `signing_secret`.
+**`POST /webhook_endpoints/{id}/rotate_secret`**. Scope `webhooks:write`. No body. Returns `200` with the endpoint including the new full `signing_secret`.
 
 <Danger>
 Rotation is an immediate hard cutover. There is no overlap window and no second valid secret. Deliveries already signed with the old secret will fail verification at your end. Deploy the new secret before you rotate, or accept the retries.
@@ -263,7 +263,7 @@ Rotation is an immediate hard cutover. There is no overlap window and no second 
 
 ## Send a test delivery
 
-**`POST /webhook_endpoints/{id}/send_test`** — scope `webhooks:write`.
+**`POST /webhook_endpoints/{id}/send_test`**. Scope `webhooks:write`.
 
 <ParamField body="event_type" type="string">
   Event to simulate. Defaults to the endpoint's first subscribed event, falling back to `payment_intent.completed`. Must be a valid event name.
@@ -283,7 +283,7 @@ An unknown `event_type` returns `422` `{"error": "Unknown event type"}`.
 
 ## Redeliver an event
 
-**`POST /webhook_endpoints/{id}/redeliver`** — scope `webhooks:write`.
+**`POST /webhook_endpoints/{id}/redeliver`**. Scope `webhooks:write`.
 
 <ParamField body="delivery_id" type="string" required>
   The delivery to send again. Accepted in the JSON body or as a query parameter.
@@ -297,7 +297,7 @@ This endpoint is currently broken: every call returns `500` `{"error": {"message
 
 ## Platform integrations
 
-Sending `platform` on create changes the semantics. Only one platform integration can exist per store per mode, so re-running a plugin's connect flow does not fail — it **adopts the existing endpoint**:
+Sending `platform` on create changes the semantics. Only one platform integration can exist per store per mode, so re-running a plugin's connect flow does not fail. It **adopts the existing endpoint**:
 
 - The response is `200`, not `201` and not `409`.
 - Any of `url`, `description`, `platform_store_url`, `metadata` and `subscribed_events` you re-sent are applied. Omitted fields keep their current values, and empty `subscribed_events` falls back to the platform's default set.
@@ -339,7 +339,7 @@ A `409` `{"error": "An active woocommerce integration already exists for this st
 | `fee_sweep.failed` | **Never** |
 
 <Warning>
-The last five pass validation and can be subscribed to, but no code path ever emits them. If you are waiting on `payout.confirmed`, you are waiting forever — poll [`GET /payouts`](/api-reference/payouts#list-payouts) instead. They remain listed here so existing subscribers can recognize why nothing arrives.
+The last five pass validation and can be subscribed to, but no code path ever emits them. If you are waiting on `payout.confirmed`, you are waiting forever. Poll [`GET /payouts`](/api-reference/payouts#list-payouts) instead. They remain listed here so existing subscribers can recognize why nothing arrives.
 </Warning>
 
 `payment_intent.canceled` is the opposite case: it is emitted when an agent cancels an intent, but it is not in the catalogue, so no endpoint can subscribe to it and it is dropped. Detect agent cancellations by polling for `status: "expired"` with `state_reason: "canceled_by_agent"`.

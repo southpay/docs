@@ -71,7 +71,7 @@ Different resources scope the key differently.
 **Make payout and balance swap keys globally unique.** Their uniqueness constraint is not scoped to your store, so a short, guessable key like `payout-1` can collide with another merchant's record. Prefix every payout and swap key with a UUID you generate.
 </Warning>
 
-The other sharp edge is mode. Payment intent lookup is scoped to `(store, key, livemode)`, but the database constraint enforcing uniqueness is only `(store, key)`. Reusing the same key in live mode that you already used in test mode does not create a new intent and does not return the old one — it fails. **Never share an idempotency key between test and live mode.** Prefix your keys with the mode if there is any chance your test and production systems generate the same values.
+The other sharp edge is mode. Payment intent lookup is scoped to `(store, key, livemode)`, but the database constraint enforcing uniqueness is only `(store, key)`. Reusing the same key in live mode that you already used in test mode does not create a new intent and does not return the old one. It fails. **Never share an idempotency key between test and live mode.** Prefix your keys with the mode if there is any chance your test and production systems generate the same values.
 
 ## Choosing a key
 
@@ -89,7 +89,7 @@ const attempt = await db.paymentAttempts.create({
 const intent = await createPaymentIntent(order, attempt.idempotencyKey);
 ```
 
-Persisting the key first is what makes the retry safe. If the `POST` times out, you do not know whether it landed — replaying the stored key resolves that without risking a duplicate.
+Persisting the key first is what makes the retry safe. If the `POST` times out, you do not know whether it landed. Replaying the stored key resolves that without risking a duplicate.
 
 ## What idempotency does not cover
 

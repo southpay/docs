@@ -20,7 +20,7 @@ Idempotency keys are **not used** anywhere in billing. Retrying a create makes a
 
 ### Create a customer
 
-**`POST /billing/customers`** — scope `billing:write`. Fields go inside a required `customer` object.
+**`POST /billing/customers`**. Scope `billing:write`. Fields go inside a required `customer` object.
 
 <ParamField body="customer.email" type="string" required>
   Must be unique within the store.
@@ -69,7 +69,7 @@ A duplicate email returns `409` `{"error": "A customer with this email already e
 
 ### List customers
 
-**`GET /billing/customers`** — scope `billing:read`. Active customers only, newest first.
+**`GET /billing/customers`**. Scope `billing:read`. Active customers only, newest first.
 
 <ParamField query="q" type="string">
   Case-insensitive substring match on email or name.
@@ -90,11 +90,11 @@ A duplicate email returns `409` `{"error": "A customer with this email already e
 
 ### Retrieve, update and delete
 
-**`GET /billing/customers/{id}`** — scope `billing:read`.
+**`GET /billing/customers/{id}`**. Scope `billing:read`.
 
-**`PATCH /billing/customers/{id}`** — scope `billing:write`. Accepts the same fields as create. Returns `200`.
+**`PATCH /billing/customers/{id}`**. Scope `billing:write`. Accepts the same fields as create. Returns `200`.
 
-**`DELETE /billing/customers/{id}`** — scope `billing:write`. Returns `204` with no body.
+**`DELETE /billing/customers/{id}`**. Scope `billing:write`. Returns `204` with no body.
 
 <Note>
 Deleting a customer is a **soft delete**. The record stops appearing in the list and cannot be used on new invoices, but existing invoices keep their `customer_id` and still resolve the embedded `customer` object. Nothing is destroyed, and the email is not freed for reuse.
@@ -106,7 +106,7 @@ An unknown id returns `404` `{"error": "Customer not found"}`.
 
 ### Create an invoice
 
-**`POST /billing/invoices`** — scope `billing:write`. Creates a `draft`. Fields go inside a required `invoice` object.
+**`POST /billing/invoices`**. Scope `billing:write`. Creates a `draft`. Fields go inside a required `invoice` object.
 
 <ParamField body="invoice.customer_id" type="string" required>
   Must be an active customer in this store.
@@ -265,7 +265,7 @@ Totals always satisfy `total_cents = subtotal_cents - discount_cents + tax_cents
 
 ### List invoices
 
-**`GET /billing/invoices`** — scope `billing:read`. Newest first.
+**`GET /billing/invoices`**. Scope `billing:read`. Newest first.
 
 <ParamField query="status" type="string">
   `draft`, `open`, `paid`, `void` or `uncollectible`.
@@ -287,13 +287,13 @@ Returns the `{data, meta}` envelope.
 
 ### Retrieve and update
 
-**`GET /billing/invoices/{id}`** — scope `billing:read`. Includes `line_items`.
+**`GET /billing/invoices/{id}`**. Scope `billing:read`. Includes `line_items`.
 
-**`PATCH /billing/invoices/{id}`** — scope `billing:write`. **Draft only.** Accepts `currency`, `due_at`, `description`, `metadata`, all the enhancement fields, and `line_items` — sending `line_items` replaces the whole set. Editing an `open` invoice returns `422` `{"error": "Only draft invoices can be edited"}`.
+**`PATCH /billing/invoices/{id}`**. Scope `billing:write`. **Draft only.** Accepts `currency`, `due_at`, `description`, `metadata`, all the enhancement fields, and `line_items`. Sending `line_items` replaces the whole set. Editing an `open` invoice returns `422` `{"error": "Only draft invoices can be edited"}`.
 
 ### Finalize
 
-**`POST /billing/invoices/{id}/finalize`** — scope `billing:write`. No body.
+**`POST /billing/invoices/{id}/finalize`**. Scope `billing:write`. No body.
 
 Moves `draft` to `open`, stamps `finalized_at`, assigns `public_token`, and emits `invoice.finalized`. Line items and totals are locked from here.
 
@@ -304,7 +304,7 @@ Moves `draft` to `open`, stamps `finalized_at`, assigns `public_token`, and emit
 
 ### Send
 
-**`POST /billing/invoices/{id}/send`** — scope `billing:write`. No body.
+**`POST /billing/invoices/{id}/send`**. Scope `billing:write`. No body.
 
 Emails the hosted invoice link to the customer. The invoice must be `open` and the customer must have an email.
 
@@ -315,25 +315,25 @@ Emails the hosted invoice link to the customer. The invoice must be `open` and t
 
 ### Void
 
-**`POST /billing/invoices/{id}/void`** — scope `billing:write`. No body.
+**`POST /billing/invoices/{id}/void`**. Scope `billing:write`. No body.
 
-Cancels a `draft` or `open` invoice, stamps `voided_at`, and emits `invoice.voided`. Voiding an already-void invoice is a `200` no-op. A `paid` invoice returns `422` `{"error": "Cannot void a paid invoice"}` — refund the underlying [payment](/api-reference/refunds) instead.
+Cancels a `draft` or `open` invoice, stamps `voided_at`, and emits `invoice.voided`. Voiding an already-void invoice is a `200` no-op. A `paid` invoice returns `422` `{"error": "Cannot void a paid invoice"}`. Refund the underlying [payment](/api-reference/refunds) instead.
 
 ### Mark uncollectible
 
-**`POST /billing/invoices/{id}/mark_uncollectible`** — scope `billing:write`. No body.
+**`POST /billing/invoices/{id}/mark_uncollectible`**. Scope `billing:write`. No body.
 
 Writes off an `open` invoice you have given up collecting. It stays on the books, unlike a void.
 
 <Warning>
-This endpoint never errors. Called on a `draft`, `paid` or `void` invoice it returns `200` with the invoice unchanged. A `200` is not confirmation that the status changed — read `status` on the response.
+This endpoint never errors. Called on a `draft`, `paid` or `void` invoice it returns `200` with the invoice unchanged. A `200` is not confirmation that the status changed. Read `status` on the response.
 </Warning>
 
 ### Delete
 
-**`DELETE /billing/invoices/{id}`** — scope `billing:write`.
+**`DELETE /billing/invoices/{id}`**. Scope `billing:write`.
 
-**Draft only**, and a genuine hard delete: the row and its line items are removed. Returns `204` with no body. An `open` invoice returns `422` `{"error": "Only draft invoices can be deleted"}` — void it instead.
+**Draft only**, and a genuine hard delete: the row and its line items are removed. Returns `204` with no body. An `open` invoice returns `422` `{"error": "Only draft invoices can be deleted"}`. Void it instead.
 
 ## Invoice lifecycle
 
@@ -351,9 +351,9 @@ Three [webhook events](/api-reference/webhook-endpoints#event-catalogue) fire he
 
 ## Hosted invoice page
 
-Two unauthenticated endpoints back the page the customer opens. They are keyed on `public_token`, not on the invoice id, and require no credential — send the customer the URL, do not proxy these yourself.
+Two unauthenticated endpoints back the page the customer opens. They are keyed on `public_token`, not on the invoice id, and require no credential. Send the customer the URL and do not proxy these yourself.
 
-**`GET /billing/invoice/{token}`** returns the invoice as the customer sees it: `public_token`, `number`, `formatted_number`, `po_number`, `status`, `currency`, `subtotal_cents`, `discount_cents`, `tax_cents`, `total_cents`, `due_at`, `description`, `notes`, `footer`, `amount_paid_cents`, `merchant_name`, `customer{name, email}`, `line_items[]`, and `payment` — a checkout object, or null if no payment has been started.
+**`GET /billing/invoice/{token}`** returns the invoice as the customer sees it: `public_token`, `number`, `formatted_number`, `po_number`, `status`, `currency`, `subtotal_cents`, `discount_cents`, `tax_cents`, `total_cents`, `due_at`, `description`, `notes`, `footer`, `amount_paid_cents`, `merchant_name`, `customer{name, email}`, `line_items[]`, and `payment`, which is a checkout object or null if no payment has been started.
 
 **`POST /billing/invoice/{token}/payment_intent`** creates the crypto [payment intent](/api-reference/payments) for the invoice and returns the same body with `payment` populated.
 

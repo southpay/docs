@@ -35,7 +35,7 @@ You can now scope API keys to least privilege, mint publishable keys for the bro
 
 - **Scoped secret keys**: Secret keys now carry scopes (`payments:write`, `refunds:read`, `payouts:write`, and more). Restrict a key to least privilege by passing a `scopes` array when you create it. A request missing a required scope returns `403` with code `insufficient_scope`. [See scopes](/authentication#scopes)
 
-- **Checkout widget (SouthPay.js)**: Embed the hosted checkout inline or as a modal with a few lines of JavaScript, using a publishable key. Create checkouts in the browser, or mount a checkout your server created. Load it from `https://integrate.southpay.io/widgets/v2.js` — it ships as a hosted bundle, not an npm package. [Read the guide](/checkout-widget)
+- **Checkout widget (SouthPay.js)**: Embed the hosted checkout inline or as a modal with a few lines of JavaScript, using a publishable key. Create checkouts in the browser, or mount a checkout your server created. Load it from `https://integrate.southpay.io/widgets/v2.js`. It ships as a hosted bundle, not an npm package. [Read the guide](/checkout-widget)
 
 </Update>
 
@@ -378,7 +378,7 @@ SouthPay v2 is live. This week we shipped the new platform, improved checkout, a
 
 - **Checkout redirect URLs**: Pass `success_url` and `failed_url` when [creating a payment intent](/api-reference/payments). Customers are automatically redirected after completing or failing a payment.
 
-- **Test mode**: Develop against test data without affecting live data. There is no separate sandbox host — test and live mode share `https://api.southpay.io` and are selected by the credential you send. [See environments](/environments)
+- **Test mode**: Develop against test data without affecting live data. There is no separate sandbox host. Test and live mode share `https://api.southpay.io` and are selected by the credential you send. [See environments](/environments)
 
 - **Live and test mode API keys**: Generate separate API keys for live and test environments from the dashboard or via the API. Live keys (`sp_live_`) process real payments; test keys (`sp_test_`) operate against sandbox data. All resources (payments, webhooks, balances) are automatically scoped to the key's mode, so live and test data never mix. [See authentication](/authentication)
 
@@ -389,7 +389,7 @@ SouthPay v2 is live. This week we shipped the new platform, improved checkout, a
 - **Expanded crypto asset support**: Accept deposits on Ethereum, Bitcoin, Solana, Avalanche C-Chain, Tron, Polygon, Litecoin, Ethereum Classic, Stellar, SUI and TON, including USDC and USDT on multiple chains. [See the full catalog](/currencies)
 
 <Note>
-  **Correction, August 2026.** This entry originally also listed BNB Chain, Arbitrum, Base, Optimism and Algorand as deposit chains. They are not, and never have been — no deposit asset exists on any of them. BNB Smart Chain, Arbitrum, Base and Optimism are supported as **payout destination networks** only; Algorand is not supported at all. [Deposit chains and payout networks are two different lists](/currencies#deposit-chains-are-not-payout-networks).
+  **Correction, August 2026.** This entry originally also listed BNB Chain, Arbitrum, Base, Optimism and Algorand as deposit chains. They are not, and never have been. No deposit asset exists on any of them. BNB Smart Chain, Arbitrum, Base and Optimism are supported as **payout destination networks** only; Algorand is not supported at all. [Deposit chains and payout networks are two different lists](/currencies#deposit-chains-are-not-payout-networks).
 </Note>
 
 - **Multi-currency settlement**: Set your store's settlement currency to USD, EUR, GBP, HKD, SGD, or JPY. Amounts and balances are denominated in your chosen currency with live exchange rates.

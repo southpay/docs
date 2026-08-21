@@ -11,7 +11,7 @@ The denials are the system working as designed. Treat them as a configuration st
 
 ## What happens by default
 
-SouthPay resolves an authorization provider per store. No provider is configured by default, so every store gets `NullAuthorizationProvider`, which approves every verification it is asked for — and then each endpoint checks whether the approval came from a real provider, and refuses if it did not.
+SouthPay resolves an authorization provider per store. No provider is configured by default, so every store gets a permissive stub that approves every verification it is asked for. Each endpoint then checks whether the approval came from a real provider, and refuses if it did not.
 
 | Agent action | Default behavior |
 | --- | --- |
@@ -21,7 +21,7 @@ SouthPay resolves an authorization provider per store. No provider is configured
 | `POST /agentic/payments/:id/refunds` | **403 `mandate_required`** |
 | `PATCH /agentic/tokens/:asset_id` | **403 `mandate_required`** |
 | `POST /agentic/mandates` | **403 `mandate_required`** |
-| `POST /agentic/x402/settlements` | **403 `mandate_required`** — needs a usable mandate, which cannot be issued |
+| `POST /agentic/x402/settlements` | **403 `mandate_required`**. Needs a usable mandate, which cannot be issued |
 | `POST /agentic/payouts` | **403 `payout_controls_required`**, unless a spend limit exists for that asset |
 
 Payment creation is the deliberate exception. Charging a customer creates a receivable rather than an outflow, so it needs no mandate.
@@ -48,7 +48,7 @@ A spend limit does two things:
 1. **It unlocks the asset.** With the default provider, a payout in an asset that has no spend limit is refused with `payout_controls_required` before any balance check happens.
 2. **It caps the payout.** Every payout is checked against a per-transaction cap and against a daily counter that resets at midnight UTC. Breaching either returns `403` with `per_tx_cap_exceeded` or `daily_cap_exceeded`.
 
-Limits are set on the credential in the dashboard, under **Agents**. Both caps are optional individually — a limit row with only a daily cap still unlocks the asset.
+Limits are set on the credential in the dashboard, under **Agents**. Both caps are optional individually. A limit row with only a daily cap still unlocks the asset.
 
 An agent reads its own headroom with `GET /api/v2/agentic/payout_limits` (or `get_payout_limits` over MCP), which returns `per_tx_cap_atomic`, `daily_cap_atomic`, `daily_spent_atomic`, `daily_remaining_atomic` and `controls_configured` per asset, plus the `utc_day` the counter belongs to. `controls_configured: false` on an asset is a reliable predictor that a payout in it will be denied. Size the payout from this endpoint rather than discovering the cap through a `403`.
 
@@ -56,7 +56,7 @@ An agent reads its own headroom with `GET /api/v2/agentic/payout_limits` (or `ge
 
 Refunds, token toggles and mandate issuance need a real authorization provider. Spend limits do not help here; the check is specifically "is this store's provider something other than the default".
 
-A provider is configured per store. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle — SouthPay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
+A provider is configured per store. **There is no API for this.** It is not exposed on any merchant endpoint and it is not a dashboard toggle. SouthPay support enables it for your store. Until then, the three actions stay at `403 mandate_required` regardless of credential scopes.
 
 <Note>
   If you are building an agent for merchants generally, assume the provider is absent. Discover it at runtime from `GET /agentic/account` and gate your own tool exposure on `authorization.mandates`, rather than offering the agent a refund capability that will always fail.
@@ -64,7 +64,7 @@ A provider is configured per store. **There is no API for this.** It is not expo
 
 ## With a provider enabled
 
-Once a provider is configured, the model changes in both directions. The three blocked actions become available, and **payment creation stops being unconditional** — it is verified per call like everything else, and can now be denied with `authorization_denied`.
+Once a provider is configured, the model changes in both directions. The three blocked actions become available, and **payment creation stops being unconditional**. It is verified per call like everything else, and can now be denied with `authorization_denied`.
 
 The agent presents a mandate on gated requests in the `X-Mandate` header, base64-encoded JSON:
 
@@ -77,7 +77,7 @@ curl -X POST https://api.southpay.io/api/v2/agentic/payments/{id}/refunds \
   -d '{"refund": {}}'
 ```
 
-SouthPay forwards the presentation and the action's parameters — action type, amount, currency, asset, destination — to the provider, which returns allow or deny. The decision and receipt are stored with the resulting payment, payout or mandate.
+SouthPay forwards the presentation and the action's parameters (action type, amount, currency, asset, destination) to the provider, which returns allow or deny. The decision and receipt are stored with the resulting payment, payout or mandate.
 
 Two details worth planning for:
 
@@ -117,4 +117,4 @@ Every agentic endpoint uses the structured envelope, with `code` populated:
 
 ## Audit trail
 
-Each gated decision is recorded. Payments, payouts and mandates persist the provider's decision and receipt on the record itself. Every agent action — created, denied, cap exceeded — is emitted as telemetry keyed by credential id. Merchants see the resulting payments, payouts and settlements per credential in the dashboard under **Agents**.
+Each gated decision is recorded. Payments, payouts and mandates persist the provider's decision and receipt on the record itself. Every agent action (created, denied, cap exceeded) is emitted as telemetry keyed by credential id. Merchants see the resulting payments, payouts and settlements per credential in the dashboard under **Agents**.

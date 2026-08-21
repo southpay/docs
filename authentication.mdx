@@ -26,7 +26,7 @@ curl https://api.southpay.io/api/v2/payments \
 ```
 
 <Danger>
-A secret key is full access to a store's money, bounded only by its scopes. Never put one in client-side code, a mobile binary, a public repository, or a URL. If one leaks, revoke it in the dashboard before you do anything else — rotation is instant and the old value stops working immediately.
+A secret key is full access to a store's money, bounded only by its scopes. Never put one in client-side code, a mobile binary, a public repository, or a URL. If one leaks, revoke it in the dashboard before you do anything else. Rotation is instant and the old value stops working immediately.
 </Danger>
 
 Keys issued before key types existed use the bare `sp_live_…` / `sp_test_…` prefix. They still authenticate and behave as secret keys. Nothing generates that form any more.
@@ -76,7 +76,7 @@ A platform sends `X-Southpay-Account: <account_id>` alongside its own credential
 Use OAuth when you are building an application that other merchants connect to their own SouthPay accounts. The flow is Authorization Code with PKCE.
 
 <Warning>
-**PKCE is mandatory and only `S256` is accepted.** A request without `code_challenge` is rejected with `invalid_request`. `plain` is not supported. This applies to confidential clients too — a client secret does not exempt you.
+**PKCE is mandatory and only `S256` is accepted.** A request without `code_challenge` is rejected with `invalid_request`. `plain` is not supported. This applies to confidential clients too. A client secret does not exempt you.
 </Warning>
 
 Register the application first; see [OAuth apps](/oauth-apps) for that. The discovery document at `https://api.southpay.io/.well-known/oauth-authorization-server` advertises the endpoints, `response_types_supported: ["code"]`, `grant_types_supported: ["authorization_code", "refresh_token"]`, and `code_challenge_methods_supported: ["S256"]`.
@@ -97,7 +97,7 @@ Eighteen scopes may be requested. The first fifteen mirror the API key scopes ab
 The consent screen currently renders no description for `accounts:read`, `accounts:write`, `accounts:act` and `agents:write`. Merchants approving those scopes see the name only. If your app requests them, explain them in your own UI before you send the merchant to the authorize page.
 </Note>
 
-### Step 1 — generate the PKCE pair
+### Step 1: generate the PKCE pair
 
 <CodeGroup>
 ```typescript pkce.ts
@@ -123,7 +123,7 @@ code_challenge = (
 
 Keep `code_verifier` server-side and bound to the session. You send it only in step 3.
 
-### Step 2 — authorize
+### Step 2: authorize
 
 ```http Authorize request
 GET https://api.southpay.io/api/v2/oauth/authorize
@@ -136,7 +136,7 @@ GET https://api.southpay.io/api/v2/oauth/authorize
   &livemode=true
 ```
 
-**`livemode` selects the mode for the whole grant.** Pass `livemode=true` for production access. The mode is recorded on the authorization code, copied onto the access token, and cannot be changed afterwards — a token issued in test mode can never read live data, and there is no header that overrides it. Omitting the parameter yields a test-mode grant.
+**`livemode` selects the mode for the whole grant.** Pass `livemode=true` for production access. The mode is recorded on the authorization code, copied onto the access token, and cannot be changed afterwards. A token issued in test mode can never read live data, and there is no header that overrides it. Omitting the parameter yields a test-mode grant.
 
 The `GET` returns consent data as JSON: the application, the requested scopes, and the merchant's stores. Render your own consent UI from it, then post the decision.
 
@@ -160,7 +160,7 @@ The response is `{"redirect_to": "https://yourapp.example/oauth/callback?code=�
 
 Authorization codes live for **10 minutes** and are single use.
 
-### Step 3 — exchange the code
+### Step 3: exchange the code
 
 <CodeGroup>
 ```bash Request
@@ -204,7 +204,7 @@ The access token's lifetime is set by the scopes you asked for, not by a fixed p
 An `expires_in` of 7776000 alongside a `refresh_token` is not a response this API produces.
 </Warning>
 
-Refresh tokens last 90 days and are single use — each refresh rotates them and returns a new one. Store the new value on every refresh.
+Refresh tokens last 90 days and are single use. Each refresh rotates them and returns a new one. Store the new value on every refresh.
 
 ```bash
 curl -X POST https://api.southpay.io/api/v2/oauth/token \
@@ -265,7 +265,7 @@ sequenceDiagram
 
 `spa_live_` and `spa_test_` credentials authenticate the `/api/v2/agentic/*` surface and nothing else. A regular API key is rejected there, and an agent credential is rejected everywhere else.
 
-Their scope set is different and smaller: `payments:read`, `payments:write`, `payouts:read`, `payouts:write`, `assets:read`, `assets:write`, `x402:read`, `x402:write`. The agentic API is also rate limited at 120 requests per minute per credential.
+Their scope set is different and smaller: `payments:read`, `payments:write`, `payouts:read`, `payouts:write`, `assets:read`, `assets:write`, `x402:read`, `x402:write`. The agentic API is also rate limited at 120 requests per minute per credential. See [Rate limits](/rate-limits).
 
 An agent only ever sees records it created. See [Agent credentials](/agentic/agent-credentials).
 

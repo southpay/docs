@@ -5,7 +5,7 @@ description: "Create a payment intent, send your customer to checkout, and verif
 
 You need a test secret API key. Create one in the [dashboard](https://app.southpay.io) under **Settings → API keys**, choosing **Test** and **Secret**. It starts with `sp_sk_test_`.
 
-Everything below runs against `https://api.southpay.io/api/v2`. There is no separate sandbox host — test and live mode are selected by which key you send.
+Everything below runs against `https://api.southpay.io/api/v2`. There is no separate sandbox host. Test and live mode are selected by which key you send.
 
 <Note>
 In test mode your store has exactly one usable asset: **Ethereum Sepolia** (`SETH`). Every test payment intent returns one deposit address on Sepolia. Live mode returns one address per asset your store has enabled. See [Environments](/environments).
@@ -80,11 +80,11 @@ curl -X POST https://api.southpay.io/api/v2/payments \
 
 Three fields to store against your order right now:
 
-- **`id`** — the UUID you use on every later API call. All SouthPay ids are bare UUIDs; there is no `pi_` prefix scheme.
-- **`reference`** — 16 uppercase alphanumeric characters. This is the customer-facing identifier and the checkout token, and it is what arrives in webhooks.
-- **`expires_at`** — 60 minutes from creation, always. It is not configurable. See [Payment lifecycle](/payment-lifecycle).
+- **`id`** is the UUID you use on every later API call. All SouthPay ids are bare UUIDs; there is no `pi_` prefix scheme.
+- **`reference`** is 16 uppercase alphanumeric characters. This is the customer-facing identifier and the checkout token, and it is what arrives in webhooks.
+- **`expires_at`** is 60 minutes from creation, always. It is not configurable. See [Payment lifecycle](/payment-lifecycle).
 
-`crypto_amount_atomic` is the exact amount the customer must send, in the asset's smallest unit. Divide by `10 ** atomic_decimals` for a human amount — here, `0.022533243243243243 ETH`.
+`crypto_amount_atomic` is the exact amount the customer must send, in the asset's smallest unit. Divide by `10 ** atomic_decimals` for a human amount, here `0.022533243243243243 ETH`.
 
 The `Idempotency-Key` header is optional on this endpoint but retrying without one creates a second intent. Read [Idempotency](/idempotency) before you build a retry loop; the behaviour has edges.
 
@@ -139,10 +139,10 @@ curl -X POST https://api.southpay.io/api/v2/webhook_endpoints \
 </CodeGroup>
 
 <Warning>
-`signing_secret` is returned **only** here and on secret rotation. Store it before you close the terminal — there is no endpoint that will show it to you again.
+`signing_secret` is returned **only** here and on secret rotation. Store it before you close the terminal. No endpoint will show it to you again.
 </Warning>
 
-`subscribed_events` is required and must list every event you want by name. **Wildcards are not supported** — `"*"` and `"payment_intent.*"` both fail validation. See the [full event list](/webhooks#event-catalogue).
+`subscribed_events` is required and must list every event you want by name. **Wildcards are not supported**. `"*"` and `"payment_intent.*"` both fail validation. See the [full event list](/webhooks#event-catalogue).
 
 ## 4. Verify and handle the delivery
 
@@ -262,7 +262,7 @@ def webhook():
 ```
 </CodeGroup>
 
-Return `2xx` within 30 seconds. **Any** non-`2xx` response is retried, up to 10 attempts over roughly 18 hours — including a `400` or `404` your framework returns by accident. Deduplicate on the event `id`.
+Return `2xx` within 30 seconds. **Any** non-`2xx` response is retried, up to 10 attempts over roughly 18 hours, including a `400` or `404` your framework returns by accident. Deduplicate on the event `id`.
 
 Test the whole path without paying anything:
 
@@ -280,7 +280,7 @@ curl https://api.southpay.io/api/v2/payments/9c1d7f42-6a3b-4e58-9f10-2b8c5d4e7a9
   -H "Authorization: Bearer sp_sk_test_YOUR_API_KEY"
 ```
 
-`terminal: true` means the outcome is settled. It does not mean the record is frozen — a terminal intent can still become `refunded` later.
+`terminal: true` means the outcome is settled. It does not mean the record is frozen. A terminal intent can still become `refunded` later.
 
 ## Next
 

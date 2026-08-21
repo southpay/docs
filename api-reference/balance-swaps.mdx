@@ -12,7 +12,7 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Authentication
 
-Any valid API key or OAuth token can call these endpoints — balance swaps are not scope-checked, so no specific scope is required. Publishable keys are still rejected.
+Any valid API key or OAuth token can call these endpoints. Balance swaps are not scope-checked, so no specific scope is required. Publishable keys are still rejected.
 
 <Note>
 Creating a swap runs a step-up MFA check. That check is a no-op for API keys and OAuth tokens; it only gates dashboard sessions, which return `403` `mfa_required` without two-factor enabled.
@@ -20,7 +20,7 @@ Creating a swap runs a step-up MFA check. That check is a no-op for API keys and
 
 ## Quote a swap
 
-**`POST /balance_swaps/quote`** — no idempotency key, creates nothing.
+**`POST /balance_swaps/quote`**. No idempotency key, creates nothing.
 
 <ParamField body="source_asset_id" type="string" required>
   The asset to sell, for example `ETH_USDC`.
@@ -79,7 +79,7 @@ A quote carries no expiry field and reserves nothing. Treat it as indicative and
 
 ## Create a swap
 
-**`POST /balance_swaps`** — `Idempotency-Key` is **required**.
+**`POST /balance_swaps`**. `Idempotency-Key` is **required**.
 
 Same three parameters as the quote, sent at the top level.
 
@@ -127,7 +127,7 @@ curl -X POST https://api.southpay.io/api/v2/balance_swaps \
 </CodeGroup>
 
 <Warning>
-Swaps are irreversible and execute at the market rate at the time of fill, which can differ from the quote. Replaying the same `Idempotency-Key` returns the original swap — still with status `201`, not `200`. A new key executes a second swap.
+Swaps are irreversible and execute at the market rate at the time of fill, which can differ from the quote. Replaying the same `Idempotency-Key` returns the original swap, still with status `201`, not `200`. A new key executes a second swap.
 </Warning>
 
 ### Response fields
@@ -164,13 +164,13 @@ Swaps are irreversible and execute at the market rate at the time of fill, which
 
 ## Retrieve a swap
 
-**`GET /balance_swaps/{id}`** — returns a bare swap object. Unknown id returns `404` `{"error": "Balance swap not found"}`.
+**`GET /balance_swaps/{id}`**. Returns a bare swap object. Unknown id returns `404` `{"error": "Balance swap not found"}`.
 
 There are no swap webhooks. Poll this endpoint until `status` is `completed` or `failed`.
 
 ## List swaps
 
-**`GET /balance_swaps`** — newest first.
+**`GET /balance_swaps`**. Newest first.
 
 <ParamField query="status" type="string">
   `pending`, `submitted`, `completed` or `failed`.

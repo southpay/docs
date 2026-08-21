@@ -91,7 +91,7 @@ The OAuth endpoints (`/oauth/authorize`, `/oauth/token`, `/oauth/revoke`) use th
 | `502 Bad Gateway` | A payment or payout provider failed. Safe to retry. |
 | `503 Service Unavailable` | A swap quote is unavailable, or the identity provider is down during a step-up check. |
 
-There is no `409` for idempotency. SouthPay does not detect "same key, different body" — see [Idempotency](/idempotency).
+There is no `409` for idempotency. SouthPay does not detect "same key, different body". See [Idempotency](/idempotency).
 
 ## 403 is not an authentication problem
 
@@ -136,7 +136,7 @@ Every code below appears in the API source. If you see a code that is not here, 
 | `account_not_found` | 404 | A platform account id in the path does not resolve |
 | `onboarding_link_unusable` | 404 / 410 | Onboarding token is unknown, consumed, or expired |
 
-Most 404s carry no code at all — a record that does not resolve renders `{"error": {"message": "Couldn't find …", "code": null}}`.
+Most 404s carry no code at all. A record that does not resolve renders `{"error": {"message": "Couldn't find …", "code": null}}`.
 
 ### 409
 
@@ -171,7 +171,7 @@ Duplicate billing customers return `409` with the plain-string body `{"error": "
 | `missing_parameter` | Market data called without `symbol_or_id` |
 | `store_required` | The OAuth-to-agent-credential exchange had no store on the grant |
 
-Most 422s carry no code — they are plain strings such as `"amount is required and must be positive"` or `"metadata values must be strings"`, or a `{"errors": [...]}` list from a model validation.
+Most 422s carry no code. They are plain strings such as `"amount is required and must be positive"` or `"metadata values must be strings"`, or a `{"errors": [...]}` list from a model validation.
 
 The report endpoints are a special case: they return `422` with a bare string in `error` plus a sibling field. `{"error": "date_range_too_large", "max_days": 366}` and `{"error": "date_range_unavailable", "available_through": "2026-08-05"}`.
 
@@ -188,22 +188,9 @@ The report endpoints are a special case: they return `422` with a bare string in
 
 ## Rate limits
 
-Only these paths are throttled. There is **no general rate limit** on the rest of the API.
+Most of the API is not throttled. `POST /api/v2/payments`, the checkout and onramp reads, the OAuth endpoints and the agentic surface are. Every limit is per minute, no `Retry-After` header is set on any `429`, and a flat sixty second wait clears all of them.
 
-| Path | Limit | Keyed on |
-| --- | --- | --- |
-| `POST /api/v2/payments` | 120 / min | Credential, falling back to IP |
-| `GET /api/v2/checkout/*` | 600 / min | IP |
-| `POST /api/v2/oauth/token`, `POST /api/v2/oauth/revoke` | 60 / min | IP |
-| `GET`/`POST /api/v2/oauth/authorize` | 30 / min | IP |
-| All of `/api/v2/agentic/*` except market data | 120 / min | Agent credential |
-| `GET /api/v2/agentic/market_data` | 30 / min | IP |
-
-<Warning>
-**No `Retry-After` header is set on any `429`.** Do not read one. Back off on your own schedule — a fixed 60-second wait clears every throttle above, since all of them are per-minute windows.
-</Warning>
-
-The general throttle returns the plain-string body `{"error": "Too many requests. Please try again later."}`. The agentic throttle returns the structured body with `code: "rate_limited"`.
+See [Rate limits](/rate-limits) for the full table, how each limit is keyed, and the two `429` body shapes.
 
 ## What to retry
 
@@ -216,7 +203,7 @@ The general throttle returns the plain-string body `{"error": "Too many requests
 | Network timeout | Yes | Same `Idempotency-Key`. The request may already have landed. |
 | `4xx` other than `429` | No | Fix the request. Retrying returns the same error. |
 
-Reusing the `Idempotency-Key` is what makes a retry safe — a replay returns the record that the first attempt created rather than creating a second one. See [Idempotency](/idempotency) for what that does and does not guarantee.
+Reusing the `Idempotency-Key` is what makes a retry safe. A replay returns the record that the first attempt created rather than creating a second one. See [Idempotency](/idempotency) for what that does and does not guarantee.
 
 ```typescript southpay/request.ts
 import { readError } from "./errors";

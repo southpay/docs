@@ -12,13 +12,13 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Authentication and scope
 
-Reads require `billing:read`, writes require `billing:write`. Publishable keys are rejected. Idempotency keys are not used anywhere in billing — retrying a create makes a second record.
+Reads require `billing:read`, writes require `billing:write`. Publishable keys are rejected. Idempotency keys are not used anywhere in billing. Retrying a create makes a second record.
 
 ## Products
 
 ### Create a product
 
-**`POST /billing/products`** — scope `billing:write`. Fields go inside a required `product` object.
+**`POST /billing/products`**. Scope `billing:write`. Fields go inside a required `product` object.
 
 <ParamField body="product.name" type="string" required />
 <ParamField body="product.description" type="string" />
@@ -52,7 +52,7 @@ curl -X POST https://api.southpay.io/api/v2/billing/products \
 
 ### List products
 
-**`GET /billing/products`** — scope `billing:read`.
+**`GET /billing/products`**. Scope `billing:read`.
 
 Returns a **bare array** with no envelope and no pagination.
 
@@ -62,9 +62,9 @@ Returns a **bare array** with no envelope and no pagination.
 
 ### Retrieve and update
 
-**`GET /billing/products/{id}`** — scope `billing:read`. Includes a `prices` array, newest first.
+**`GET /billing/products/{id}`**. Scope `billing:read`. Includes a `prices` array, newest first.
 
-**`PATCH /billing/products/{id}`** — scope `billing:write`. Accepts `name`, `description`, `active` and `metadata`. This is the only way to set `active`. Deactivating a product does not archive its prices or cancel subscriptions using them — do those separately.
+**`PATCH /billing/products/{id}`**. Scope `billing:write`. Accepts `name`, `description`, `active` and `metadata`. This is the only way to set `active`. Deactivating a product does not archive its prices or cancel subscriptions using them. Do those separately.
 
 Unknown id returns `404` `{"error": "Product not found"}`.
 
@@ -72,7 +72,7 @@ Unknown id returns `404` `{"error": "Product not found"}`.
 
 ### Create a price
 
-**`POST /billing/products/{product_id}/prices`** — scope `billing:write`. Fields go inside a required `price` object.
+**`POST /billing/products/{product_id}/prices`**. Scope `billing:write`. Fields go inside a required `price` object.
 
 <ParamField body="price.unit_amount_cents" type="integer" required>
   Minor units of `currency`.
@@ -117,14 +117,14 @@ curl -X POST https://api.southpay.io/api/v2/billing/products/7182930a-4b51-4627-
 </CodeGroup>
 
 <Warning>
-`product_id`, `unit_amount_cents`, `currency`, `interval` and `interval_count` are immutable. There is no `PATCH` for a price. To change an amount, create a new price and archive the old one — existing subscriptions keep billing the price they were created with until you update them.
+`product_id`, `unit_amount_cents`, `currency`, `interval` and `interval_count` are immutable. There is no `PATCH` for a price. To change an amount, create a new price and archive the old one. Existing subscriptions keep billing the price they were created with until you update them.
 </Warning>
 
 ### List and retrieve prices
 
-**`GET /billing/products/{product_id}/prices`** — scope `billing:read`. A **bare array**, newest first, unpaginated. Includes archived prices.
+**`GET /billing/products/{product_id}/prices`**. Scope `billing:read`. A **bare array**, newest first, unpaginated. Includes archived prices.
 
-**`GET /billing/products/{product_id}/prices/{id}`** — scope `billing:read`. Unknown id returns `404` `{"error": "Price not found"}`.
+**`GET /billing/products/{product_id}/prices/{id}`**. Scope `billing:read`. Unknown id returns `404` `{"error": "Price not found"}`.
 
 ### Archive and activate
 
@@ -138,7 +138,7 @@ Both take no body and return `200` with the price.
 
 ### Create a subscription
 
-**`POST /billing/subscriptions`** — scope `billing:write`. Fields go inside a required `subscription` object.
+**`POST /billing/subscriptions`**. Scope `billing:write`. Fields go inside a required `subscription` object.
 
 <ParamField body="subscription.customer_id" type="string" required>
   Must be an active [customer](/api-reference/invoicing#customers).
@@ -226,7 +226,7 @@ curl -X POST https://api.southpay.io/api/v2/billing/subscriptions \
 </CodeGroup>
 
 <Note>
-The first entry in `items` is the anchor price and always has `id: null` — it is synthesized from `price_id` rather than being a stored item row. Only add-on items have real ids. Do not use `items[].id` as a stable key without checking for null.
+The first entry in `items` is the anchor price and always has `id: null`. It is synthesized from `price_id` rather than being a stored item row. Only add-on items have real ids. Do not use `items[].id` as a stable key without checking for null.
 </Note>
 
 ### Response fields
@@ -273,7 +273,7 @@ The first entry in `items` is the anchor price and always has `id: null` — it 
 
 ### List subscriptions
 
-**`GET /billing/subscriptions`** — scope `billing:read`.
+**`GET /billing/subscriptions`**. Scope `billing:read`.
 
 <ParamField query="status" type="string">
   `trialing`, `active`, `past_due`, `paused` or `canceled`.
@@ -282,22 +282,22 @@ The first entry in `items` is the anchor price and always has `id: null` — it 
 <ParamField query="customer_id" type="string" />
 
 <Warning>
-This endpoint is **unpaginated**. It returns a bare array of every matching subscription in one response — no `data` wrapper, no `meta`, no `page` or `per_page`. Invoices and customers on the same billing surface *are* paginated with `{data, meta}`. Filter by `status` or `customer_id` to keep the response bounded.
+This endpoint is **unpaginated**. It returns a bare array of every matching subscription in one response, with no `data` wrapper, no `meta`, and no `page` or `per_page`. Invoices and customers on the same billing surface *are* paginated with `{data, meta}`. Filter by `status` or `customer_id` to keep the response bounded.
 </Warning>
 
 Rows include `customer`, `amount_cents`, `currency`, `interval` and `interval_count` on top of the base fields.
 
 ### Retrieve and update
 
-**`GET /billing/subscriptions/{id}`** — scope `billing:read`. Adds `price`, `items` and `customer`.
+**`GET /billing/subscriptions/{id}`**. Scope `billing:read`. Adds `price`, `items` and `customer`.
 
-**`PATCH /billing/subscriptions/{id}`** — scope `billing:write`. Accepts `price_id`, `quantity`, `grace_cycles`, `items` and `metadata`. Sending `items` replaces the full set. A canceled subscription cannot be changed: `422` `{"error": "Cannot change a canceled subscription"}`.
+**`PATCH /billing/subscriptions/{id}`**. Scope `billing:write`. Accepts `price_id`, `quantity`, `grace_cycles`, `items` and `metadata`. Sending `items` replaces the full set. A canceled subscription cannot be changed: `422` `{"error": "Cannot change a canceled subscription"}`.
 
 Unknown id returns `404` `{"error": "Subscription not found"}`.
 
 ### Cancel
 
-**`POST /billing/subscriptions/{id}/cancel`** — scope `billing:write`.
+**`POST /billing/subscriptions/{id}/cancel`**. Scope `billing:write`.
 
 <ParamField body="at_period_end" type="boolean" default="false">
   Sent at the **top level**, not inside a `subscription` object. Omitting it cancels immediately.
@@ -309,15 +309,15 @@ Both return `200` with the full subscription. Canceling an already-canceled subs
 
 ### Uncancel
 
-**`POST /billing/subscriptions/{id}/uncancel`** — scope `billing:write`. No body.
+**`POST /billing/subscriptions/{id}/uncancel`**. Scope `billing:write`. No body.
 
-Clears a scheduled period-end cancellation. It cannot revive an already-`canceled` subscription — that is terminal, and the call returns `200` with the subscription unchanged. Check `status` on the response, not the status code.
+Clears a scheduled period-end cancellation. It cannot revive an already-`canceled` subscription. That is terminal, and the call returns `200` with the subscription unchanged. Check `status` on the response, not the status code.
 
 ### Pause and resume
 
 **`POST /billing/subscriptions/{id}/pause`** stops billing and sets `paused_at`.
 
-**`POST /billing/subscriptions/{id}/resume`** sets `status` back to `active`, clears `paused_at`, resets `failed_cycle_count` to zero, and **restarts the billing period from now** — `current_period_start`, `current_period_end` and `next_billing_at` are all recalculated. The customer is not charged for the paused span.
+**`POST /billing/subscriptions/{id}/resume`** sets `status` back to `active`, clears `paused_at`, resets `failed_cycle_count` to zero, and **restarts the billing period from now**. `current_period_start`, `current_period_end` and `next_billing_at` are all recalculated. The customer is not charged for the paused span.
 
 Both take no body and return `200` with the subscription.
 
@@ -335,7 +335,7 @@ Allowed transitions: `trialing` to `active` or `canceled`; `active` to `past_due
 
 An illegal transition returns `422` `{"error": "Cannot move subscription from canceled to active"}`.
 
-Four [webhook events](/api-reference/webhook-endpoints#event-catalogue) fire: `subscription.created`, `subscription.updated`, `subscription.past_due` and `subscription.canceled`. Pausing, resuming, uncanceling and scheduling a period-end cancellation all emit `subscription.updated` — inspect the payload to tell them apart. Billing events carry the full subscription object in `data.object` and do not fan out to platform accounts.
+Four [webhook events](/api-reference/webhook-endpoints#event-catalogue) fire: `subscription.created`, `subscription.updated`, `subscription.past_due` and `subscription.canceled`. Pausing, resuming, uncanceling and scheduling a period-end cancellation all emit `subscription.updated`, so inspect the payload to tell them apart. Billing events carry the full subscription object in `data.object` and do not fan out to platform accounts.
 
 ## Errors
 

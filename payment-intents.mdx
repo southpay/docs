@@ -19,7 +19,7 @@ Content-Type: application/json
 Every field goes inside a required `payment_intent` object.
 
 <ParamField body="amount" type="string" required>
-  Fiat amount in major units, as a decimal string — `"149.00"`. Must be greater than zero. Multiplied by 100 into `settlement_amount_cents` internally.
+  Fiat amount in major units, as a decimal string: `"149.00"`. Must be greater than zero. Multiplied by 100 into `settlement_amount_cents` internally.
 </ParamField>
 
 <ParamField body="currency" type="string" required>
@@ -35,7 +35,7 @@ Every field goes inside a required `payment_intent` object.
 </ParamField>
 
 <ParamField body="order_id" type="string">
-  Your own order identifier, up to 255 characters. Indexed — you can filter the list endpoint by it, which `metadata` does not allow.
+  Your own order identifier, up to 255 characters. Indexed, so you can filter the list endpoint by it, which `metadata` does not allow.
 </ParamField>
 
 <ParamField body="title" type="string">
@@ -51,7 +51,7 @@ Every field goes inside a required `payment_intent` object.
 </ParamField>
 
 <ParamField body="metadata" type="object">
-  Up to 50 keys. **Every value must be a string** — a number or a nested object returns `422 "metadata values must be strings"`. Returned verbatim on the intent and in every webhook.
+  Up to 50 keys. **Every value must be a string**. A number or a nested object returns `422 "metadata values must be strings"`. Returned verbatim on the intent and in every webhook.
 </ParamField>
 
 <ParamField body="line_items" type="array">
@@ -64,7 +64,7 @@ Every field goes inside a required `payment_intent` object.
   </Expandable>
 </ParamField>
 
-`Idempotency-Key` is optional here and strongly recommended. Read [Idempotency](/idempotency) first — a replay returns `201` with the original intent, and a changed amount under the same key is discarded without an error.
+`Idempotency-Key` is optional here and strongly recommended. Read [Idempotency](/idempotency) first. A replay returns `201` with the original intent, and a changed amount under the same key is discarded without an error.
 
 <CodeGroup>
 ```bash Request
@@ -159,7 +159,7 @@ EVM assets share one deposit address across chains, so two addresses on the same
 ### Response fields
 
 <ResponseField name="id" type="string (UUID)" required>
-  The identifier for every subsequent API call. A bare UUID — there is no `pi_` prefix.
+  The identifier for every subsequent API call. A bare UUID, with no `pi_` prefix.
 </ResponseField>
 
 <ResponseField name="reference" type="string" required>
@@ -187,7 +187,7 @@ EVM assets share one deposit address across chains, so two addresses on the same
 </ResponseField>
 
 <ResponseField name="terminal" type="boolean">
-  `true` for `completed`, `expired`, `failed` and `refunded`. Means the outcome is settled, not that the record is frozen — any of them can still become `refunded`.
+  `true` for `completed`, `expired`, `failed` and `refunded`. Means the outcome is settled, not that the record is frozen. Any of them can still become `refunded`.
 </ResponseField>
 
 <ResponseField name="payment_addresses" type="array">
@@ -271,7 +271,7 @@ The single-intent read returns a considerably richer object than create does. On
 | `auto_swap_detail` | The swap, if one ran |
 | `onramp_session`, `onramp_unavailable` | Card-to-crypto onramp state, where enabled |
 
-`transaction.status` uses the transaction state set — `pending`, `confirming`, `confirmed`, `submitted`, `failed`. `confirming` is a transaction status and never a payment intent status.
+`transaction.status` uses the transaction state set: `pending`, `confirming`, `confirmed`, `submitted`, `failed`. `confirming` is a transaction status and never a payment intent status.
 
 ## List
 

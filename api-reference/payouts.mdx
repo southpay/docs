@@ -12,7 +12,7 @@ Paths are relative to `https://api.southpay.io/api/v2`.
 
 ## Before you can pay out
 
-`POST /payouts` needs a **payout destination** — a saved bank account or wallet address, referenced by `fiat_payout_detail_id` or `crypto_payout_detail_id`. You cannot create one over the public API; they are configured in the dashboard. See [payout destinations](/payout-destinations) for what each kind is, where the ids come from, and what a fiat destination requires.
+`POST /payouts` needs a **payout destination**: a saved bank account or wallet address, referenced by `fiat_payout_detail_id` or `crypto_payout_detail_id`. You cannot create one over the public API; they are configured in the dashboard. See [payout destinations](/payout-destinations) for what each kind is, where the ids come from, and what a fiat destination requires.
 
 The crypto path also accepts a raw `destination_address` instead of a saved detail id, which skips the saved-destination requirement but not the address validation.
 
@@ -21,12 +21,12 @@ The crypto path also accepts a raw `destination_address` instead of a saved deta
 Reads require `payouts:read`, writes require `payouts:write`. Publishable keys cannot call any of these endpoints.
 
 <Note>
-Creating a crypto payout runs a step-up MFA check. For API keys and OAuth tokens that check is a no-op — it never fires. It only gates dashboard sessions, which return `403` `mfa_required` without two-factor enabled, or `503` `mfa_check_unavailable` if the identity provider is down. The same applies to `POST /balance_swaps` and `POST /payout_schedules/{id}/run`.
+Creating a crypto payout runs a step-up MFA check. For API keys and OAuth tokens that check is a no-op and never fires. It only gates dashboard sessions, which return `403` `mfa_required` without two-factor enabled, or `503` `mfa_check_unavailable` if the identity provider is down. The same applies to `POST /balance_swaps` and `POST /payout_schedules/{id}/run`.
 </Note>
 
 ## Create a payout
 
-**`POST /payouts`** — scope `payouts:write`. `Idempotency-Key` is **required**.
+**`POST /payouts`**. Scope `payouts:write`. `Idempotency-Key` is **required**.
 
 Parameters are sent at the **top level**, not wrapped in an object.
 
@@ -114,7 +114,7 @@ curl -X POST https://api.southpay.io/api/v2/payouts \
 </CodeGroup>
 
 <Warning>
-Live-mode payouts are irreversible once broadcast. A replayed `Idempotency-Key` returns the original payout with status `201`, so a retry after a network timeout is safe — but only if you send the same key. A new key sends a second payout.
+Live-mode payouts are irreversible once broadcast. A replayed `Idempotency-Key` returns the original payout with status `201`, so a retry after a network timeout is safe, but only if you send the same key. A new key sends a second payout.
 </Warning>
 
 ### Fiat off-ramp constraints
@@ -205,7 +205,7 @@ Live-mode payouts are irreversible once broadcast. A replayed `Idempotency-Key` 
 </ResponseField>
 
 <ResponseField name="failure_reason" type="string | null">
-  The provider's raw error text. Free-form and not stable — for humans only.
+  The provider's raw error text. Free-form and not stable. For humans only.
 </ResponseField>
 
 <ResponseField name="asset" type="object" required>
@@ -219,7 +219,7 @@ Live-mode payouts are irreversible once broadcast. A replayed `Idempotency-Key` 
 
 ## Quote a fiat payout
 
-**`POST /payouts/quote`** — scope `payouts:write`. Fiat only. Creates nothing.
+**`POST /payouts/quote`**. Scope `payouts:write`. Fiat only. Creates nothing.
 
 <ParamField body="asset_id" type="string" required>
   Must be a USDT or USDC asset.
@@ -266,11 +266,11 @@ curl -X POST https://api.southpay.io/api/v2/payouts/quote \
 
 ## Retrieve a payout
 
-**`GET /payouts/{id}`** — scope `payouts:read`. Returns a bare payout object. Unknown id returns `404` `{"error": "Payout not found"}`.
+**`GET /payouts/{id}`**. Scope `payouts:read`. Returns a bare payout object. Unknown id returns `404` `{"error": "Payout not found"}`.
 
 ## List payouts
 
-**`GET /payouts`** — scope `payouts:read`. Newest first.
+**`GET /payouts`**. Scope `payouts:read`. Newest first.
 
 <ParamField query="status" type="string">
   Filter by payout status.
@@ -312,7 +312,7 @@ Payouts wrap the page in `pagination`, while payments and billing use `meta`, an
 
 ## Retry a payout
 
-**`POST /payouts/{id}/retry`** — scope `payouts:write`. No body, no MFA check.
+**`POST /payouts/{id}/retry`**. Scope `payouts:write`. No body, no MFA check.
 
 Only a `failed` payout whose funds have not already been returned to your balance can be retried. Returns `200` with the updated payout.
 
@@ -353,4 +353,4 @@ There are no payout webhooks. `payout.created`, `payout.confirmed` and `payout.f
 | `404` | `{"error": "Fiat payout detail not found or not active"}` | Bad `fiat_payout_detail_id`. |
 | `422` | `{"error": "Insufficient balance"}` or `{"error": "No balance found for ETH_USDC"}` | Not enough funds. |
 
-Every one of these uses the flat `{"error": "<message>"}` envelope, except the `retry` responses above, which add a `code`. Errors raised deeper in the service layer — most notably from `POST /payout_schedules/{id}/run` — surface through the global handler as `{"error": {"message": "…", "code": null}}`. Handle both.
+Every one of these uses the flat `{"error": "<message>"}` envelope, except the `retry` responses above, which add a `code`. Errors raised deeper in the service layer, most notably from `POST /payout_schedules/{id}/run`, surface through the global handler as `{"error": {"message": "…", "code": null}}`. Handle both.

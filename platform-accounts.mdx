@@ -98,10 +98,10 @@ Content-Type: application/json
 
 `platform_fee_percentage` is optional and a decimal rate, so `0.005` is 0.5%. Leave it out to inherit your platform default.
 
-Accounts come back with: `id`, `name`, `external_id`, `platform_fee_percentage`, `kyc_confirmed_at`, `charges_enabled`, `payouts_enabled`, `verification_status`, `created_at`. `verification_status` is `not_started`, `pending`, `approved` or `rejected` — and it reads `approved` once KYC is confirmed, whatever the underlying verification request says.
+Accounts come back with: `id`, `name`, `external_id`, `platform_fee_percentage`, `kyc_confirmed_at`, `charges_enabled`, `payouts_enabled`, `verification_status`, `created_at`. `verification_status` is `not_started`, `pending`, `approved` or `rejected`. It reads `approved` once KYC is confirmed, whatever the underlying verification request says.
 
 <Note>
-`name`, `platform_fee_percentage` and `external_id` all change on a `PATCH`. `country` is accepted and ignored — it only seeds default assets at creation time.
+`name`, `platform_fee_percentage` and `external_id` all change on a `PATCH`. `country` is accepted and ignored. It only seeds default assets at creation time.
 
 Retire an account with `DELETE /platform/accounts/{id}`. It is a soft delete: keys are revoked, webhooks disabled, ledger history kept, and `POST /platform/accounts/{id}/restore` brings it back. An account still holding a balance, a pending payout, an in-flight payment or an open refund is refused with `409 account_has_active_funds` and a list of what is blocking it.
 </Note>
@@ -130,7 +130,7 @@ Content-Type: application/json
 
 The response contains a `url`. Redirect the merchant to it. They enter their business details and a payout address, and are sent back to your `return_url` when they finish.
 
-Links are single use and expire after seven days by default. Pass `expires_in` **in seconds** to change that, up to a hard maximum of 30 days — anything larger is clamped, not rejected. The token is shown once, in the create response, and is not retrievable afterwards.
+Links are single use and expire after seven days by default. Pass `expires_in` **in seconds** to change that, up to a hard maximum of 30 days. Anything larger is clamped, not rejected. The token is shown once, in the create response, and is not retrievable afterwards.
 
 A link that has been used or has expired returns `onboarding_link_unusable`, as `404` or `410` depending on which. Mint a fresh one rather than retrying the old token.
 
