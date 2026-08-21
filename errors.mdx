@@ -179,7 +179,8 @@ The report endpoints are a special case: they return `422` with a bare string in
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `rate_limited` | 429 | Agentic API or market data throttle |
+| `rate_limited` | 429 | A rate limit was exceeded. See [Rate limits](/rate-limits). |
+| `too_many_failed_attempts` | 429 | Too many requests from your address failed authentication |
 | `upstream_rate_limited` | 429 | The market data provider throttled us |
 | `market_data_error` | 502 | The market data provider failed |
 | `quote_unavailable` | 503 | No swap quote could be obtained |

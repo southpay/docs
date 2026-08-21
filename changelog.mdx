@@ -14,7 +14,7 @@ Rate limiting was rebuilt. Limits are higher, the responses tell you where you s
 
 - **Token buckets instead of fixed windows.** Buckets refill continuously, so there are no window boundaries to time and sustained traffic under the rate never throttles.
 
-- **`Retry-After` on every `429`.** Wait the number of seconds it names. Authenticated responses also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, plus the `RateLimit` and `RateLimit-Policy` pair from the IETF draft, so you can pace a batch job without waiting to be throttled.
+- **`Retry-After` on every `429`.** Wait the number of seconds it names. Authenticated responses also carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, plus the `RateLimit` and `RateLimit-Policy` pair from the IETF draft, so you can pace a batch job without waiting to be throttled. `X-RateLimit-Limit` reports the burst bucket that `X-RateLimit-Remaining` counts down; the sustained rate is in `RateLimit-Policy`.
 
 - **The budget is per store.** Issuing more API keys no longer multiplies your allowance, and rotating a key no longer resets it. Platforms are budgeted **per sub-merchant**, so one busy sub-merchant cannot exhaust the budget the others depend on.
 
@@ -23,6 +23,8 @@ Rate limiting was rebuilt. Limits are higher, the responses tell you where you s
 - **Checkout traffic is budgeted per checkout, not per IP address.** Mobile carrier and office networks put many unrelated shoppers behind one address, and the old per-IP key let strangers throttle each other mid-payment. A shopper's checkout now has its own budget, with a high per-IP ceiling behind it purely to stop abuse. The onramp limits are keyed per checkout and caller for the same reason. [See rate limits](/rate-limits)
 
 - **The dashboard has its own budget.** People signed in to the dashboard are counted separately from your API keys, and connected OAuth apps separately again. A batch job that exhausts your API budget can no longer lock a colleague out of the dashboard.
+
+- **Repeated authentication failures are now throttled per address.** After 40 failed attempts in quick succession an address gets `429` with code `too_many_failed_attempts` instead of unlimited `401`s. Valid credentials are never affected.
 
 ### Corrections
 

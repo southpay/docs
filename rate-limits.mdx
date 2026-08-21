@@ -23,6 +23,7 @@ Live mode. Test mode gets a quarter of the sustained rate on the credential-keye
 | `POST /api/v2/checkout/{reference}/onramp_sessions` | 12 / min | 6 | Checkout and caller |
 | | 60 / min | 20 | The checkout |
 | Inbound provider webhooks | 6,000 / min | 1,000 | Caller IP |
+| Failed authentication attempts | 120 / min | 40 | Caller IP |
 
 Reading payments, creating refunds, listing balances, running payouts, managing subscriptions and invoices, registering webhook endpoints, and the platform account endpoints have **no enforced limit today**. We are measuring them, and limits will be introduced there. Exact numbers will be published here, and announced in the [changelog](/changelog), at least 60 days before they are enforced. Build the backoff described below once and apply it everywhere so that change is a non-event for you.
 
@@ -61,20 +62,24 @@ This replaced a fixed one minute window in August 2026. If you built against the
 Every authenticated response carries your current budget, so you can pace yourself without waiting to be throttled.
 
 ```http
-X-RateLimit-Limit: 1200
-X-RateLimit-Remaining: 1187
+X-RateLimit-Limit: 200
+X-RateLimit-Remaining: 187
 X-RateLimit-Reset: 3
 RateLimit-Policy: "payment_create";q=1200;w=60
-RateLimit: "payment_create";r=1187;t=3
+RateLimit: "payment_create";r=187;t=3
 ```
 
 | Header | Meaning |
 | --- | --- |
-| `X-RateLimit-Limit` | The sustained allowance for this policy |
-| `X-RateLimit-Remaining` | Tokens left in your bucket right now |
+| `X-RateLimit-Limit` | How many tokens your bucket holds: the **Burst** column above |
+| `X-RateLimit-Remaining` | Tokens left in that bucket right now |
 | `X-RateLimit-Reset` | Seconds until the bucket is full again |
-| `RateLimit-Policy` | The policy name, its quota `q` and window `w`, per the IETF draft |
+| `RateLimit-Policy` | The **sustained** rate: quota `q` per window `w` seconds |
 | `RateLimit` | The same policy's remaining `r` and reset `t` |
+
+<Note>
+`X-RateLimit-Limit` reports the burst bucket, not the per-minute rate, so that it and `X-RateLimit-Remaining` measure the same thing. The sustained rate lives in `RateLimit-Policy` as `q` per `w` seconds. In the example above you may hold 200 tokens at once, and they refill at 1,200 per minute.
+</Note>
 
 `X-RateLimit-Reset` is **delta-seconds**, not a Unix timestamp. The `RateLimit` and `RateLimit-Policy` pair follows [draft-ietf-httpapi-ratelimit-headers](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/). That draft is not yet an RFC and its syntax has changed between revisions, so treat the `X-` headers as the stable contract and the draft pair as additive.
 
@@ -100,6 +105,8 @@ X-RateLimit-Reset: 3
 ```
 
 `Retry-After` is in seconds and is never less than 1. Waiting exactly that long is enough; you do not need to guess.
+
+A `429` with `code: "too_many_failed_attempts"` is different: it means too many requests from your address failed authentication. Fix the credential rather than retrying, then the budget clears on its own.
 
 <Warning>
 **A `429` with `code: "upstream_rate_limited"` is not your limit.** It means a market data provider throttled SouthPay. Branch on the code, not on the status alone, or your client will back off against a budget it never spent.
