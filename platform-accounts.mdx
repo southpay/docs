@@ -4,17 +4,31 @@ description: "Onboard your own merchants onto SouthPay, take a fee on everything
 sidebarTitle: "Platform accounts"
 ---
 
-Platform mode is not a feature you can switch on yourself. Read this first.
+Platform mode is reviewed before it is switched on. Read this first.
 
 <Warning>
-**Platform mode is off until SouthPay staff turn it on.** There is no API and no dashboard toggle that enables it. Until it is enabled on your store, every endpoint on this page returns:
+**Platform mode is off until someone at SouthPay approves it.** Until it is enabled on your store, every endpoint on this page returns:
 
 ```json 403
 { "error": { "message": "This store is not a platform account", "code": "not_a_platform" } }
 ```
 
-The same `403` comes back from any request carrying `X-Southpay-Account`. Email [support@southpay.io](mailto:support@southpay.io) to have your account enabled before you build against this page.
+The same `403` comes back from any request carrying `X-Southpay-Account`.
 </Warning>
+
+Ask for it in the dashboard under **Settings > Platform**, or by API:
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/platform/access_request \
+  -H "Authorization: Bearer <session token>" \
+  -H "X-Store-Id: <your store id>" \
+  -H "Content-Type: application/json" \
+  -d '{ "access_request": { "use_case": "We onboard our own restaurants." } }'
+```
+
+One request can be under review at a time; a second returns `409` `access_request_pending`, and a store that is already a platform returns `409` `already_a_platform`. `GET /platform/access_request` returns `{ "request": null }` until you have asked, then the latest request with its `status`. A rejected request carries a `rejection_reason` and you can ask again.
+
+Review is a person, not a queue timer, because a platform takes a cut of its merchants' payments and stands behind their verification.
 
 A **platform** is a SouthPay account that onboards and manages other merchants, called **sub-merchants**. You integrate once, create accounts by API, and earn a fee on every payment your merchants take.
 
@@ -33,6 +47,8 @@ Platform endpoints need scopes that a normal secret key is **not** created with.
 | `accounts:act` | Sending `X-Southpay-Account` |
 
 A request missing one returns `403` `insufficient_scope`, which is a different failure from `not_a_platform`. Read the `code`, not the status.
+
+Scopes are fixed when a key is created. A key you made before your store was enabled keeps the non-platform set for good, so issue a new one after approval rather than reusing the old key. The dashboard flags any key in that state, and the `insufficient_scope` message says so too.
 
 ## How money splits
 
