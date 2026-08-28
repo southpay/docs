@@ -7,6 +7,8 @@ Test mode settles on **Ethereum Sepolia** and nothing else, and there is no merc
 
 Sepolia ETH has no market value and is given away by faucets, so a full test costs nothing. What you need is a wallet pointed at Sepolia and a small balance in it. Any Ethereum wallet works, and so does a script with no wallet software at all.
 
+For automated tests, simulate the deposit through the API instead of sending anything. See [simulate a deposit](/environments#simulate-a-deposit). Do the wallet setup below at least once anyway, because a simulated deposit never exercises your address rendering, decimal handling or gas assumptions.
+
 ## Network details
 
 Every wallet asks for some subset of these. They are the whole contract.
