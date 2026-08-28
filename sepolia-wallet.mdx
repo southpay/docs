@@ -1,13 +1,15 @@
 ---
 title: "Sepolia test wallet"
-description: "Add Ethereum Sepolia to MetaMask, claim free test ETH from a faucet, and send it to a test payment intent."
+description: "Point any wallet at Ethereum Sepolia, claim free test ETH from a faucet, and send it to a test payment intent."
 ---
 
 Test mode settles on **Ethereum Sepolia** and nothing else, and there is no merchant-facing simulator. To complete a test payment you do what a customer does: send Sepolia ETH from a wallet to the deposit address on the intent.
 
-Sepolia ETH has no market value and is given away by faucets, so a full test costs nothing. What you need is a wallet pointed at Sepolia and a small balance in it.
+Sepolia ETH has no market value and is given away by faucets, so a full test costs nothing. What you need is a wallet pointed at Sepolia and a small balance in it. Any Ethereum wallet works, and so does a script with no wallet software at all.
 
 ## Network details
+
+Every wallet asks for some subset of these. They are the whole contract.
 
 | Field | Value |
 | --- | --- |
@@ -15,38 +17,40 @@ Sepolia ETH has no market value and is given away by faucets, so a full test cos
 | Chain ID | `11155111`, hex `0xaa36a7` |
 | Currency symbol | `ETH` |
 | Decimals | 18 |
+| RPC URL | `https://ethereum-sepolia-rpc.publicnode.com` |
 | Block explorer | `https://sepolia.etherscan.io` |
 | SouthPay asset id | `SETH` |
 
-## Point MetaMask at Sepolia
+Sepolia addresses are ordinary `0x` addresses. The same address exists on every EVM chain and holds a different balance on each, so the network your wallet is set to is what decides where a transaction lands.
 
-MetaMask ships with Sepolia built in. It is hidden until you turn test networks on, so switch it on rather than adding the network by hand.
+## Add Sepolia to your wallet
 
-<Steps>
-  <Step title="Show test networks">
-    Open the network selector, scroll to the bottom of the network list, and enable **Show test networks**. On the extension you can also reach this under **Settings → Advanced**.
-  </Step>
-  <Step title="Switch to Sepolia">
-    Open the network selector again and choose **Sepolia**. The balance now reads in Sepolia ETH.
-  </Step>
-  <Step title="Copy your address">
-    Click the account name to copy the address. It is an ordinary `0x` address, the same format as mainnet.
-  </Step>
-</Steps>
+Most mainstream Ethereum wallets already know about Sepolia and hide it behind a setting, because testnets are noise for ordinary users. Look for a toggle named something close to **Show test networks**, **Enable testnets** or **Testnet mode**, usually in the network list itself or under advanced or developer settings. MetaMask, Rabby and Coinbase Wallet all work this way, though the wording and the menu differ and both move between releases.
 
-<Note>
-The same address works on every EVM network. An address holding Sepolia ETH holds nothing on mainnet, and the reverse is also true. Which network your wallet is set to decides which chain a transaction lands on.
-</Note>
+Turn that setting on, then pick Sepolia from the network list. If your wallet has it, use the bundled entry rather than adding the network by hand.
 
-### Adding Sepolia to another wallet
+### Check which Sepolia you picked
 
-Wallets that do not bundle Sepolia take the network details above plus an RPC URL. SouthPay does not run a public RPC endpoint; use a third-party one.
+Nearly every rollup runs a testnet called "Sepolia", so a wallet's network list may offer twenty entries matching that name. They are separate chains. SouthPay watches Ethereum Sepolia only, and the chain ID is the only reliable way to tell them apart.
 
-```text
-https://ethereum-sepolia-rpc.publicnode.com
-```
+| Network | Chain ID | Hex |
+| --- | --- | --- |
+| **Ethereum Sepolia** | **`11155111`** | **`0xaa36a7`** |
+| OP Sepolia | `11155420` | `0xaa37dc` |
+| Arbitrum Sepolia | `421614` | `0x66eee` |
+| Base Sepolia | `84532` | `0x14a34` |
 
-Public RPC endpoints appear and disappear without notice, and several long-standing ones now return errors or require a paid plan. If the endpoint above stops responding, pick another from [chainlist.org](https://chainlist.org/chain/11155111) and confirm it reports chain ID `0xaa36a7`:
+OP Sepolia is the dangerous one. It differs from Ethereum Sepolia in the fourth digit, and some wallets show the two adjacent in the list.
+
+<Warning>
+Confirm the chain before you send, every time. A test deposit address is watched on Ethereum Sepolia and nowhere else. Funds sent to it on mainnet, on OP Sepolia, or on any other chain are not credited to the intent, never appear in test mode, and cannot be recovered through the API or the dashboard.
+</Warning>
+
+### Adding it manually
+
+Wallets that do not bundle Sepolia take a custom network built from the table above: network name, RPC URL, chain ID, currency symbol and explorer URL. The chain ID is the field that matters; a wallet that reports a different one from the RPC than the one you typed is pointed at the wrong chain.
+
+SouthPay does not run a public RPC endpoint, so the URL above belongs to a third party. Public endpoints appear and disappear without notice, and several long-standing ones now return errors or require a paid plan. If it stops responding, pick another from [chainlist.org](https://chainlist.org/chain/11155111) and confirm it reports `0xaa36a7` before you trust it:
 
 ```bash
 curl -X POST https://ethereum-sepolia-rpc.publicnode.com \
@@ -56,7 +60,7 @@ curl -X POST https://ethereum-sepolia-rpc.publicnode.com \
 
 ## Get test ETH from a faucet
 
-A faucet sends you Sepolia ETH for free. Paste your address, solve whatever check the faucet asks for, and the balance arrives in under a minute.
+A faucet sends you Sepolia ETH for free. Paste your address, satisfy whatever check the faucet asks for, and the balance arrives in under a minute.
 
 | Faucet | Typically asks for |
 | --- | --- |
@@ -66,13 +70,13 @@ A faucet sends you Sepolia ETH for free. Paste your address, solve whatever chec
 | [Chainlink](https://faucets.chain.link/sepolia) | A connected wallet |
 | [PoW faucet](https://sepolia-faucet.pk910.de/) | Browser-side proof of work, no account |
 
-Faucets change their drip amounts, cooldowns and eligibility rules often, and they run dry. Treat the amounts and requirements on the faucet's own page as authoritative, and keep a second faucet in reserve. Claiming from more than one is fine.
+Faucets change their drip amounts, cooldowns and eligibility rules often, and they run dry. Treat the faucet's own page as authoritative on what it currently gives, and keep a second one in reserve. Claiming from more than one is fine.
 
-You need a little more than the payment amount, because the sender pays gas on top. Sepolia gas is a rounding error next to any faucet drip.
+Check the faucet is funding Ethereum Sepolia and not a rollup testnet of the same name. You need a little more than the payment amount, because the sender pays gas on top, but Sepolia gas is a rounding error next to any faucet drip.
 
 ## How much a test intent costs
 
-Test mode does not use live market rates. Sepolia has no market, so `SETH` is priced from a fixed table and the rate is the same on every intent you create.
+Test mode does not use live market rates. Sepolia has no market, so `SETH` is priced from a fixed table and the rate is identical on every intent you create.
 
 At the fixed USD rate of `2217` per ETH:
 
@@ -93,10 +97,10 @@ Price test intents low. A handful of one-dollar intents goes much further than a
     Use a `sp_sk_test_` key. See the [quickstart](/quickstart) for the request.
   </Step>
   <Step title="Read the address and amount">
-    Take `payment_addresses[0].address` and `payment_addresses[0].crypto_amount_atomic` from the response. Divide the atomic amount by `10 ** 18` for the ETH figure to type into your wallet.
+    Take `payment_addresses[0].address` and `payment_addresses[0].crypto_amount_atomic` from the response. Divide the atomic amount by `10 ** 18` for the ETH figure a wallet UI expects.
   </Step>
-  <Step title="Send from MetaMask">
-    Confirm the network reads **Sepolia**, then send that exact amount to that address.
+  <Step title="Send it">
+    Confirm the network reads Ethereum Sepolia, then send that exact amount to that address.
   </Step>
   <Step title="Watch it settle">
     The intent moves `pending → processing → completed` as the transaction confirms, and your webhook endpoint receives each transition. Look the transaction up at `https://sepolia.etherscan.io/tx/{hash}`.
@@ -105,13 +109,24 @@ Price test intents low. A handful of one-dollar intents goes much further than a
 
 Send less than the required amount to exercise your underpayment path, or leave the intent alone to exercise expiry. Intents expire 60 minutes after creation.
 
-<Warning>
-Check the network before you confirm, every time. A test deposit address is watched on Sepolia only. Real ETH sent to it from Ethereum mainnet is not credited to the intent, does not appear in test mode, and is not recoverable through the API or the dashboard.
-</Warning>
+### Paying from a script
+
+You do not need wallet software. Any library or CLI that signs an Ethereum transaction will do, which is usually the better option in an automated test.
+
+`SETH` has 18 decimals, so `crypto_amount_atomic` is already denominated in wei. Pass it straight through and skip the conversion entirely. The value below is the wei figure for a `49.99` USD test intent:
+
+```bash
+cast send 0xDEPOSIT_ADDRESS_FROM_THE_INTENT \
+  --value 22548488949030221 \
+  --rpc-url https://ethereum-sepolia-rpc.publicnode.com \
+  --private-key $SEPOLIA_TEST_KEY
+```
+
+Use a throwaway key that has only ever held testnet funds. A key that also controls real assets on mainnet should never be pasted into a shell, a script or a CI secret for this.
 
 ## When the payment does not arrive
 
-- **Wallet on the wrong network.** The most common cause. Sepolia ETH sent while MetaMask is on another testnet never reaches the address.
+- **Wrong chain.** The most common cause by a wide margin. Check the transaction on [Sepolia Etherscan](https://sepolia.etherscan.io); if it is not there, it confirmed on some other network.
 - **Amount below what the intent asked for.** The intent stays open and reports the shortfall rather than completing. See [Payment lifecycle](/payment-lifecycle).
 - **Intent already expired.** After 60 minutes the intent is terminal, and a later transfer does not reopen it.
-- **Transaction still pending.** Check the address on [Sepolia Etherscan](https://sepolia.etherscan.io) before assuming SouthPay missed it. If the explorer has no record, the transaction never left your wallet.
+- **Transaction still pending.** Confirm it on the explorer before assuming SouthPay missed it. If the explorer has no record, the transaction never left your wallet.
