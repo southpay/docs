@@ -36,7 +36,7 @@ There is no merchant-facing simulator. Test payments are real transactions on a 
 
 1. Create a payment intent with a test key.
 2. Take `payment_addresses[0].address` and `payment_addresses[0].crypto_amount_atomic` from the response.
-3. Fund a Sepolia wallet from any public faucet.
+3. Fund a Sepolia wallet from any public faucet. See [Sepolia test wallet](/sepolia-wallet) for the network details, wallet setup and a list of faucets.
 4. Send exactly `crypto_amount_atomic / 10 ** 18` ETH to that address.
 
 The intent moves `pending → processing → completed` as the transaction confirms, and your webhook endpoint receives each transition. Send less than the required amount to exercise your underpayment path, or leave the intent alone for an hour to exercise expiry.
