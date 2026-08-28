@@ -32,43 +32,39 @@ What test mode does cover well: the intent lifecycle, expiry, webhook signing an
 
 ## Paying a test intent
 
-There are two ways to pay a test intent. Simulate the deposit through the API, which is what an automated test suite should do, or send real Sepolia ETH from a wallet, which is what you should do at least once before going live.
+There are two ways to pay a test intent. Have SouthPay pay it from the test wallet, which is what an automated test suite should do, or send Sepolia ETH from your own wallet. Both are real transactions on Sepolia; the only difference is whose wallet the ETH leaves.
 
-### Simulate a deposit
+### Pay from the test wallet
 
-`POST /payments/{id}/test_deposits` credits a deposit to a test payment intent without touching a chain. It accepts test credentials only; a live credential is refused with `403` and code `test_deposit_live_mode`.
-
-```bash
-curl -X POST https://api.southpay.io/api/v2/payments/{payment_id}/test_deposits \
-  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"test_deposit": {}}'
-```
-
-With an empty body it credits exactly the amount the intent asked for and the intent completes. Three optional fields change that.
-
-| Field | Effect |
-| --- | --- |
-| `amount_atomic` | Credit this many atomic units instead of the expected amount. Less than required exercises underpayment, more exercises overpayment. |
-| `confirmations` | `0` holds the deposit unconfirmed, moving the intent to `processing`. Repeat the call with the same `transaction_id` and `confirmations: 1` to settle it. |
-| `transaction_id` | Reuse a returned id to update that deposit rather than create another one. |
-
-Each call without a `transaction_id` creates a distinct deposit, so an underpayment can be topped up:
+`POST /payments/{id}/test_payments` sends Sepolia ETH from a SouthPay-funded wallet to the deposit address on the intent. You do not need a wallet, a faucet or a balance of your own.
 
 ```bash
-curl -X POST https://api.southpay.io/api/v2/payments/{payment_id}/test_deposits \
+curl -X POST https://api.southpay.io/api/v2/payments/{payment_id}/test_payments \
   -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"test_deposit": {"amount_atomic": "11274244474515110"}}'
+  -d '{"test_payment": {}}'
 ```
 
-The response echoes both `amount_atomic` and `required_atomic`, so you can assert on the amount your own checkout displayed rather than on the amount the API credited back to itself.
+The response is `202 Accepted`. The transfer is broadcast, not yet confirmed, so the intent is still `pending` when the call returns and moves to `processing` and then `completed` as the transaction confirms, exactly as it would for a customer payment. Watch your webhook endpoint, not the response body.
 
-<Warning>
-A simulated deposit never reaches a chain. It does not exercise your deposit address rendering, decimal handling, QR encoding or gas behaviour, and it cannot reproduce a customer who sends net of gas. Send one real Sepolia payment before you go live.
-</Warning>
+Send `amount_atomic` to pay something other than the exact amount. Below the required amount produces a real underpayment on chain:
 
-### Send real testnet ETH
+```bash
+curl -X POST https://api.southpay.io/api/v2/payments/{payment_id}/test_payments \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"test_payment": {"amount_atomic": "5000000000000000"}}'
+```
+
+The response echoes both `amount_atomic` and `required_atomic`, so you can assert against the amount your own checkout displayed rather than against the amount SouthPay chose to send.
+
+Because the wallet holds a finite balance, the endpoint is bounded. A single payment above the per-payment cap is refused with `422` and code `test_payment_amount_too_large`. A store that exhausts its rolling daily allowance is refused with `429`. If the wallet itself runs dry the call returns `503` with code `test_payment_faucet_unfunded`, and `remaining_daily_atomic` on every successful response tells you how much of your allowance is left.
+
+<Note>
+The test wallet has an allowance per store per day. Price test intents low, and keep your own funded wallet for a load test. Live credentials are refused with `403` and code `test_payment_live_mode`.
+</Note>
+
+### Send from your own wallet
 
 1. Create a payment intent with a test key.
 2. Take `payment_addresses[0].address` and `payment_addresses[0].crypto_amount_atomic` from the response.
@@ -78,7 +74,7 @@ A simulated deposit never reaches a chain. It does not exercise your deposit add
 The intent moves `pending → processing → completed` as the transaction confirms, and your webhook endpoint receives each transition. Leave the intent alone for an hour to exercise expiry.
 
 <Note>
-Simulated deposits are for integration and webhook tests, where you want a real intent to reach a real status and your endpoint to receive real deliveries. They are not a substitute for stubbing the SouthPay client in unit tests, which should not make network calls at all.
+The test wallet is for integration and webhook tests, where you want a real intent to settle from a real transaction and your endpoint to receive real deliveries. It is not a substitute for stubbing the SouthPay client in unit tests, which should not make network calls at all.
 </Note>
 
 ## Testing webhooks
