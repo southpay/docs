@@ -112,6 +112,7 @@
             "group": "Checkout",
             "pages": [
               "checkout-widget",
+              "custom-checkout",
               "card-payments"
             ]
           },

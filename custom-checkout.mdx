@@ -1,0 +1,219 @@
+---
+title: "Custom checkout"
+description: "Build your own payment page against the public checkout endpoint: read addresses and amounts, track confirmations, and offer card payments."
+---
+
+`GET /api/v2/checkout/{reference}` is the JSON behind SouthPay's hosted checkout. It is the endpoint to build against when you want your own payment page instead of [hosted checkout](/payment-intents#send-the-customer-to-checkout) or the [checkout widget](/checkout-widget).
+
+It is public and unauthenticated, keyed by the intent's `reference`, and cross-origin requests are allowed from any origin. Call it directly from the browser — no API key, no proxy.
+
+<Warning>
+  Because it needs no key, anyone with a `reference` can read it. Treat the `reference` as the secret. Do not put it in a URL you index, log it to a third party, or reuse it across orders.
+</Warning>
+
+Reading the checkout does not require your customer to be signed in to anything, but it is not free of side effects: a `pending` intent whose window has closed is expired by this call.
+
+## Get the checkout
+
+**`GET /checkout/{reference}`**. No authentication.
+
+```bash
+curl https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8
+```
+
+```json
+{
+  "token": "A1B2C3D4E5F6G7H8",
+  "payment_intent_id": "9c1d7f42-6a3b-4e58-9f10-2b8c5d4e7a91",
+  "store_id": "2f4b8a10-7c33-4d92-b0e5-8a1f6c3d5b27",
+  "store_name": "Example Store",
+  "status": "pending",
+  "state_reason": null,
+  "settlement_amount_cents": 4999,
+  "settlement_currency": "USD",
+  "expires_at": "2026-08-31T15:00:00.000Z",
+  "expired": false,
+  "terminal": false,
+  "success_url": "https://yourapp.com/success",
+  "failed_url": "https://yourapp.com/cancel",
+  "customer_pays_fee": true,
+  "fee_percentage": "0.0199",
+  "payment_addresses": [
+    {
+      "id": "b7e2c9d1-4a58-4f30-9c61-3d7e5a2b8f04",
+      "address": "0x1234…",
+      "crypto_amount_atomic": "50984000",
+      "status": "pending",
+      "fee_crypto_atomic": "994000",
+      "base_crypto_atomic": "49990000",
+      "asset": {
+        "coin_symbol": "USDC",
+        "chain_symbol": "ETH",
+        "atomic_decimals": 6,
+        "display_decimals": 2,
+        "token_standard": "ERC20"
+      }
+    }
+  ],
+  "order_summary": {
+    "image_url": "https://…",
+    "line_items": [],
+    "total_cents": 4999,
+    "currency": "USD"
+  },
+  "onramp": {
+    "available": true,
+    "providers": ["…"]
+  },
+  "transactions": [],
+  "branding": null
+}
+```
+
+### Fields
+
+<ResponseField name="token" type="string">
+  The intent's `reference`, echoed back.
+</ResponseField>
+
+<ResponseField name="payment_intent_id" type="string">
+  The intent's id. Use it when talking to support, and to match against the authenticated API.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  The payment intent status: `pending`, `processing`, `completed`, `failed`, `expired` or `refunded`. See [Payment lifecycle](/payment-lifecycle).
+</ResponseField>
+
+<ResponseField name="state_reason" type="string | null">
+  Why the intent is in that status, for example `pending_confirmations`, `completed_exact`, `completed_overpaid`, `completed_underpaid`, `processing_underpaid`, `failed_underpaid`, `failed_overpaid`, `expired_timeout`, `canceled_by_merchant`, `canceled_by_agent` or `refund_completed`.
+</ResponseField>
+
+<ResponseField name="terminal" type="boolean">
+  Whether the payment has finished for display purposes. True for `completed`, `expired`, `refunded` and `failed`. **Stop polling when this is true.**
+</ResponseField>
+
+<ResponseField name="expired" type="boolean">
+  Whether `expires_at` is in the past. A `pending` intent can read `expired: true` for the moment before the status catches up.
+</ResponseField>
+
+<ResponseField name="settlement_amount_cents" type="integer">
+  The order total in minor units of `settlement_currency`. This is the fiat price, not the crypto due.
+</ResponseField>
+
+<ResponseField name="customer_pays_fee" type="boolean">
+  Whether SouthPay's fee is added on top of the customer's amount. Drives whether `fee_crypto_atomic` and `base_crypto_atomic` appear on each address.
+</ResponseField>
+
+<ResponseField name="fee_percentage" type="string | null">
+  The total fee rate as a decimal fraction, for example `"0.0199"` for 1.99%. Null when no fee applies.
+</ResponseField>
+
+<ResponseField name="payment_addresses" type="object[]">
+  One entry per asset the customer may pay in. Show all of them and let the customer choose.
+
+  <Expandable title="address">
+    <ResponseField name="id" type="string">Identifier for this address.</ResponseField>
+    <ResponseField name="address" type="string">The deposit address. This is what goes in the QR code.</ResponseField>
+    <ResponseField name="crypto_amount_atomic" type="string">
+      **The exact amount due**, in the asset's smallest unit, as a string. Parse it with `BigInt`, never a JavaScript number — an 18-decimal asset overflows float precision and you will display the wrong amount. Divide by `10 ** atomic_decimals` for the display value.
+    </ResponseField>
+    <ResponseField name="status" type="string">`pending` or `confirmed`, for this address specifically.</ResponseField>
+    <ResponseField name="fee_crypto_atomic" type="string">
+      The fee portion of `crypto_amount_atomic`. Present only when `customer_pays_fee` is true and a fee applies.
+    </ResponseField>
+    <ResponseField name="base_crypto_atomic" type="string">
+      The order portion of `crypto_amount_atomic`, so you can show "order + fee". Present under the same condition as `fee_crypto_atomic`.
+    </ResponseField>
+    <ResponseField name="asset" type="object">
+      `coin_symbol`, `chain_symbol`, `atomic_decimals`, `display_decimals` and `token_standard`. Use `atomic_decimals` to convert and `display_decimals` to round for display — they differ, and rounding by `atomic_decimals` shows an unreadable number of places.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="transactions" type="object[]">
+  Deposits seen so far, oldest first. Empty until the customer pays. Drive your confirmation progress from this.
+
+  <Expandable title="transaction">
+    <ResponseField name="tx_hash" type="string">The on-chain transaction hash.</ResponseField>
+    <ResponseField name="status" type="string">`pending`, `confirming`, `confirmed`, `submitted` or `failed`. This is a transaction status, not an intent status.</ResponseField>
+    <ResponseField name="confirmations" type="integer">Confirmations seen.</ResponseField>
+    <ResponseField name="required_confirmations" type="integer">Confirmations needed. Render `confirmations` / `required_confirmations` as progress.</ResponseField>
+    <ResponseField name="amount_atomic" type="string">Amount received, smallest unit, as a string.</ResponseField>
+    <ResponseField name="coin_symbol" type="string">Asset received.</ResponseField>
+    <ResponseField name="chain_symbol" type="string">Chain it arrived on.</ResponseField>
+    <ResponseField name="atomic_decimals" type="integer">Decimals for converting `amount_atomic`.</ResponseField>
+    <ResponseField name="explorer_url" type="string">Block explorer link for the hash. Show it — customers look for it.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="order_summary" type="object | null">
+  `image_url`, `line_items`, `total_cents` and `currency`, from what you sent at creation. Null when the intent has neither line items nor an image.
+</ResponseField>
+
+<ResponseField name="onramp" type="object">
+  Whether this checkout can be funded by card. `available` and `providers`. See [Card payments](/card-payments).
+</ResponseField>
+
+<ResponseField name="branding" type="object | null">
+  `logo_url`, `brand_name`, `primary_color`, `secondary_color` and `remove_southpay_branding`, when white-label branding is configured for the store. Null otherwise. Building your own checkout, you can ignore this and use your own design.
+</ResponseField>
+
+<ResponseField name="success_url" type="string | null">
+  Where to send the customer once the payment completes.
+</ResponseField>
+
+<ResponseField name="failed_url" type="string | null">
+  Where to send the customer if they abandon or the payment fails.
+</ResponseField>
+
+Errors are `{"error": "Checkout not found"}` with `404` when no intent matches the reference.
+
+## Poll for completion
+
+There is no customer-facing webhook and no websocket. Poll this endpoint, and stop when `terminal` is true.
+
+```javascript
+async function waitForPayment(reference, { intervalMs = 4000 } = {}) {
+  for (;;) {
+    const res = await fetch(
+      `https://api.southpay.io/api/v2/checkout/${reference}`
+    );
+    if (!res.ok) throw new Error(`checkout ${res.status}`);
+    const checkout = await res.json();
+
+    render(checkout);
+
+    if (checkout.terminal) return checkout;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+```
+
+Poll every few seconds, not every few hundred milliseconds. `GET` requests under `/api/v2/checkout/` are [rate limited](/rate-limits) per checkout, and a tight loop will throttle the customer out of their own payment page.
+
+<Warning>
+  Poll for your **display** only. Never release goods on what the browser saw — a customer can close the tab, and anyone can call this endpoint with the reference. Fulfil on the `payment_intent.completed` [webhook](/webhooks) delivered to your backend.
+</Warning>
+
+Convert amounts with `BigInt` throughout:
+
+```javascript
+const address = checkout.payment_addresses[0];
+const units = BigInt(address.crypto_amount_atomic);
+const scale = 10n ** BigInt(address.asset.atomic_decimals);
+const display = (
+  Number(units) / Number(scale)
+).toFixed(address.asset.display_decimals);
+```
+
+## Adding card payments
+
+If `onramp.available` is true, you can offer a card option alongside the wallet addresses. The request flow, pricing and session creation are covered in [Card payments](/card-payments).
+
+One constraint shapes the design, so decide on it before you build:
+
+<Warning>
+  The card flow does not return the customer to your page. After paying, the provider sends them to SouthPay's hosted checkout at `https://pay.southpay.io/{reference}`, which waits for settlement and then forwards them to your `success_url`. You cannot override that return target.
+</Warning>
+
+So a custom checkout offering card payments hands the customer to SouthPay for the waiting period and gets them back at `success_url`. Wallet payments stay on your page throughout. If keeping the customer on your own domain end to end matters more than offering cards, offer wallet payments only.

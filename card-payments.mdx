@@ -105,9 +105,11 @@ The provider's own cut is never a number SouthPay adds. It is discovered inside 
 
 ## Building your own checkout
 
-If you use [hosted checkout](/payment-intents#send-the-customer-to-checkout) or the [checkout widget](/checkout-widget), the card option renders itself and there is nothing to build. Everything below is for a checkout UI you host.
+If you use [hosted checkout](/payment-intents#send-the-customer-to-checkout) or the [checkout widget](/checkout-widget), the card option renders itself and there is nothing to build. Everything below is for a checkout UI you host — start from [Custom checkout](/custom-checkout), which covers the endpoint your page renders from.
 
-The endpoints are public and unauthenticated, keyed by the intent's `reference`. They carry no API key, so they are safe to call from the browser. Paths are relative to `https://api.southpay.io/api/v2`.
+The endpoints are public and unauthenticated, keyed by the intent's `reference`, and cross-origin requests are allowed from any origin. Call them straight from the browser — no API key, no proxy, and no `Idempotency-Key` header. Paths are relative to `https://api.southpay.io/api/v2`.
+
+Read the [warning about the return redirect](#3-handle-the-return) before you design the flow. It is the one constraint that can change how you build.
 
 ### 1. Price the available methods
 
@@ -333,9 +335,11 @@ https://pay.southpay.io/{reference}?onramp=cancel
 
 `onramp=success` means the card charge went through. It does not mean the payment is complete — crypto still has to arrive on-chain. Keep showing a pending state until the intent reaches `completed`.
 
-<Note>
-  The return URL always points at SouthPay's hosted checkout, not at a URL you supply. If you host your own checkout, the customer lands on SouthPay's page after paying. Your `success_url` on the payment intent is still honoured once the payment actually completes.
-</Note>
+<Warning>
+  **The card flow does not return the customer to your page, and you cannot change that.** The return target is always SouthPay's hosted checkout for the intent. A customer who pays by card on your own checkout leaves your domain, waits for settlement on `pay.southpay.io`, and is then forwarded to your `success_url`.
+
+  Wallet payments stay on your page throughout; card payments do not. If keeping the customer on your own domain end to end matters more than offering cards, offer wallet payments only.
+</Warning>
 
 ### One session at a time
 
