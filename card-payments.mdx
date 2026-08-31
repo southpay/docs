@@ -3,7 +3,7 @@ title: "Card payments"
 description: "Let customers fund a crypto checkout with a card or local payment method, price the available methods, and open a funding session from your own checkout UI."
 ---
 
-Card payments let a customer pay a crypto payment intent without holding crypto. The customer picks a card or local payment method, pays in your settlement currency, and a licensed onramp provider delivers crypto to the deposit address on the intent.
+Card payments let a customer pay a crypto payment intent without holding crypto. The customer picks a card or local payment method, pays in your settlement currency, and an onramp provider delivers crypto to the deposit address on the intent.
 
 Nothing about the payment intent changes. The same addresses, the same amounts, the same statuses, the same webhooks. Card payments only change **where the deposit comes from**.
 
@@ -80,7 +80,6 @@ When you need to know *why* an intent has no card option, read `onramp_unavailab
 | `no_settlement_asset` | The intent has no address in an asset the provider network can deliver. |
 | `below_min_amount` | Below the provider floor. |
 | `above_max_amount` | Above the provider ceiling. |
-| `uneconomic_for_store` | No method priced well enough to be offered under your store's absorbed rate. |
 
 `below_min_amount` and `above_max_amount` additionally carry `charge_amount_cents`, `min_amount_cents`, `max_amount_cents` and `currency`, so you can tell the customer the actual bound rather than a generic refusal. `max_amount_cents` is null when there is no ceiling.
 
@@ -90,7 +89,7 @@ Your store's `customer_pays_fee` setting decides who absorbs the cost of the car
 
 **`customer_pays_fee: true`.** The customer covers the platform fee, a card surcharge and the provider's own cut. The card is charged more than the order total, and you receive the full order amount.
 
-**`customer_pays_fee: false`.** The customer's card is charged the order total exactly, with nothing added. You receive the order amount minus a flat card rate. Because the provider's cut comes out of your side here, some methods on some amounts are not worth offering, and those are dropped. If none survive, availability reports `uneconomic_for_store`.
+**`customer_pays_fee: false`.** The customer's card is charged the order total exactly, with nothing added. You receive the order amount minus a flat card rate. Because the provider's cut comes out of your side here, some methods on some amounts are not worth offering, and those are dropped from the pricing response. If none survive, `payment_methods` comes back as an empty array — not an error, and not an `onramp_unavailable` reason. If the economics only fail at the last moment, creating the session returns `422` with `Card payments are not available for this amount.`
 
 The pricing response tells you which model is in effect and what has been added, so you can show the customer a breakdown rather than an unexplained difference:
 
@@ -389,13 +388,19 @@ Use it for support and reconciliation. Do not use it as a completion signal.
 
 ## Refunds
 
-**Card-funded deposits are never refunded automatically, and the ordinary refund path will not send them.**
+A refund normally returns crypto to the address the funds came from. For a card-funded deposit that address belongs to the onramp provider, not your customer. Sending there hands the money to a third party with no way to attribute it, and your customer gets nothing back.
 
-A refund normally returns crypto to the address the funds came from. For a card-funded deposit that address belongs to the onramp provider, not the customer — refunding to it would send money to a third party with no way to attribute it, and the customer would get nothing.
+**Check `onramp_session` on the intent before refunding.** If it is non-null, the deposit was card-funded and the on-chain sender is not your customer.
 
-So SouthPay blocks it. This applies to automatic refunds too: a card-funded payment that is overpaid or underpaid past expiry is **not** auto-refunded the way a wallet-funded one is. It is flagged for manual resolution instead.
+**Automatic refunds are blocked.** A card-funded payment that SouthPay would normally refund itself — overpaid, or underpaid past expiry — is not auto-refunded the way a wallet-funded one is. No refund is created; the payment is flagged for manual resolution instead.
 
-Email [support@southpay.io](mailto:support@southpay.io) with the payment intent id to resolve one. If you already know where the money should go, a refund with an explicit destination address is not blocked — see [Refunds](/api-reference/refunds).
+**Refunds you request on a `failed` or `expired` intent are blocked as well.** They take the same path. `POST /payments/{id}/refunds` returns `201` with no new refund in the array rather than an error, so read the response instead of assuming the request worked.
+
+<Warning>
+  A refund you request on a **`completed`** card-funded intent is not blocked. With no `refund.destination_address`, the destination is resolved from the on-chain sender — the onramp provider's wallet, not your customer. Always send an explicit `refund.destination_address` when refunding an intent that has an `onramp_session`.
+</Warning>
+
+An explicit destination is never blocked, on any refundable status. See [Refunds](/api-reference/refunds) for the request format, and email [support@southpay.io](mailto:support@southpay.io) with the payment intent id if you need help working out where funds should go.
 
 ## Test mode
 
@@ -405,7 +410,7 @@ Card payments work in [test mode](/environments) with an important limit.
 
 **What it does not do:** deliver crypto. Test-mode card payments are simulated end to end, so no deposit is ever sent on-chain. The session will reach `paid` and the payment intent will sit unpaid until it expires.
 
-To carry a test payment all the way through settlement, send testnet funds to the intent's deposit address yourself once the session is `paid`. See the [testnet wallet guide](/sepolia-wallet).
+To carry a test payment all the way through settlement, send testnet funds to the intent's deposit address yourself once the session is `paid`. See [Sepolia test wallet](/sepolia-wallet).
 
 Test and live credentials are never mixed. If a store is configured with the wrong pair, card payments are refused for that mode rather than falling back to the other — that is what `live_credentials_in_test` and `test_credentials_in_live` report. A store with no test credentials has no card option in test mode; it never quietly charges a real card.
 
@@ -413,12 +418,12 @@ Test and live credentials are never mixed. If a store is configured with the wro
 
 Both endpoints return `{"error": "<message>"}` as a plain string, not the structured envelope used elsewhere. See [Errors](/errors).
 
-| Status | When |
-| --- | --- |
-| `404` | No payment intent matches the `reference`. |
-| `409` | A card payment is already complete for this checkout, or the intent no longer accepts sessions. |
-| `422` | Card payments are unavailable for this store, intent or provider. The message says which. |
-| `502` | The provider network is temporarily unavailable, or a quote timed out. Retry. |
+| Status | Endpoint | When |
+| --- | --- | --- |
+| `404` | Both | No payment intent matches the `reference`. |
+| `409` | Create only | A card payment is already complete for this checkout; the intent is no longer `pending` or has expired; or a session was already in progress and could not be returned. |
+| `422` | Both | Card payments are unavailable for this store, intent or provider, or nothing priced economically. The message says which. |
+| `502` | Both | The provider network is temporarily unavailable, or a quote timed out. Retry. |
 
 `502` is worth retrying once; the underlying quote search has a deadline and a slow provider can trip it. Do not retry `422` — the answer will not change without the intent changing.
 
