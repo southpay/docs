@@ -1,0 +1,425 @@
+---
+title: "Card payments"
+description: "Let customers fund a crypto checkout with a card or local payment method, price the available methods, and open a funding session from your own checkout UI."
+---
+
+Card payments let a customer pay a crypto payment intent without holding crypto. The customer picks a card or local payment method, pays in your settlement currency, and a licensed onramp provider delivers crypto to the deposit address on the intent.
+
+Nothing about the payment intent changes. The same addresses, the same amounts, the same statuses, the same webhooks. Card payments only change **where the deposit comes from**.
+
+SouthPay never sees, stores or transmits card details. The customer enters them on the provider's own checkout, which is why the flow ends in a redirect rather than a form you host.
+
+## The card charge is not the payment
+
+This is the single most important thing on this page.
+
+A successful card charge means the provider took the customer's money. It does **not** mean the payment intent is paid. The provider still has to send crypto on-chain to the deposit address, and the intent settles the way every other payment settles: when that deposit is detected and confirmed.
+
+<Warning>
+  Do not release goods, mark an order paid, or trust a customer returning to your success URL when the card charge succeeds. Wait for `payment_intent.completed`, exactly as you would for a customer paying from their own wallet.
+</Warning>
+
+Because card and bank rails can settle long after the customer commits, an intent with a funding session in progress is held open past its normal expiry window.
+
+## Availability
+
+Card payments are **off by default**. There is no API field and no dashboard switch that turns them on — only SouthPay staff can enable them for a store. Contact [support@southpay.io](mailto:support@southpay.io) to have them enabled.
+
+Even on an enabled store, availability is decided per payment intent. A method is offered only when all of the following hold:
+
+- The settlement currency is one the provider network supports.
+- The intent has a deposit address in an asset the provider network can deliver. This is a subset of the assets your store accepts, so an intent that accepts only assets outside that subset gets no card option.
+- The amount is inside the provider's floor and ceiling.
+- The economics work for your store. See [Who pays the fee](#who-pays-the-fee).
+
+### Checking availability
+
+`GET /api/v2/checkout/{reference}` carries an `onramp` object:
+
+```json
+{
+  "onramp": {
+    "available": true,
+    "providers": ["…"]
+  }
+}
+```
+
+<ResponseField name="onramp.available" type="boolean">
+  Whether to render a card option for this checkout.
+</ResponseField>
+
+<ResponseField name="onramp.providers" type="string[]">
+  Opaque provider identifiers enabled for this intent. Pass one back as `provider` to pin a session to it. Treat the values as opaque strings; do not branch on them or display them.
+</ResponseField>
+
+When you need to know *why* an intent has no card option, read `onramp_unavailable` on the authenticated intent, `GET /api/v2/payments/{id}`:
+
+```json
+{
+  "onramp_unavailable": {
+    "reason": "below_min_amount",
+    "message": "This payment is below the card payment minimum.",
+    "charge_amount_cents": 500,
+    "min_amount_cents": 1000,
+    "max_amount_cents": null,
+    "currency": "USD"
+  }
+}
+```
+
+`onramp_unavailable` is null once a funding session exists for the intent, whatever that session's outcome.
+
+| `reason` | Meaning |
+| --- | --- |
+| `feature_disabled` | Card payments are not enabled for your store. |
+| `provider_unconfigured` | No provider is configured for this mode. |
+| `live_credentials_in_test` | Card payments are unavailable in test mode because the configured test credentials are not test credentials. |
+| `test_credentials_in_live` | Card payments are unavailable because the provider is configured with test credentials. |
+| `unsupported_currency` | The intent's settlement currency is not supported for card payments. |
+| `no_settlement_asset` | The intent has no address in an asset the provider network can deliver. |
+| `below_min_amount` | Below the provider floor. |
+| `above_max_amount` | Above the provider ceiling. |
+| `uneconomic_for_store` | No method priced well enough to be offered under your store's absorbed rate. |
+
+`below_min_amount` and `above_max_amount` additionally carry `charge_amount_cents`, `min_amount_cents`, `max_amount_cents` and `currency`, so you can tell the customer the actual bound rather than a generic refusal. `max_amount_cents` is null when there is no ceiling.
+
+## Who pays the fee
+
+Your store's `customer_pays_fee` setting decides who absorbs the cost of the card rail, and it changes what the customer is charged.
+
+**`customer_pays_fee: true`.** The customer covers the platform fee, a card surcharge and the provider's own cut. The card is charged more than the order total, and you receive the full order amount.
+
+**`customer_pays_fee: false`.** The customer's card is charged the order total exactly, with nothing added. You receive the order amount minus a flat card rate. Because the provider's cut comes out of your side here, some methods on some amounts are not worth offering, and those are dropped. If none survive, availability reports `uneconomic_for_store`.
+
+The pricing response tells you which model is in effect and what has been added, so you can show the customer a breakdown rather than an unexplained difference:
+
+<ResponseField name="fee_borne_by" type="string">
+  `payer` or `merchant`.
+</ResponseField>
+
+<ResponseField name="southpay_fee_cents" type="integer">
+  What SouthPay added on top of the order for the customer to cover. `0` when the store absorbs the fee.
+</ResponseField>
+
+The provider's own cut is never a number SouthPay adds. It is discovered inside each quote and is already reflected in the charge amounts below.
+
+## Building your own checkout
+
+If you use [hosted checkout](/payment-intents#send-the-customer-to-checkout) or the [checkout widget](/checkout-widget), the card option renders itself and there is nothing to build. Everything below is for a checkout UI you host.
+
+The endpoints are public and unauthenticated, keyed by the intent's `reference`. They carry no API key, so they are safe to call from the browser. Paths are relative to `https://api.southpay.io/api/v2`.
+
+### 1. Price the available methods
+
+**`GET /checkout/{reference}/onramp/payment_methods`**
+
+Every method is priced by running a real quote for it, so the response contains only methods a provider actually quoted at this amount, in this currency, for this customer's region. A method that cannot be priced is left out rather than shown and failed at the provider. Results are cached briefly per intent, so reopening the picker is fast.
+
+Expect this call to be slow the first time — it is quoting several methods against live providers.
+
+<ParamField query="country" type="string">
+  ISO 3166-1 alpha-2 country code for the customer. Ignored when the request arrives with a `CF-IPCountry` header, which takes precedence.
+</ParamField>
+
+<ParamField query="region" type="string">
+  Sub-national region code, for example a US state. Ignored when the request arrives with a `CF-Region-Code` or `CF-Region` header.
+</ParamField>
+
+<ParamField query="provider" type="string">
+  Pin pricing to one provider identifier from `onramp.providers`. Omit to use the default.
+</ParamField>
+
+<Note>
+  Region matters more than it looks. In countries with sub-national regions, availability differs between them — a customer in one US state can be offered providers that cannot serve a customer in another. Send `region` when you know it, or the customer may pick a provider that rejects them at its own checkout.
+</Note>
+
+<CodeGroup>
+```bash Request
+curl "https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8/onramp/payment_methods?country=US&region=CA"
+```
+
+```json Response 200
+{
+  "provider": "…",
+  "currency": "USD",
+  "settlement_amount_cents": 10000,
+  "southpay_fee_cents": 406,
+  "fee_borne_by": "payer",
+  "payment_methods": [
+    {
+      "id": "…",
+      "name": "Credit card",
+      "code": "…",
+      "letter_id": "…",
+      "icon_url": "https://…",
+      "crypto_symbol": "USDC",
+      "charge_amount_cents": 10812,
+      "converted_amount_cents": 10500,
+      "crypto_amount": "105.000000",
+      "provider_id": "…",
+      "provider_name": "Provider A",
+      "providers": [
+        {
+          "id": "…",
+          "name": "Provider A",
+          "slug": "…",
+          "icon_url": "https://…",
+          "charge_amount_cents": 10812,
+          "converted_amount_cents": 10500,
+          "crypto_amount": "105.000000",
+          "no_kyc": false,
+          "recommended": true
+        },
+        {
+          "id": "…",
+          "name": "Provider B",
+          "slug": "…",
+          "icon_url": "https://…",
+          "charge_amount_cents": 10990,
+          "converted_amount_cents": 10500,
+          "crypto_amount": "104.120000",
+          "no_kyc": true,
+          "recommended": false
+        }
+      ]
+    }
+  ]
+}
+```
+</CodeGroup>
+
+Provider names and icons come from the providers themselves and are meant for display. The `…` values above are placeholders for opaque identifiers.
+
+<ResponseField name="payment_methods" type="object[]">
+  Methods that priced successfully, best crypto delivered first. An empty array means no method could be offered; it is not an error.
+
+  <Expandable title="method">
+    <ResponseField name="id" type="string">
+      Pass this back as `payment_method_id` when creating the session.
+    </ResponseField>
+
+    <ResponseField name="name" type="string">
+      Display name, for example `Credit card`.
+    </ResponseField>
+
+    <ResponseField name="code" type="string | null">
+      Provider-side method code.
+    </ResponseField>
+
+    <ResponseField name="letter_id" type="string | null">
+      Short provider-side method identifier.
+    </ResponseField>
+
+    <ResponseField name="icon_url" type="string | null">
+      Icon for the method.
+    </ResponseField>
+
+    <ResponseField name="crypto_symbol" type="string">
+      The asset that will be delivered, for example `USDC`.
+    </ResponseField>
+
+    <ResponseField name="charge_amount_cents" type="integer">
+      **What the customer's card is charged.** This is the price to display.
+    </ResponseField>
+
+    <ResponseField name="converted_amount_cents" type="integer">
+      The amount that gets converted to crypto, net of the provider's fee. Always less than or equal to `charge_amount_cents`. Do not show this as the price.
+    </ResponseField>
+
+    <ResponseField name="crypto_amount" type="string">
+      Decimal string of the crypto expected to arrive.
+    </ResponseField>
+
+    <ResponseField name="provider_id" type="string">
+      Identifier of the recommended provider. Mirrors `providers[0].id`.
+    </ResponseField>
+
+    <ResponseField name="provider_name" type="string">
+      Display name of the recommended provider.
+    </ResponseField>
+
+    <ResponseField name="providers" type="object[]">
+      Every provider that quoted this method, ranked best first. Each carries its own `id`, `name`, `slug`, `icon_url`, `charge_amount_cents`, `converted_amount_cents`, `crypto_amount`, `no_kyc` and `recommended`. Exactly one has `recommended: true`, and it is the first.
+
+      The method's own `charge_amount_cents`, `converted_amount_cents`, `crypto_amount`, `provider_id` and `provider_name` mirror that recommended provider, so a client that ignores `providers` entirely and shows one price per method is correct.
+
+      `no_kyc` indicates the provider expects no identity check at this amount. Treat it as the provider's claim, not a guarantee.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### 2. Open a funding session
+
+**`POST /checkout/{reference}/onramp_sessions`**
+
+Returns `201` with a `url`. Send the customer there.
+
+<ParamField body="payment_method_id" type="string">
+  The `id` of the method the customer chose. Omit and the provider picks.
+</ParamField>
+
+<ParamField body="provider_service_id" type="string">
+  Send this only when the customer picked a provider other than the recommended one — the `id` from the `providers` entry they chose. If that provider no longer quotes by the time the session is created, the ranking is used instead.
+</ParamField>
+
+<ParamField body="customer_email" type="string">
+  Prefills the customer's email at the provider.
+</ParamField>
+
+<ParamField body="provider" type="string">
+  Provider identifier from `onramp.providers`. Omit to use the default.
+</ParamField>
+
+<ParamField body="country" type="string">
+  ISO 3166-1 alpha-2 country code. Overridden by a `CF-IPCountry` header.
+</ParamField>
+
+<ParamField body="region" type="string">
+  Sub-national region code. Overridden by a `CF-Region-Code` or `CF-Region` header.
+</ParamField>
+
+<CodeGroup>
+```bash Request
+curl -X POST https://api.southpay.io/api/v2/checkout/A1B2C3D4E5F6G7H8/onramp_sessions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "payment_method_id": "…",
+    "customer_email": "customer@example.com",
+    "country": "US",
+    "region": "CA"
+  }'
+```
+
+```json Response 201
+{
+  "id": "3f8a1c22-9b40-4e77-8d51-6c2e9a7b4d10",
+  "provider": "…",
+  "status": "pending",
+  "amount_cents": 10812,
+  "currency": "USD",
+  "expires_at": "2026-08-31T14:30:00.000Z",
+  "paid_at": null,
+  "provider_txid": "…",
+  "created_at": "2026-08-31T14:00:00.000Z",
+  "url": "https://…"
+}
+```
+</CodeGroup>
+
+<ResponseField name="url" type="string">
+  The provider's checkout link. Redirect the customer here.
+</ResponseField>
+
+<ResponseField name="amount_cents" type="integer">
+  What the customer's card is charged, in minor units of `currency`.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  `pending`, `paid`, `expired` or `failed`. See [Session statuses](#session-statuses).
+</ResponseField>
+
+<ResponseField name="provider_txid" type="string | null">
+  The provider's own transaction identifier, for support requests.
+</ResponseField>
+
+### 3. Handle the return
+
+The provider returns the customer to the hosted checkout for the intent with an `onramp` query parameter:
+
+```text
+https://pay.southpay.io/{reference}?onramp=success
+https://pay.southpay.io/{reference}?onramp=cancel
+```
+
+`onramp=success` means the card charge went through. It does not mean the payment is complete — crypto still has to arrive on-chain. Keep showing a pending state until the intent reaches `completed`.
+
+<Note>
+  The return URL always points at SouthPay's hosted checkout, not at a URL you supply. If you host your own checkout, the customer lands on SouthPay's page after paying. Your `success_url` on the payment intent is still honoured once the payment actually completes.
+</Note>
+
+### One session at a time
+
+A funding session cannot be cancelled once it is created, so SouthPay will not create a second one while an earlier one may still be payable. Two live links against one deposit address means the customer can be charged twice.
+
+- Requesting a session while one is pending returns the **existing** session with `201`, not a new one. Redirect to the `url` you get back.
+- Once any session for the intent is `paid`, no further session can be created. A repeat request returns `409`.
+
+Treat the response as authoritative rather than assuming your request created something new. Compare the `id`.
+
+## Session statuses
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Created; the customer has not finished paying, or the provider has not reported yet. |
+| `paid` | The provider took the customer's money. Crypto delivery and settlement still follow. |
+| `expired` | The session went unpaid long enough to be swept. |
+| `failed` | The provider reported failure. |
+
+`paid`, `expired` and `failed` are terminal.
+
+<Warning>
+  `failed` also covers **refunded and cancelled** at the provider. A session that moves from `paid` to `failed` usually means the customer's card payment was reversed after the fact, not that they never paid. If crypto had already arrived and the intent completed, that is a chargeback-shaped event and needs a human. SouthPay alerts internally when this happens.
+</Warning>
+
+## Reading state from your backend
+
+There is no card-specific webhook event. A card-funded payment emits the ordinary [payment intent events](/webhooks): `payment_intent.processing` when the deposit is seen, `payment_intent.completed` when it confirms. Integrate against those.
+
+To inspect the funding session, read `onramp_session` on `GET /api/v2/payments/{id}`. It holds the most recent session for the intent:
+
+```json
+{
+  "onramp_session": {
+    "provider": "…",
+    "provider_name": "…",
+    "status": "paid",
+    "amount_cents": 10812,
+    "currency": "USD",
+    "provider_txid": "…",
+    "destination_address": "0x1234…",
+    "paid_at": "2026-08-31T14:12:00.000Z",
+    "expires_at": "2026-08-31T14:30:00.000Z",
+    "created_at": "2026-08-31T14:00:00.000Z"
+  }
+}
+```
+
+Use it for support and reconciliation. Do not use it as a completion signal.
+
+## Refunds
+
+**Card-funded deposits are never refunded automatically, and the ordinary refund path will not send them.**
+
+A refund normally returns crypto to the address the funds came from. For a card-funded deposit that address belongs to the onramp provider, not the customer — refunding to it would send money to a third party with no way to attribute it, and the customer would get nothing.
+
+So SouthPay blocks it. This applies to automatic refunds too: a card-funded payment that is overpaid or underpaid past expiry is **not** auto-refunded the way a wallet-funded one is. It is flagged for manual resolution instead.
+
+Email [support@southpay.io](mailto:support@southpay.io) with the payment intent id to resolve one. If you already know where the money should go, a refund with an explicit destination address is not blocked — see [Refunds](/api-reference/refunds).
+
+## Test mode
+
+Card payments work in [test mode](/environments) with an important limit.
+
+**What test mode exercises:** availability, method discovery and pricing, provider selection, session creation, the redirect, the return, and every status transition on the session up to `paid`.
+
+**What it does not do:** deliver crypto. Test-mode card payments are simulated end to end, so no deposit is ever sent on-chain. The session will reach `paid` and the payment intent will sit unpaid until it expires.
+
+To carry a test payment all the way through settlement, send testnet funds to the intent's deposit address yourself once the session is `paid`. See the [testnet wallet guide](/sepolia-wallet).
+
+Test and live credentials are never mixed. If a store is configured with the wrong pair, card payments are refused for that mode rather than falling back to the other — that is what `live_credentials_in_test` and `test_credentials_in_live` report. A store with no test credentials has no card option in test mode; it never quietly charges a real card.
+
+## Errors
+
+Both endpoints return `{"error": "<message>"}` as a plain string, not the structured envelope used elsewhere. See [Errors](/errors).
+
+| Status | When |
+| --- | --- |
+| `404` | No payment intent matches the `reference`. |
+| `409` | A card payment is already complete for this checkout, or the intent no longer accepts sessions. |
+| `422` | Card payments are unavailable for this store, intent or provider. The message says which. |
+| `502` | The provider network is temporarily unavailable, or a quote timed out. Retry. |
+
+`502` is worth retrying once; the underlying quote search has a deadline and a slow provider can trip it. Do not retry `422` — the answer will not change without the intent changing.
+
+These endpoints have their own [rate limits](/rate-limits), tighter than the rest of the checkout surface, because each call runs live quotes. Price methods once per checkout and cache the result in your UI rather than re-querying on every render.

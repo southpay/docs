@@ -18,9 +18,9 @@ Live mode. Test mode gets a quarter of the sustained rate on the credential-keye
 | `GET` and `POST /api/v2/oauth/authorize` | 60 / min | 20 | Caller IP |
 | Any `GET` under `/api/v2/checkout/` | 300 / min | 60 | The checkout |
 | | 6,000 / min | 600 | Caller IP |
-| `GET /api/v2/checkout/{reference}/onramp/payment_methods` | 20 / min | 10 | Checkout and caller |
+| [`GET /api/v2/checkout/{reference}/onramp/payment_methods`](/card-payments#1-price-the-available-methods) | 20 / min | 10 | Checkout and caller |
 | | 120 / min | 40 | The checkout |
-| `POST /api/v2/checkout/{reference}/onramp_sessions` | 12 / min | 6 | Checkout and caller |
+| [`POST /api/v2/checkout/{reference}/onramp_sessions`](/card-payments#2-open-a-funding-session) | 12 / min | 6 | Checkout and caller |
 | | 60 / min | 20 | The checkout |
 | Inbound provider webhooks | 6,000 / min | 1,000 | Caller IP |
 | Failed authentication attempts | 120 / min | 40 | Caller IP |

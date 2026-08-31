@@ -269,7 +269,7 @@ The single-intent read returns a considerably richer object than create does. On
 | `merchant` | Your store's legal details, as rendered on the invoice |
 | `payment_events`, `timeline` | The transition history |
 | `auto_swap_detail` | The swap, if one ran |
-| `onramp_session`, `onramp_unavailable` | Card-to-crypto onramp state, where enabled |
+| `onramp_session`, `onramp_unavailable` | [Card payment](/card-payments) funding state, where enabled |
 
 `transaction.status` uses the transaction state set: `pending`, `confirming`, `confirmed`, `submitted`, `failed`. `confirming` is a transaction status and never a payment intent status.
 

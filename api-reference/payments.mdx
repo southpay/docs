@@ -430,11 +430,28 @@ curl https://api.southpay.io/api/v2/payments/7b1f0c2e-2b0a-4c31-9f0e-1d2c3b4a5e6
 </ResponseField>
 
 <ResponseField name="onramp_session" type="object | null">
-  The most recent card-to-crypto session, when the `onramp` feature is enabled for your store. Keys: `provider`, `provider_name`, `status`, `amount_cents`, `currency`, `provider_txid`, `destination_address`, `paid_at`, `expires_at`, `created_at`.
+  The most recent card-to-crypto funding session, when [card payments](/card-payments) are enabled for your store. Null when the customer paid from their own wallet.
+
+  `status` here is the funding session, not the payment. A `paid` session means the card charge went through; the intent still settles from the on-chain deposit that follows.
+
+  <Expandable title="onramp_session">
+    <ResponseField name="provider" type="string">Opaque provider identifier. Do not branch on it.</ResponseField>
+    <ResponseField name="provider_name" type="string">Display name of the provider.</ResponseField>
+    <ResponseField name="status" type="string">`pending`, `paid`, `expired` or `failed`. `failed` also covers refunded and cancelled at the provider.</ResponseField>
+    <ResponseField name="amount_cents" type="integer">What the customer's card was charged, in minor units of `currency`.</ResponseField>
+    <ResponseField name="currency" type="string">Currency of `amount_cents`.</ResponseField>
+    <ResponseField name="provider_txid" type="string | null">The provider's own transaction identifier, for support requests.</ResponseField>
+    <ResponseField name="destination_address" type="string">The deposit address the purchased crypto is delivered to.</ResponseField>
+    <ResponseField name="paid_at" type="string | null">When the card charge completed.</ResponseField>
+    <ResponseField name="expires_at" type="string">When the funding session stops being payable.</ResponseField>
+    <ResponseField name="created_at" type="string">When the session was created.</ResponseField>
+  </Expandable>
 </ResponseField>
 
 <ResponseField name="onramp_unavailable" type="object | null">
-  Why an onramp session could not be offered. Always null once a session exists.
+  Why no card option could be offered for this intent. Always null once a funding session exists, whatever its outcome.
+
+  Carries `reason` and a human-readable `message`. `below_min_amount` and `above_max_amount` also carry `charge_amount_cents`, `min_amount_cents`, `max_amount_cents` and `currency`, so you can name the actual bound. See [Card payments](/card-payments#checking-availability) for the full list of reasons.
 </ResponseField>
 
 <ResponseField name="auto_swap_detail" type="object | null">

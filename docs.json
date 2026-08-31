@@ -111,7 +111,8 @@
           {
             "group": "Checkout",
             "pages": [
-              "checkout-widget"
+              "checkout-widget",
+              "card-payments"
             ]
           },
           {
