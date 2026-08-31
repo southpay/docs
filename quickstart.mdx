@@ -82,7 +82,7 @@ Three fields to store against your order right now:
 
 - **`id`** is the UUID you use on every later API call. All SouthPay ids are bare UUIDs; there is no `pi_` prefix scheme.
 - **`reference`** is 16 uppercase alphanumeric characters. This is the customer-facing identifier and the checkout token, and it is what arrives in webhooks.
-- **`expires_at`** is 60 minutes from creation, always. It is not configurable. See [Payment lifecycle](/payment-lifecycle).
+- **`expires_at`** is 60 minutes from creation by default. Send `expires_in` (seconds, `300` to `86400`) on create for a different window. See [Payment lifecycle](/payment-lifecycle).
 
 `crypto_amount_atomic` is the exact amount the customer must send, in the asset's smallest unit. Divide by `10 ** atomic_decimals` for a human amount, here `0.022533243243243243 ETH`.
 

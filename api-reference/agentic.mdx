@@ -123,6 +123,10 @@ The same `payment_intent` envelope as [the public endpoint](/api-reference/payme
 <ParamField body="payment_intent.success_url" type="string" />
 <ParamField body="payment_intent.failed_url" type="string" />
 
+<ParamField body="payment_intent.expires_in" type="integer" default="3600">
+  How long the payment stays payable, in **seconds**. Minimum `300`, maximum `86400`. Omit it for the 60 minute default.
+</ParamField>
+
 <ParamField body="payment_intent.metadata" type="object">
   At most 50 keys. Every value must be a string.
 </ParamField>
@@ -182,7 +186,7 @@ curl -X POST https://api.southpay.io/api/v2/agentic/payments \
 `exchange_rate_snapshot` is a plain decimal string, not an object. There is no `{rate, source}` shape on a payment address.
 </Warning>
 
-The intent expires 60 minutes after creation. Send the customer to `hosted_url` and pay the exact `crypto_amount_atomic` to `address`.
+The intent expires 60 minutes after creation, or after `expires_in` seconds when you send it. Send the customer to `hosted_url` and pay the exact `crypto_amount_atomic` to `address`.
 
 | Status | Code | Cause |
 | --- | --- | --- |
@@ -191,6 +195,7 @@ The intent expires 60 minutes after creation. Send the customer to `hosted_url` 
 | `422` | `invalid_currency` | `currency` blank. |
 | `422` | `unsupported_currency` | Not one of the ten payment currencies. |
 | `422` | `invalid_metadata` | Over 50 keys, or a non-string value. |
+| `422` | `invalid_expires_in` | Not an integer, or outside 300 to 86400 seconds. |
 | `403` | `authorization_denied` | The provider refused. Message is `Payment not authorized: <reason>`. |
 
 ## Retrieve a payment

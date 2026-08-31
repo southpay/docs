@@ -109,7 +109,7 @@ Price test intents low. A handful of one-dollar intents goes much further than a
   </Step>
 </Steps>
 
-Send less than the required amount to exercise your underpayment path, or leave the intent alone to exercise expiry. Intents expire 60 minutes after creation.
+Send less than the required amount to exercise your underpayment path, or leave the intent alone to exercise expiry. Intents expire 60 minutes after creation by default; create one with `expires_in: 300` if you do not want to wait an hour to watch it expire.
 
 ### Paying from a script
 
@@ -130,5 +130,5 @@ Use a throwaway key that has only ever held testnet funds. A key that also contr
 
 - **Wrong chain.** The most common cause by a wide margin. Check the transaction on [Sepolia Etherscan](https://sepolia.etherscan.io); if it is not there, it confirmed on some other network.
 - **Amount below what the intent asked for.** The intent stays open and reports the shortfall rather than completing. See [Payment lifecycle](/payment-lifecycle).
-- **Intent already expired.** After 60 minutes the intent is terminal, and a later transfer does not reopen it.
+- **Intent already expired.** Once past `expires_at` the intent is terminal, and a later transfer does not reopen it.
 - **Transaction still pending.** Confirm it on the explorer before assuming SouthPay missed it. If the explorer has no record, the transaction never left your wallet.

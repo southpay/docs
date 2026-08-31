@@ -65,7 +65,7 @@ The **Wait for a Payment** operation polls until the payment reaches a terminal 
 
 There is no `overpaid` status. An overpayment arrives as `completed` with `state_reason: "completed_overpaid"`, so a check for `status === "completed"` catches it. Read `state_reason` if you need to treat it differently.
 
-Intents expire 60 minutes after creation and that window is not configurable, so a timeout longer than an hour buys you nothing. For production, prefer the trigger over polling.
+Intents expire 60 minutes after creation by default, so a timeout longer than an hour buys you nothing unless the intent was created with a longer `expires_in`. For production, prefer the trigger over polling.
 
 ## Operations
 

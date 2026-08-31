@@ -112,7 +112,7 @@ Do this in test mode. Test mode has exactly one usable asset, `SETH` on Ethereum
   </Step>
 
   <Step title="Wait for it to complete">
-    Intents expire 60 minutes after creation, and that window is not configurable.
+    Intents expire 60 minutes after creation. Send `expires_in` on create to choose a different window, in seconds, between `300` and `86400`.
 
     Over MCP, `wait_for_payment` takes the payment id or its reference and polls server-side until the payment is `completed`, `expired`, `failed` or `refunded`, returning `{done: true, status, polls, payment}`. If the budget runs out first it returns `{done: false, timed_out: true, status, polls, hint, payment}`. A timeout is not a failed payment, so call it again.
 

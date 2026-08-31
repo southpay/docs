@@ -55,11 +55,13 @@ stateDiagram-v2
 
 Status never moves backwards. `completed` never returns to `processing`.
 
-## Expiry is 60 minutes and is not configurable
+## Expiry defaults to 60 minutes
 
-Every payment intent expires 60 minutes after it is created. The exact moment is on the intent as `expires_at`; read that field rather than adding an hour yourself.
+Every payment intent expires 60 minutes after it is created unless you send `expires_in` on [create](/api-reference/payments#create-a-payment-intent). The exact moment is on the intent as `expires_at`; read that field rather than computing it yourself.
 
-There is no parameter to lengthen or shorten the window, and no endpoint to extend a live intent. If a customer needs longer, create a second intent with a new [idempotency key](/idempotency).
+`expires_in` is in seconds, from `300` (5 minutes) to `86400` (24 hours). It is a create-time input only: there is no endpoint to extend a live intent, so if a customer needs longer, create a second intent with a new [idempotency key](/idempotency).
+
+The crypto amounts are quoted when the intent is created and stay fixed for the whole window, so a longer window leaves you exposed to more exchange-rate movement. A customer who funds the payment by card can push `expires_at` out to 6 hours regardless of what you set, because the card leg needs that time to settle.
 
 Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `expired` the next time it is loaded, including when the customer opens the hosted checkout page, so a stale `pending` in your database may already be dead. Trust `expires_at` over `status`.
 
@@ -76,7 +78,7 @@ Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `exp
 | `completed_underpaid` | `completed` | Less than required arrived, and your store accepts underpayments |
 | `failed_underpaid` | `failed` | Underpaid, and your store does not accept underpayments |
 | `failed_overpaid` | `failed` | Overpaid, and your store does not accept overpayments |
-| `expired_timeout` | `expired` | The 60-minute window closed with no usable payment |
+| `expired_timeout` | `expired` | The window closed with no usable payment |
 | `canceled_by_agent` | `expired` | An [agent](/agentic/index) canceled a `pending` intent |
 | `refund_completed` | `refunded` | A refund confirmed on-chain |
 

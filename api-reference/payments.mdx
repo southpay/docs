@@ -52,6 +52,10 @@ All fields go inside a required `payment_intent` object.
   Product or order image shown on checkout. Must be `https` and at most 2048 characters. Surfaces as `display_image_url` on the detail view.
 </ParamField>
 
+<ParamField body="payment_intent.expires_in" type="integer" default="3600">
+  How long the payment stays payable, in **seconds**. Minimum `300` (5 minutes), maximum `86400` (24 hours). Omit it for the 60 minute default. The resolved deadline comes back as `expires_at`.
+</ParamField>
+
 <ParamField body="payment_intent.metadata" type="object">
   Key-value pairs echoed back on the intent and in every payment webhook. At most 50 keys, and **every value must be a string**. Numbers and booleans are rejected.
 </ParamField>
@@ -147,7 +151,9 @@ curl -X POST https://api.southpay.io/api/v2/payments \
 Send the customer to `hosted_url`. It is `https://pay.southpay.io/{reference}` unless your store has a verified custom domain.
 
 <Warning>
-An intent expires 60 minutes after creation. That window is fixed and cannot be configured. Do not create the intent until the customer is ready to pay.
+An intent expires 60 minutes after creation unless you send `expires_in`. Do not create the intent until the customer is ready to pay.
+
+The crypto amounts are quoted when the intent is created and stay fixed for the whole window, so a longer `expires_in` leaves you exposed to more exchange-rate movement. A customer who funds the payment by card can push `expires_at` out to 6 hours regardless of what you set, because the card leg needs that time to settle.
 </Warning>
 
 ### Response fields
@@ -185,7 +191,7 @@ An intent expires 60 minutes after creation. That window is fixed and cannot be 
 </ResponseField>
 
 <ResponseField name="expires_at" type="string" required>
-  ISO 8601. Always 60 minutes after `created_at`.
+  ISO 8601. 60 minutes after `created_at`, or `expires_in` seconds after it when you sent that on create.
 </ResponseField>
 
 <ResponseField name="settlement_status" type="string | null">
@@ -236,6 +242,8 @@ Validation failures on this endpoint return `422` with the flat envelope `{"erro
 | `line item unit_amount_cents must be a non-negative integer` | Negative or non-integer. |
 | `metadata must have at most 50 keys` | Over the limit. |
 | `metadata values must be strings` | A value was a number, boolean or nested object. |
+| `expires_in must be an integer number of seconds` | Not parseable as an integer. |
+| `expires_in must be between 300 and 86400 seconds` | Under 5 minutes or over 24 hours. |
 
 An unsupported `currency` also returns `422`, but through the global handler, so it uses the *structured* envelope: `{"error": {"message": "Unsupported settlement currency: XYZ", "code": null}}`. Write your client to handle both shapes.
 
