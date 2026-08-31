@@ -75,7 +75,7 @@ Handle `payment_intent.refunded` as an update to an order you already shipped. I
 
 An overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`. So is an exact payment, minus the reason. If you only read `status`, you ship the order and never notice you owe the customer money. The excess is on the intent's detail view under `overpayment`.
 
-The same applies to `completed_underpaid`, which is a completion your store opted into, and to `canceled_by_agent`, which arrives as `expired`. The full table is on [Payment lifecycle](/payment-lifecycle).
+The same applies to `completed_underpaid`, which is a completion your store opted into, and to `canceled_by_agent` and `canceled_by_merchant`, which both arrive as `expired`. The full table is on [Payment lifecycle](/payment-lifecycle).
 
 ## Handle all four terminal outcomes
 
@@ -83,7 +83,7 @@ The same applies to `completed_underpaid`, which is a completion your store opte
 | --- | --- |
 | `payment_intent.completed` | Fulfil. Check `state_reason` for over- and underpayment. |
 | `payment_intent.failed` | Funds arrived but the amount rules were not met. A refund may follow automatically. |
-| `payment_intent.expired` | Nobody paid, or an agent canceled. Offer a fresh payment link with a **new** idempotency key. |
+| `payment_intent.expired` | Nobody paid, or the payment was canceled. Offer a fresh payment link with a **new** idempotency key. |
 | `payment_intent.refunded` | Reverse the fulfilment, or escalate. |
 
 ## Poll for payouts

@@ -1,6 +1,6 @@
 ---
 title: "Payment lifecycle"
-description: "The six payment intent statuses, the transitions between them, the ten state reasons, and the 60-minute expiry window."
+description: "The six payment intent statuses, the transitions between them, the eleven state reasons, and the 60-minute expiry window."
 ---
 
 This is the canonical reference for payment intent state. Every other page links here rather than restating it.
@@ -14,7 +14,7 @@ A payment intent has exactly six statuses. There is no `created`, no `confirming
 | `pending` | `false` | Created. Deposit addresses issued, waiting for the customer to send funds. |
 | `processing` | `false` | At least one transaction for a deposit address is confirming or confirmed on-chain. |
 | `completed` | `true` | Enough confirmed funds received. Credited to your balance. |
-| `expired` | `true` | The window closed without a usable payment, or an agent canceled the intent. |
+| `expired` | `true` | The window closed without a usable payment, or the intent was canceled. |
 | `failed` | `true` | Funds arrived but the intent could not complete under your store's rules. |
 | `refunded` | `true` | A refund confirmed on-chain. |
 
@@ -31,7 +31,7 @@ stateDiagram-v2
   [*] --> pending : created
 
   pending --> processing : on-chain tx detected
-  pending --> expired : window closed, or agent canceled
+  pending --> expired : window closed, or canceled
   pending --> failed
 
   processing --> completed : confirmations reached
@@ -67,7 +67,7 @@ Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `exp
 
 ## State reasons
 
-`state_reason` is the machine-readable "why" behind the current status. It has ten values.
+`state_reason` is the machine-readable "why" behind the current status. It has eleven values.
 
 | `state_reason` | Status | Meaning |
 | --- | --- | --- |
@@ -80,11 +80,12 @@ Expiry is applied lazily. A `pending` intent past its `expires_at` flips to `exp
 | `failed_overpaid` | `failed` | Overpaid, and your store does not accept overpayments |
 | `expired_timeout` | `expired` | The window closed with no usable payment |
 | `canceled_by_agent` | `expired` | An [agent](/agentic/index) canceled a `pending` intent |
+| `canceled_by_merchant` | `expired` | You canceled a `pending` intent via [`POST /payments/{id}/cancel`](/payment-intents#canceling-a-payment) |
 | `refund_completed` | `refunded` | A refund confirmed on-chain |
 
 **Overpayment is not a status.** An accepted overpayment is `status: "completed"` with `state_reason: "completed_overpaid"`, and the `:detail` view of the intent carries an `overpayment` object with the excess. If you branch on `status === "completed"` and ignore `state_reason`, you will fulfil overpaid and underpaid orders identically, which may or may not be what you want.
 
-**`canceled_by_agent` lands in `expired`, not in a cancel status.** There is no `canceled` status. An agentic cancel is modelled as an early expiry.
+**Cancels land in `expired`, not in a cancel status.** There is no `canceled` status. A cancel is modelled as an early expiry, and the reason tells you who did it: `canceled_by_agent` for an agent, `canceled_by_merchant` for you.
 
 ## Related status fields
 
@@ -114,4 +115,6 @@ Transactions have their own statuses (`pending`, `confirming`, `confirmed`, `sub
 | → `failed` | `payment_intent.failed` |
 | → `refunded` | `payment_intent.refunded` |
 
-The agentic cancel path emits `payment_intent.canceled`, which **cannot be subscribed to**. See [Webhooks](/webhooks#events-you-cannot-receive). Watch for `payment_intent.expired` with `state_reason: "canceled_by_agent"` instead.
+A merchant cancel emits `payment_intent.expired`, exactly like a natural expiry — if you already handle expiry, you already handle cancels. Check `state_reason` to tell them apart.
+
+The **agentic** cancel path is the exception: it emits `payment_intent.canceled`, which **cannot be subscribed to**. See [Webhooks](/webhooks#events-you-cannot-receive). Watch for `payment_intent.expired` with `state_reason: "canceled_by_agent"` instead.

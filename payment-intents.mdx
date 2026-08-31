@@ -273,6 +273,47 @@ The single-intent read returns a considerably richer object than create does. On
 
 `transaction.status` uses the transaction state set: `pending`, `confirming`, `confirmed`, `submitted`, `failed`. `confirming` is a transaction status and never a payment intent status.
 
+## Cancel
+
+Closes a payment's window early instead of waiting for it to expire on its own.
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/payments/9c1d7f42-6a3b-4e58-9f10-2b8c5d4e7a91/cancel \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY"
+```
+
+A `pending` payment — one where nothing has arrived on-chain yet — becomes `expired` with `state_reason: "canceled_by_merchant"`. There is no `canceled` status; see [Payment lifecycle](/payment-lifecycle#state-reasons). The response is the same detail object as [Retrieve](#retrieve), so you can read the resulting status straight off it.
+
+Cancelling also pulls `expires_at` back to now. That is what the status change means: the window is over.
+
+### Payments that already have funds
+
+Once any transaction is seen on-chain the payment is `processing`, and a plain cancel returns `422` — you cannot void money that is already moving. To close it out anyway, force it:
+
+```bash
+curl -X POST "https://api.southpay.io/api/v2/payments/{id}/cancel?force=true" \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY"
+```
+
+`force=true` brings the deadline forward and resolves the payment down **exactly the path a natural expiry takes**:
+
+| Your store setting | Result |
+| --- | --- |
+| Accepts underpayments | `completed` with `state_reason: "completed_underpaid"`, and the funds settle |
+| Rejects underpayments | `failed` with `state_reason: "failed_underpaid"`, and a refund is initiated automatically |
+
+<Warning>
+`force=true` can therefore **complete** a payment rather than cancel it, if funds arrived and your store accepts underpayments. Read the `status` on the response rather than assuming the payment is dead.
+</Warning>
+
+<Warning>
+Forcing while a transaction is still confirming ends the payment before the chain settles it. A confirmation that lands afterwards has no open intent to attach to and becomes an unmatched deposit requiring manual reconciliation. Prefer letting `processing` payments finish on their own, and reach for `force` only when you know nothing further is coming.
+</Warning>
+
+A payment that is already `completed`, `expired`, `failed` or `refunded` returns `422` with or without `force`. To reverse one of those, [create a refund](#related-operations) instead.
+
+Cancels emit `payment_intent.expired`, the same event a natural expiry emits — if you already handle expiry you already handle cancels. Branch on `state_reason` to tell them apart.
+
 ## List
 
 ```bash
@@ -337,6 +378,7 @@ This log contains events that no webhook endpoint can subscribe to, such as `pay
 
 | Operation | Endpoint | Scope |
 | --- | --- | --- |
+| Cancel a payment | `POST /api/v2/payments/{id}/cancel` | `payments:write` |
 | PDF invoice (binary) | `GET /api/v2/payments/{id}/invoice` | `payments:read` |
 | List refunds | `GET /api/v2/payments/{id}/refunds` | `refunds:read` |
 | Create a refund | `POST /api/v2/payments/{id}/refunds` | `refunds:write` |

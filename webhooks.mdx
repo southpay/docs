@@ -294,7 +294,7 @@ Twenty-three names pass `subscribed_events` validation. Eighteen of them are emi
 | `payment_intent.processing` | A transaction for one of its deposit addresses is confirming or confirmed |
 | `payment_intent.completed` | Enough confirmed funds arrived and the balance is credited |
 | `payment_intent.failed` | Funds arrived but the amount rules were not met |
-| `payment_intent.expired` | The 60-minute window closed, or an agent canceled a pending intent |
+| `payment_intent.expired` | The window closed, or the payment was canceled (by you or by an agent) |
 | `payment_intent.refunded` | A refund confirmed on-chain |
 
 Read `data.object.status` and, where you need the reason, fetch the intent for its `state_reason`. See [Payment lifecycle](/payment-lifecycle).
