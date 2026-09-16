@@ -3,6 +3,31 @@ title: "Changelog"
 description: "Latest updates, new features, and improvements to the SouthPay API and platform"
 ---
 
+<Update label="September 16, 2026" description="Simulate a test payment with no testnet, no faucet and no confirmations" tags={["Feature"]}>
+## Week of September 14
+
+Paying a test payment no longer needs a chain. `POST /payments/{id}/simulated_payments` credits a payment as if a deposit had arrived, and the payment has already settled by the time the call returns.
+
+### What is new
+
+- **Simulated payments.** The new endpoint needs no Sepolia transaction, no faucet balance and no waiting for confirmations. The deposit runs through the same pipeline a real one does, so transactions, status transitions, events and webhook deliveries are unchanged. [See simulate a payment](/environments#simulate-a-payment)
+
+- **Five outcomes.** `scenario` produces `exact`, `underpaid`, `overpaid`, `unconfirmed` or `failed`. The underpaid, overpaid and failed paths were previously awkward to reach, because each needed a real transaction of a carefully chosen size.
+
+- **Partial deposits and confirmations.** `reference` names the simulated deposit. Distinct references credit several deposits against one payment; reusing a reference updates the deposit it already created, which is how you take a deposit from confirming to confirmed.
+
+- **In the dashboard.** **Developers** → **Test payments** now has a **Simulate** tab, which is the quickest way to drive a payment to a given state by hand. The section was previously called Test wallet and only sent Sepolia transfers.
+
+### Still available
+
+The test wallet endpoint, `POST /payments/{id}/test_payments`, is unchanged and still sends a real Sepolia transfer from a SouthPay-funded wallet. Use it, or your own wallet, when the chain integration itself is what you are testing.
+
+### Corrections
+
+- The Sepolia test wallet page said there was no merchant-facing simulator. That is no longer true and the page has been updated.
+
+</Update>
+
 <Update label="August 21, 2026" description="Rate limits move to token buckets, gain Retry-After and RateLimit headers, and are now counted per store" tags={["Improvement"]}>
 ## Week of August 18
 

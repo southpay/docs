@@ -32,7 +32,91 @@ What test mode does cover well: the intent lifecycle, expiry, webhook signing an
 
 ## Paying a test intent
 
-There are two ways to pay a test intent. Have SouthPay pay it from the test wallet, which is what an automated test suite should do, or send Sepolia ETH from your own wallet. Both are real transactions on Sepolia; the only difference is whose wallet the ETH leaves.
+There are three ways to pay a test intent. Simulate it, which needs no chain at all and is what most development and automated testing should use. Have SouthPay pay it from the test wallet, which puts a real transaction on Sepolia without costing you a faucet claim. Or send Sepolia ETH from your own wallet.
+
+Simulation is the fastest and the only one that does not wait for confirmations. Reach for one of the other two when the chain itself is what you are testing.
+
+### Simulate a payment
+
+`POST /payments/{id}/simulated_payments` credits a payment as if a deposit had arrived. Nothing is broadcast, so there is no testnet transaction, no faucet balance to exhaust and no confirmation to wait for. The deposit runs through the same pipeline a real one does, so the payment transactions, status transitions, events and webhook deliveries are the ones you will see in live mode. Only the origin of the deposit is invented.
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/payments/{payment_id}/simulated_payments \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"simulated_payment": {}}'
+```
+
+The response is `201 Created` and the payment has already been re-evaluated by the time it returns, so `payment_status` on the body is the settled status rather than a status you have to wait for.
+
+<ParamField body="simulated_payment.scenario" type="string" default="exact">
+  Which outcome to produce: `exact`, `underpaid`, `overpaid`, `unconfirmed` or `failed`.
+</ParamField>
+
+<ParamField body="simulated_payment.amount_atomic" type="string">
+  Exact amount to credit, in the deposit asset's smallest unit. Overrides the amount the scenario would have chosen.
+</ParamField>
+
+<ParamField body="simulated_payment.reference" type="string">
+  Names the simulated deposit. Reuse a reference to update the deposit it already created; use distinct references to credit several deposits against one payment. Defaults to a random value.
+</ParamField>
+
+<ParamField body="simulated_payment.confirmations" type="integer">
+  How many confirmations the deposit reports. Only the `unconfirmed` scenario reads it, and it is clamped below the required count so the deposit stays unconfirmed.
+</ParamField>
+
+Each scenario credits an amount relative to what the payment still needs, so it behaves the same whether the payment is untouched or already part paid.
+
+| Scenario | Credits | Payment ends up |
+| --- | --- | --- |
+| `exact` | The outstanding amount | `completed`, reason `completed_exact` |
+| `underpaid` | Half the outstanding amount | `processing`, reason `processing_underpaid` |
+| `overpaid` | More than the overpayment tolerance | `completed_overpaid`, or `failed_overpaid` when the store rejects overpayments |
+| `unconfirmed` | The outstanding amount, still confirming | `processing`, reason `pending_confirmations` |
+| `failed` | Nothing; records a failed deposit | Unchanged |
+
+`overpaid` deliberately clears the tolerance, so it trips the overpayment path on a one-dollar payment as reliably as on a large one.
+
+```bash
+curl -X POST https://api.southpay.io/api/v2/payments/{payment_id}/simulated_payments \
+  -H "Authorization: Bearer sp_sk_test_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"simulated_payment": {"scenario": "underpaid"}}'
+```
+
+#### Partial deposits and confirmations
+
+A fresh `reference` on each call credits a separate deposit, which is how you build a payment up from partial payments:
+
+```bash
+curl ... -d '{"simulated_payment": {"amount_atomic": "12500000", "reference": "part-1"}}'
+curl ... -d '{"simulated_payment": {"amount_atomic": "12500000", "reference": "part-2"}}'
+```
+
+Reusing a reference updates the deposit it already created rather than adding another, which is how a real deposit gains confirmations. Simulate the wait, then resolve it:
+
+```bash
+curl ... -d '{"simulated_payment": {"scenario": "unconfirmed", "reference": "dep-1"}}'
+curl ... -d '{"simulated_payment": {"scenario": "exact", "reference": "dep-1"}}'
+```
+
+The first call leaves the payment `processing` with reason `pending_confirmations`. The second confirms the same deposit and the payment completes.
+
+#### Simulation errors
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| `403` | `simulated_payment_live_mode` | A live credential was used |
+| `422` | `simulated_payment_unknown_scenario` | `scenario` is not one of the five names |
+| `422` | `simulated_payment_already_finalized` | The payment is already `completed`, `expired` or `refunded` |
+| `422` | `simulated_payment_no_address` | The payment has no deposit address |
+| `422` | `simulated_payment_no_expected_amount` | The deposit address has no expected amount |
+| `422` | `simulated_payment_invalid_amount` | `amount_atomic` was not a positive integer |
+| `422` | `simulated_payment_amount_too_small_to_underpay` | The outstanding amount cannot be halved |
+
+<Note>
+Simulation is available in the dashboard under **Developers** → **Test payments** → **Simulate**, which is the quickest way to drive a payment to a given state by hand. It does not change which assets test mode offers; the single-asset limit above still applies.
+</Note>
 
 ### Pay from the test wallet
 

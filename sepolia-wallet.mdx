@@ -3,11 +3,15 @@ title: "Sepolia test wallet"
 description: "Point any wallet at Ethereum Sepolia, claim free test ETH from a faucet, and send it to a test payment intent."
 ---
 
-Test mode settles on **Ethereum Sepolia** and nothing else, and there is no merchant-facing simulator. To complete a test payment you do what a customer does: send Sepolia ETH from a wallet to the deposit address on the intent.
+Test mode settles on **Ethereum Sepolia** and nothing else. This page is about paying a test intent the way a customer would: sending Sepolia ETH from a wallet to the deposit address on the intent.
 
 Sepolia ETH has no market value and is given away by faucets, so a full test costs nothing. What you need is a wallet pointed at Sepolia and a small balance in it. Any Ethereum wallet works, and so does a script with no wallet software at all.
 
-You can skip all of it for routine testing: SouthPay can pay a test intent for you from its own funded wallet, with no faucet involved. See [pay from the test wallet](/environments#pay-from-the-test-wallet). That wallet is rate limited and has a daily allowance per store, so set up your own when you need volume or want to control exactly what gets sent.
+You can skip all of it for routine testing. [Simulating a payment](/environments#simulate-a-payment) credits an intent with no chain, no faucet and no waiting for confirmations, and it reaches the underpaid, overpaid and failed outcomes that are awkward to produce on a real network. Use it for day-to-day development and automated tests.
+
+SouthPay can also pay an intent from its own funded wallet, which is a real Sepolia transaction without a faucet claim. See [pay from the test wallet](/environments#pay-from-the-test-wallet). That wallet is rate limited and has a daily allowance per store, so set up your own when you need volume or want to control exactly what gets sent.
+
+Reach for this page when the chain integration itself is what you are testing.
 
 ## Network details
 
