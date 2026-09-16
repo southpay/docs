@@ -14,6 +14,8 @@ Paying a test payment no longer needs a chain. `POST /payments/{id}/simulated_pa
 
 - **Five outcomes.** `scenario` produces `exact`, `underpaid`, `overpaid`, `unconfirmed` or `failed`. The underpaid, overpaid and failed paths were previously awkward to reach, because each needed a real transaction of a carefully chosen size.
 
+- **Amounts in the currency you priced the payment in.** `settlement_amount` takes `12.50`, `amount` takes the asset's own units, and `amount_atomic` stays for a test that asserts on a precise figure. The endpoint previously took atomic units only, which meant knowing the asset's decimals before you could test an underpayment.
+
 - **Partial deposits and confirmations.** `reference` names the simulated deposit. Distinct references credit several deposits against one payment; reusing a reference updates the deposit it already created, which is how you take a deposit from confirming to confirmed.
 
 - **In the dashboard.** **Developers** → **Test payments** now has a **Simulate** tab, which is the quickest way to drive a payment to a given state by hand. The section was previously called Test wallet and only sent Sepolia transfers.
